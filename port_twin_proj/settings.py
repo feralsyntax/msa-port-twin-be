@@ -41,6 +41,7 @@ DATABASES = {
 # Application definition
 
 INSTALLED_APPS = [
+    'port_twin_app',
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
