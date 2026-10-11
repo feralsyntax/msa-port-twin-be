@@ -41,7 +41,7 @@ DATABASES = {
 # Application definition
 
 INSTALLED_APPS = [
-    'port_twin_app',
+    "port_twin_app",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -49,8 +49,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # third-party apps
-    'corsheaders',
-    'rest_framework',
+    "corsheaders",
+    "rest_framework",
 ]
 
 MIDDLEWARE = [
@@ -88,17 +88,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "port_twin_proj.wsgi.application"
-
-
-# Database
-# https://docs.djangoproject.com/en/6.1/ref/settings/#databases
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
 
 
 # Password validation
