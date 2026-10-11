@@ -267,6 +267,36 @@ class SimulationRun(models.Model):
         indexes = [  # noqa: RUF012
             models.Index(fields=["status", "created_at"]),
         ]
-    
+
     def __str__(self):
         return f"{self.scenario.name} - {self.status}"
+
+
+class SimulationResult(models.Model):
+    """
+    Stores the outputs produced by a simulation run.
+
+    It will give the front-end data to display vessel waiting times, queue lengths, berth allocations, and AI-generated marine predictions.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    simulation_run = models.ForeignKey(
+        SimulationRun, on_delete=models.CASCADE, related_name="results"
+    )
+    result_type = models.CharField(
+        max_length=50,
+        help_text="Category of result, such as queue, berth allocation, or marine prediction.",
+    )
+    data = models.JSONField(
+        default=dict, help_text="Structured output produced by the simulation."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]  # noqa: RUF012
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["simulation_run", "result_type"]),
+        ]
+
+    def __str__(self):
+        return f"{self.result_type} - {self.simulation_run}"
