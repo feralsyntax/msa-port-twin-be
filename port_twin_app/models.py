@@ -5,6 +5,10 @@ from django.db import models
 
 
 class Vessel(models.Model):
+    """
+    Defines vessel identity and physical characteristics
+    """
+
     class VesselType(models.TextChoices):
         CONTAINER = "container", "Container Ship"
         TANKER = "tanker", "Tanker"
