@@ -68,7 +68,7 @@ class VesselPosition(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     vessel = models.ForeignKey(
-        "Vessel", on_delete=models.CASCADE, related_name="positions"
+        "Vessel", on_delete=models.CASCADE, related_name="position_history"
     )
     position = gis_models.PointField(geography=True, srid=4326)
     speed_over_ground = models.DecimalField(
