@@ -96,3 +96,48 @@ class VesselPosition(models.Model):
 
     def __str__(self):
         return f"{self.vessel.name} at {self.recorded_at}"
+
+
+class Berth(models.Model):
+    """
+    Stores port berths and their operational characteristics.
+
+    A berth is a designated location in a port where a vessel can dock for loading, unloading, and other operations.
+
+    Berth data will help simulate which vessels can be accommodated, assign vessels to suitable berths, and estimate waiting times.
+    """
+
+    class OperationalStatus(models.TextChoices):
+        ACTIVE = "active", "Active"
+        INACTIVE = "inactive", "Inactive"
+        MAINTENANCE = "maintenance", "Under Maintenance"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100, unique=True)
+    location = gis_models.PointField(geography=True, srid=4326, null=True, blank=True)
+    max_vessel_length = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        help_text="Maximum vessel length in metres.",
+    )
+    max_vessel_draft = models.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Maximum permitted vessel draft in metres.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=OperationalStatus.choices,
+        default=OperationalStatus.ACTIVE,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]  # noqa: RUF012
+
+    def __str__(self):
+        return self.name
