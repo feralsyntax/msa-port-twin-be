@@ -141,3 +141,62 @@ class Berth(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class MarineCondition(models.Model):
+    """
+    Stores observed and predicted marine conditions
+    """
+
+    class DataSource(models.TextChoices):
+        OBSERVED = "observed", "Observed"
+        AI_PREDICTION = "ai_prediction", "AI Prediction"
+        EXTERNAL = "external", "External Data Source"
+        DEMO = "demo", "Demonstration Data"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    location = gis_models.PointField(geography=True, srid=4326)
+    recorded_at = models.DateTimeField(
+        help_text="Time the conditions apply to or were observed."
+    )
+    water_level = models.DecimalField(
+        max_digits=7,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="Water level relative to a documented reference datum, in metres.",
+    )
+    current_speed = models.DecimalField(
+        max_digits=6,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        help_text="Current speed in metres per second.",
+    )
+    current_direction = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Current direction in degrees.",
+    )
+    wind_speed = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Wind speed in metres per second.",
+    )
+    source = models.CharField(
+        max_length=20, choices=DataSource.choices, default=DataSource.DEMO
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-recorded_at"]  # noqa: RUF012
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["recorded_at", "source"]),
+        ]
+
+    def __str__(self):
+        return f"{self.source} marine condition at {self.recorded_at}"
