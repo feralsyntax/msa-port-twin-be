@@ -200,3 +200,38 @@ class MarineCondition(models.Model):
 
     def __str__(self):
         return f"{self.source} marine condition at {self.recorded_at}"
+
+
+class Scenario(models.Model):
+    """
+    Stores configuration for a port simulation scenario.
+
+    A scenario represents a set of assumptions and parameters for a port simulation.
+
+    It will help answer questions such as:
+    - What happens to a vessel waiting times if arrivals increase?
+    - How would congestion change if a berth becomes unavailable?
+    - How might marine conditions affect vessel movement through the channel?
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        READY = "ready", "Ready"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    parameters = models.JSONField(
+        default=dict, help_text="Configuration values used by the simulation."
+    )
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.DRAFT
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ["-created_at"]  # noqa: RUF012
+        
+    def __str__(self):
+        return self.name
