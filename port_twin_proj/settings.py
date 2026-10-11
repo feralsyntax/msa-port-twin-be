@@ -12,8 +12,20 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from pathlib import Path
 
+from decouple import Csv, config
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# Basic Configurations
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", cast=Csv())
+CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)
+CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", cast=Csv())
+CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", cast=Csv())
+DEBUG = config("DEBUG", default=False, cast=bool)
+MODE = config("MODE", default="dev", cast=str)
+SECRET_KEY = config("SECRET_KEY")
 
 
 # Application definition
