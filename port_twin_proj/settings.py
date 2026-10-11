@@ -74,6 +74,17 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
+# drf-spectacular configs
+SPECTACULAR_SETTINGS = {
+    "TITLE": "MSA Port Twin API",
+    "DESCRIPTION": (
+        "API for port operations, vessel queueing, "
+        "marine conditions, and AI-powered simulations."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
