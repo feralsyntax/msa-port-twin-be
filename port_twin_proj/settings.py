@@ -67,6 +67,11 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "port_twin_proj.urls"
 
+# Rest Framework Configs
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
