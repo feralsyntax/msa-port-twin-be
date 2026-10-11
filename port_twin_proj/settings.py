@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     # third-party apps
     "corsheaders",
     "rest_framework",
+    "drf_spectacular",
 ]
 
 MIDDLEWARE = [
@@ -71,6 +72,21 @@ ROOT_URLCONF = "port_twin_proj.urls"
 # Rest Framework Configs
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PAGINATION_CLASS": (
+        "rest_framework.pagination.PageNumberPagination"
+    ),
+    "PAGE_SIZE": 20,
+}
+
+# drf-spectacular configs
+SPECTACULAR_SETTINGS = {
+    "TITLE": "MSA Port Twin API",
+    "DESCRIPTION": (
+        "API for port operations, vessel queueing, "
+        "marine conditions, and AI-powered simulations."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
 
 TEMPLATES = [
