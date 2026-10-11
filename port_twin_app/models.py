@@ -1,5 +1,6 @@
 import uuid
 
+from django.contrib.gis.db import models as gis_models
 from django.db import models
 
 
@@ -54,3 +55,40 @@ class Vessel(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class VesselPosition(models.Model):
+    """
+    Connects vessels to their geographical positions using PostGIS
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    vessel = models.ForeignKey(
+        "Vessel", on_delete=models.CASCADE, related_name="positions"
+    )
+    position = gis_models.PointField(geography=True, srid=4326)
+    speed_over_ground = models.DecimalField(
+        max_digits=6,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Vessel speed in knots.",
+    )
+    course_over_ground = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Vessel course in degrees.",
+    )
+    recorded_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-recorded_at"]  # noqa: RUF012
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["vessel", "recorded_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.vessel.name} at {self.recorded_at}"
