@@ -1,8 +1,9 @@
 from rest_framework import generics
 
-from port_twin_app.models import Berth, Vessel, VesselPosition
+from port_twin_app.models import Berth, MarineCondition, Vessel, VesselPosition
 from port_twin_app.serializers import (
     BerthSerializer,
+    MarineConditionSerializer,
     VesselPositionSerializer,
     VesselSerializer,
 )
@@ -58,5 +59,24 @@ class VesselPositionListAPIView(generics.ListAPIView):
 
         if vessel_id:
             queryset = queryset.filter(vessel_id=vessel_id)
+
+        return queryset
+
+
+
+class MarineConditionListAPIView(generics.ListAPIView):
+    """
+    Returns all marine-condition records and records filtered by source
+    """
+    
+    serializer_class = MarineConditionSerializer
+
+    def get_queryset(self):
+        queryset = MarineCondition.objects.all()
+
+        source = self.request.query_params.get("source")
+
+        if source:
+            queryset = queryset.filter(source=source)
 
         return queryset
