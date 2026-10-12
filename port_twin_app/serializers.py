@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from port_twin_app.models import Berth, Vessel, VesselPosition
+from port_twin_app.models import Berth, MarineCondition, Vessel, VesselPosition
 
 
 class VesselSerializer(serializers.ModelSerializer):
@@ -62,3 +62,30 @@ class VesselPositionSerializer(serializers.ModelSerializer):
 
     def get_latitude(self, obj) -> float:
         return obj.position.y
+
+
+class MarineConditionSerializer(serializers.ModelSerializer):
+    longitude = serializers.SerializerMethodField()
+    latitude = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MarineCondition
+        fields = [  # noqa: RUF012
+            "id",
+            "longitude",
+            "latitude",
+            "recorded_at",
+            "water_level",
+            "current_speed",
+            "current_direction",
+            "wind_speed",
+            "source",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_longitude(self, obj) -> float:
+        return obj.location.x
+
+    def get_latitude(self, obj) -> float:
+        return obj.location.y
