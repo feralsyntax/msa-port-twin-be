@@ -15,6 +15,13 @@ from port_twin_app.models import (
 
 class Command(BaseCommand):
     help = "Populate the database with demonstration data for MSA Port Twin."
+    
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--reset",
+            action="store_true",
+            help="Delete and recreate the demonstration dataset.",
+        )
 
     def handle(self, *args, **options):
         self.seed_vessels()
@@ -28,6 +35,26 @@ class Command(BaseCommand):
                 "All demonstration data has been seeded successfully."
             )
         )
+    
+    def reset_demo_data(self):
+        demo_scenario = Scenario.objects.filter(
+            name="DEMO Standard Port Operations"
+        ).first()
+
+        if demo_scenario:
+            demo_scenario.runs.all().delete()
+            demo_scenario.delete()
+
+        VesselPosition.objects.filter(
+            vessel__name__startswith="DEMO "
+        ).delete()
+
+        MarineCondition.objects.filter(
+            source=MarineCondition.DataSource.DEMO
+        ).delete()
+
+        Vessel.objects.filter(name__startswith="DEMO ").delete()
+        Berth.objects.filter(name__startswith="DEMO ").delete()
 
     def seed_vessels(self):
         vessels = [
