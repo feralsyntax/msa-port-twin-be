@@ -17,4 +17,9 @@ urlpatterns = [
         views.BerthDetailAPIView.as_view(),
         name="berth-detail",
     ),
+    path(
+        "vessel-positions/",
+        views.VesselPositionListAPIView.as_view(),
+        name="vessel-position-list",
+    ),
 ]
