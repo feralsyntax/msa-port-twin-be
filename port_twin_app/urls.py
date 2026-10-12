@@ -22,4 +22,9 @@ urlpatterns = [
         views.VesselPositionListAPIView.as_view(),
         name="vessel-position-list",
     ),
+    path(
+        "marine-conditions/",
+        views.MarineConditionListAPIView.as_view(),
+        name="marine-condition-list",
+    ),
 ]
