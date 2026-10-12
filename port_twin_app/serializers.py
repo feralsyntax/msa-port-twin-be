@@ -33,8 +33,8 @@ class VesselPositionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-    def get_longitude(self, obj):
+    def get_longitude(self, obj) -> float:
         return obj.position.x
 
-    def get_latitude(self, obj):
+    def get_latitude(self, obj) -> float:
         return obj.position.y
