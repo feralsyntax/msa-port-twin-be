@@ -11,10 +11,10 @@ urlpatterns = [
         views.VesselDetailAPIView.as_view(),
         name="vessel-detail",
     ),
-    path("berths/", views.BerthListAPIView.as_view(), name="vessel-list"),
+    path("berths/", views.BerthListAPIView.as_view(), name="berth-list"),
     path(
         "berths/<uuid:pk>/",
         views.BerthDetailAPIView.as_view(),
-        name="vessel-detail",
+        name="berth-detail",
     ),
 ]
