@@ -24,6 +24,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        if options["reset"]:
+            self.reset_demo_data()
+            self.stdout.write("Existing demonstration data removed.")
+
         self.seed_vessels()
         self.seed_berths()
         self.seed_vessel_positions()
@@ -32,7 +36,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                "All demonstration data has been seeded successfully."
+                "Demonstration data is ready."
             )
         )
     
