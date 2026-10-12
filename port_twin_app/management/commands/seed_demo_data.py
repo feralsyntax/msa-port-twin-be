@@ -4,7 +4,13 @@ from django.contrib.gis.geos import Point
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from port_twin_app.models import Berth, MarineCondition, Vessel, VesselPosition
+from port_twin_app.models import (
+    Berth,
+    MarineCondition,
+    Scenario,
+    Vessel,
+    VesselPosition,
+)
 
 
 class Command(BaseCommand):
@@ -15,11 +21,11 @@ class Command(BaseCommand):
         self.seed_berths()
         self.seed_vessel_positions()
         self.seed_marine_conditions()
+        self.seed_scenarios()
 
         self.stdout.write(
             self.style.SUCCESS(
-                "Demo vessels, berths, vessel positions, "
-                "and marine conditions have been seeded."
+                "All demonstration data has been seeded successfully."
             )
         )
 
@@ -206,3 +212,25 @@ class Command(BaseCommand):
                     "wind_speed": item["wind_speed"],
                 },
             )
+
+    def seed_scenarios(self):
+        Scenario.objects.update_or_create(
+            name="DEMO Standard Port Operations",
+            defaults={
+                "description": (
+                    "Demonstration scenario for exploring vessel queueing, "
+                    "berth allocation, and the effects of marine conditions "
+                    "on port operations."
+                ),
+                "parameters": {
+                    "simulation_hours": 24,
+                    "expected_vessel_arrivals": 12,
+                    "average_service_time_hours": 8,
+                    "arrival_interval_hours": 2,
+                    "available_berths": 2,
+                    "marine_conditions_enabled": True,
+                    "ai_predictions_enabled": False,
+                },
+                "status": Scenario.Status.READY,
+            },
+        )
