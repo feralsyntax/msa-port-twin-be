@@ -27,4 +27,9 @@ urlpatterns = [
         views.MarineConditionListAPIView.as_view(),
         name="marine-condition-list",
     ),
+    path(
+        "scenarios/<uuid:pk>/simulations/",
+        views.ScenarioSimulationView.as_view(),
+        name="scenario-simulations",
+    ),
 ]
