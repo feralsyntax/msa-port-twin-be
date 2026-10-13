@@ -139,3 +139,35 @@ class ScenarioSimulationView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class SimulationDetailView(APIView):
+    """
+    Retrieves a simulation run and its persisted results.
+    """
+
+    def get(self, request, pk):
+        simulation_run = get_object_or_404(
+            SimulationRun.objects.select_related("scenario"),
+            pk=pk,
+        )
+
+        results = {
+            result.result_type: result.data for result in simulation_run.results.all()
+        }
+
+        return Response(
+            {
+                "id": str(simulation_run.id),
+                "scenario_id": str(simulation_run.scenario_id),
+                "scenario_name": simulation_run.scenario.name,
+                "status": simulation_run.status,
+                "started_at": simulation_run.started_at,
+                "completed_at": simulation_run.completed_at,
+                "error_message": simulation_run.error_message,
+                "created_at": simulation_run.created_at,
+                "summary": results.get("summary"),
+                "vessel_results": results.get("vessel_results"),
+            },
+            status=status.HTTP_200_OK,
+        )
