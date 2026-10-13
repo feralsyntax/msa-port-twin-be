@@ -70,6 +70,7 @@ def run_simulation(
 ) -> SimulationOutput:
     """Simulate vessel arrivals and allocation to compatible berths."""
 
+    # Validate simulation configuration.
     if config.duration_hours <= 0:
         raise ValueError("Simulation duration must be greater than zero.")
 
@@ -87,14 +88,24 @@ def run_simulation(
             "The number of expected arrivals cannot exceed the supplied vessels."
         )
 
+    # Validate vessel dimensions.
     if any(v.length <= 0 or v.draft <= 0 for v in vessels):
         raise ValueError("Vessel length and draft must be greater than zero.")
 
-    if any(b.max_vessel_length <= 0 or b.max_vessel_draft <= 0 for b in berths):
+    # Validate berth capacity limits.
+    if any(
+        berth.max_vessel_length <= 0 or berth.max_vessel_draft <= 0 for berth in berths
+    ):
         raise ValueError("Berth capacity limits must be greater than zero.")
 
-    # Each berth tracks the hour when it next becomes available.
+    # Berth identifiers must be unique for correct availability tracking.
+    berth_ids = [berth.berth_id for berth in berths]
+    if len(berth_ids) != len(set(berth_ids)):
+        raise ValueError("Berth identifiers must be unique.")
+
+    # Track the next available hour for each berth.
     berth_available_at = {berth.berth_id: 0.0 for berth in berths}
+
     results: list[VesselSimulationResult] = []
 
     total_waiting = 0.0
@@ -103,10 +114,11 @@ def run_simulation(
     completed_count = 0
     occupied_hours = 0.0
 
+    # Each supplied simulation vessel represents one arrival event.
     for index, vessel in enumerate(vessels[: config.expected_arrivals]):
         arrival_hour = index * config.arrival_interval_hours
 
-        # Only vessels arriving within the simulation window are included.
+        # Only arrivals within the simulation horizon are included.
         if arrival_hour >= config.duration_hours:
             break
 
@@ -117,6 +129,7 @@ def run_simulation(
             and vessel.draft <= berth.max_vessel_draft
         ]
 
+        # No berth can accommodate this vessel.
         if not compatible_berths:
             results.append(
                 VesselSimulationResult(
@@ -131,11 +144,15 @@ def run_simulation(
             )
             continue
 
-        # Pick the compatible berth available soonest.
+        # Choose the compatible berth available soonest.
+        # Use berth ID as a deterministic tie-breaker.
         berth = min(
             compatible_berths,
             key=lambda item: (
-                max(berth_available_at[item.berth_id], arrival_hour),
+                max(
+                    berth_available_at[item.berth_id],
+                    arrival_hour,
+                ),
                 item.berth_id,
             ),
         )
@@ -149,15 +166,14 @@ def run_simulation(
 
         berth_available_at[berth.berth_id] = departure
 
-        # Count only the portion of service occurring within the horizon.
+        # Count only service hours occurring within the simulation horizon.
         occupied_hours += max(
             0.0,
             min(departure, config.duration_hours) - max(service_start, 0.0),
         )
 
-        if waiting > 0:
-            total_waiting += waiting
-            waiting_count += 1
+        total_waiting += waiting
+        waiting_count += 1
 
         if departure <= config.duration_hours:
             status = "completed"
@@ -186,8 +202,8 @@ def run_simulation(
     summary = SimulationSummary(
         total_arrivals=len(results),
         vessels_served=completed_count,
-        vessels_waiting=sum(r.status == "waiting" for r in results),
-        vessels_in_service=sum(r.status == "in_service" for r in results),
+        vessels_waiting=sum(result.status == "waiting" for result in results),
+        vessels_in_service=sum(result.status == "in_service" for result in results),
         average_waiting_hours=(total_waiting / waiting_count if waiting_count else 0.0),
         average_turnaround_hours=(
             total_turnaround / completed_count if completed_count else 0.0
