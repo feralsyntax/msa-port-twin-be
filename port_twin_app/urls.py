@@ -32,4 +32,9 @@ urlpatterns = [
         views.ScenarioSimulationView.as_view(),
         name="scenario-simulations",
     ),
+    path(
+        "simulations/<uuid:pk>/",
+        views.SimulationDetailView.as_view(),
+        name="simulation-detail",
+    ),
 ]
