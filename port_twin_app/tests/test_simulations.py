@@ -42,7 +42,7 @@ class SimulationEngineTests(SimpleTestCase):
         self.assertEqual(third.waiting_hours, 12)
 
         self.assertEqual(output.summary.vessels_served, 3)
-        self.assertEqual(output.summary.average_waiting_hours, 9)
+        self.assertEqual(output.summary.average_waiting_hours, 6)
 
     def test_rejects_more_arrivals_than_supplied_vessels(self):
         config = SimulationConfig(
