@@ -9,3 +9,21 @@ MSA Port Twin provides synthetic demonstration data for local development and ap
 
 ```bash
 python manage.py seed_demo_data
+```
+
+# Tests
+
+The `port_twin_app` has test modules for:
+- The API
+- The simulation engine
+
+## Run API Tests
+
+```bash
+python manage.py test port_twin_app.tests.test_api
+```
+## Run Simulation Engine Tests
+
+```bash
+python manage.py test port_twin_app.tests.test_simulations
+```
