@@ -1,12 +1,23 @@
-from rest_framework import generics
+from django.shortcuts import get_object_or_404
+from rest_framework import generics, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from port_twin_app.models import Berth, MarineCondition, Vessel, VesselPosition
+from port_twin_app.models import (
+    Berth,
+    MarineCondition,
+    Scenario,
+    SimulationRun,
+    Vessel,
+    VesselPosition,
+)
 from port_twin_app.serializers import (
     BerthSerializer,
     MarineConditionSerializer,
     VesselPositionSerializer,
     VesselSerializer,
 )
+from port_twin_app.services.simulation_execution import execute_simulation_run
 
 
 class VesselListAPIView(generics.ListAPIView):
@@ -49,7 +60,7 @@ class VesselPositionListAPIView(generics.ListAPIView):
     """
     Returns either all vessel positions or the position of one vessel
     """
-    
+
     serializer_class = VesselPositionSerializer
 
     def get_queryset(self):
@@ -63,12 +74,11 @@ class VesselPositionListAPIView(generics.ListAPIView):
         return queryset
 
 
-
 class MarineConditionListAPIView(generics.ListAPIView):
     """
     Returns all marine-condition records and records filtered by source
     """
-    
+
     serializer_class = MarineConditionSerializer
 
     def get_queryset(self):
@@ -80,3 +90,52 @@ class MarineConditionListAPIView(generics.ListAPIView):
             queryset = queryset.filter(source=source)
 
         return queryset
+
+
+class ScenarioSimulationView(APIView):
+    """
+    Executes a simulation for a saved scenario.
+    """
+
+    def post(self, request, pk):
+        scenario = get_object_or_404(Scenario, pk=pk)
+
+        simulation_run = SimulationRun.objects.create(
+            scenario=scenario,
+        )
+
+        try:
+            execute_simulation_run(simulation_run)
+
+        except ValueError as exc:
+            simulation_run.refresh_from_db()
+
+            return Response(
+                {
+                    "id": str(simulation_run.id),
+                    "scenario_id": str(scenario.id),
+                    "status": simulation_run.status,
+                    "error": str(exc),
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        simulation_run.refresh_from_db()
+
+        summary = (
+            simulation_run.results.filter(result_type="summary")
+            .values_list("data", flat=True)
+            .first()
+        )
+
+        return Response(
+            {
+                "id": str(simulation_run.id),
+                "scenario_id": str(scenario.id),
+                "status": simulation_run.status,
+                "started_at": simulation_run.started_at,
+                "completed_at": simulation_run.completed_at,
+                "summary": summary,
+            },
+            status=status.HTTP_201_CREATED,
+        )
