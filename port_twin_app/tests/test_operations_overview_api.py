@@ -28,7 +28,7 @@ class OperationsOverviewAPITests(TestCase):
     def test_overview_returns_database_and_simulation_metrics(self):
         Vessel.objects.create(
             name="Test Vessel",
-            imo_number="IMO1234567",
+            imo_number="IMO 1234567",
             mmsi="123456789",
             vessel_type="container",
             length_overall=200,
