@@ -23,7 +23,7 @@ class Vessel(models.Model):
     )
     name = models.CharField(max_length=255)
     # International Maritime Organization number
-    imo_number = models.CharField(max_length=7, unique=True, blank=True, null=True)
+    imo_number = models.CharField(max_length=12, unique=True, blank=True, null=True)
     # Maritime Mobile Service Identity
     mmsi = models.CharField(max_length=9, unique=True, blank=True, null=True)
     vessel_type = models.CharField(
