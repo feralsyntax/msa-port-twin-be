@@ -89,3 +89,56 @@ class MarineConditionSerializer(serializers.ModelSerializer):
 
     def get_latitude(self, obj) -> float:
         return obj.location.y
+
+
+class SimulationSummarySerializer(serializers.Serializer):
+    total_arrivals = serializers.IntegerField()
+    vessels_served = serializers.IntegerField()
+    vessels_waiting = serializers.IntegerField()
+    vessels_in_service = serializers.IntegerField()
+    average_waiting_hours = serializers.FloatField()
+    average_turnaround_hours = serializers.FloatField()
+    berth_utilization_percent = serializers.FloatField()
+
+
+class VesselSimulationResultSerializer(serializers.Serializer):
+    vessel_id = serializers.CharField()
+    arrival_hour = serializers.FloatField()
+    berth_id = serializers.CharField(allow_null=True)
+    service_start_hour = serializers.FloatField(allow_null=True)
+    departure_hour = serializers.FloatField(allow_null=True)
+    waiting_hours = serializers.FloatField(allow_null=True)
+    status = serializers.CharField()
+
+
+class VesselResultsSerializer(serializers.Serializer):
+    vessels = VesselSimulationResultSerializer(many=True)
+
+
+class ScenarioSimulationResponseSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    scenario_id = serializers.UUIDField()
+    status = serializers.CharField()
+    started_at = serializers.DateTimeField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
+    summary = SimulationSummarySerializer(allow_null=True)
+
+
+class SimulationDetailResponseSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    scenario_id = serializers.UUIDField()
+    scenario_name = serializers.CharField()
+    status = serializers.CharField()
+    started_at = serializers.DateTimeField(allow_null=True)
+    completed_at = serializers.DateTimeField(allow_null=True)
+    error_message = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    summary = SimulationSummarySerializer(allow_null=True)
+    vessel_results = VesselResultsSerializer(allow_null=True)
+
+
+class SimulationErrorResponseSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    scenario_id = serializers.UUIDField()
+    status = serializers.CharField()
+    error = serializers.CharField()
