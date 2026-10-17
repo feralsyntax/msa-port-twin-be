@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 
 from port_twin_app.models import Berth, MarineCondition, Vessel, VesselPosition
@@ -7,6 +9,24 @@ class VesselSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vessel
         fields = "__all__"
+
+    def validate_imo_number(self, value):
+        if not value:
+            return value
+
+        value = value.strip().upper()
+
+        if value.startswith("IMO"):
+            value = value[3:].strip()
+
+        digits = value
+
+        if not re.fullmatch(r"\d{7,8}", digits):
+            raise serializers.ValidationError(
+                "Enter a valid IMO number, e.g. 'IMO 1234567'."
+            )
+
+        return f"IMO {digits}"
 
 
 class BerthSerializer(serializers.ModelSerializer):
