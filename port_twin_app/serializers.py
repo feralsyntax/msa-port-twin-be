@@ -142,3 +142,39 @@ class SimulationErrorResponseSerializer(serializers.Serializer):
     scenario_id = serializers.UUIDField()
     status = serializers.CharField()
     error = serializers.CharField()
+
+
+class OperationsBerthOverviewSerializer(serializers.Serializer):
+    total = serializers.IntegerField()
+    active = serializers.IntegerField()
+    inactive = serializers.IntegerField()
+    maintenance = serializers.IntegerField()
+
+
+class OperationsMetricsSerializer(serializers.Serializer):
+    vessels_waiting = serializers.IntegerField()
+    vessels_in_service = serializers.IntegerField()
+    vessels_served = serializers.IntegerField()
+    average_waiting_hours = serializers.FloatField()
+    berth_utilization_percent = serializers.FloatField()
+
+
+class OperationsDataStatusSerializer(serializers.Serializer):
+    marine_condition_sources = serializers.ListField(
+        child=serializers.CharField(),
+    )
+    latest_marine_condition_at = serializers.DateTimeField(
+        allow_null=True,
+    )
+
+
+class OperationsOverviewSerializer(serializers.Serializer):
+    generated_at = serializers.DateTimeField()
+    total_vessels = serializers.IntegerField()
+    berths = OperationsBerthOverviewSerializer()
+    operations = OperationsMetricsSerializer(allow_null=True)
+    latest_simulation_id = serializers.UUIDField(allow_null=True)
+    latest_simulation_completed_at = serializers.DateTimeField(
+        allow_null=True,
+    )
+    data_status = OperationsDataStatusSerializer()
