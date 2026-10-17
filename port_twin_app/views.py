@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +15,9 @@ from port_twin_app.models import (
 from port_twin_app.serializers import (
     BerthSerializer,
     MarineConditionSerializer,
+    ScenarioSimulationResponseSerializer,
+    SimulationDetailResponseSerializer,
+    SimulationErrorResponseSerializer,
     VesselPositionSerializer,
     VesselSerializer,
 )
@@ -97,6 +101,14 @@ class ScenarioSimulationView(APIView):
     Executes a simulation for a saved scenario.
     """
 
+    @extend_schema(
+        operation_id="create_scenario_simulation",
+        summary="Run a scenario simulation",
+        responses={
+            201: ScenarioSimulationResponseSerializer,
+            400: SimulationErrorResponseSerializer,
+        },
+    )
     def post(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
 
@@ -146,6 +158,14 @@ class SimulationDetailView(APIView):
     Retrieves a simulation run and its persisted results.
     """
 
+    @extend_schema(
+        operation_id="retrieve_simulation",
+        summary="Retrieve simulation results",
+        responses={
+            200: SimulationDetailResponseSerializer,
+            404: {"description": "Simulation run not found."},
+        },
+    )
     def get(self, request, pk):
         simulation_run = get_object_or_404(
             SimulationRun.objects.select_related("scenario"),
