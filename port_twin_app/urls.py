@@ -37,4 +37,9 @@ urlpatterns = [
         views.SimulationDetailView.as_view(),
         name="simulation-detail",
     ),
+    path(
+        "overview/",
+        views.OperationsOverviewView.as_view(),
+        name="operations-overview",
+    ),
 ]

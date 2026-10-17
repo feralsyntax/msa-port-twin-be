@@ -1,4 +1,6 @@
+from django.db.models import Max
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
@@ -15,6 +17,7 @@ from port_twin_app.models import (
 from port_twin_app.serializers import (
     BerthSerializer,
     MarineConditionSerializer,
+    OperationsOverviewSerializer,
     ScenarioSimulationResponseSerializer,
     SimulationDetailResponseSerializer,
     VesselPositionSerializer,
@@ -178,3 +181,68 @@ class SimulationDetailView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class OperationsOverviewView(GenericAPIView):
+    """
+    Return a consolidated overview of port operations.
+    """
+
+    serializer_class = OperationsOverviewSerializer
+
+    def get(self, request):
+        berths = Berth.objects.all()
+        marine_conditions = MarineCondition.objects.all()
+
+        latest_simulation = (
+            SimulationRun.objects.filter(status="completed")
+            .order_by("-completed_at", "-created_at")
+            .first()
+        )
+
+        operations = None
+
+        if latest_simulation:
+            summary = (
+                latest_simulation.results.filter(result_type="summary")
+                .values_list("data", flat=True)
+                .first()
+            )
+
+            if summary is not None:
+                operations = {
+                    "vessels_waiting": summary["vessels_waiting"],
+                    "vessels_in_service": summary["vessels_in_service"],
+                    "vessels_served": summary["vessels_served"],
+                    "average_waiting_hours": (summary["average_waiting_hours"]),
+                    "berth_utilization_percent": (summary["berth_utilization_percent"]),
+                }
+
+        data = {
+            "generated_at": timezone.now(),
+            "total_vessels": Vessel.objects.count(),
+            "berths": {
+                "total": berths.count(),
+                "active": berths.filter(status="active").count(),
+                "inactive": berths.filter(status="inactive").count(),
+                "maintenance": berths.filter(status="maintenance").count(),
+            },
+            "operations": operations,
+            "latest_simulation_id": (
+                latest_simulation.id if latest_simulation else None
+            ),
+            "latest_simulation_completed_at": (
+                latest_simulation.completed_at if latest_simulation else None
+            ),
+            "data_status": {
+                "marine_condition_sources": sorted(
+                    set(marine_conditions.values_list("source", flat=True))
+                ),
+                "latest_marine_condition_at": marine_conditions.aggregate(
+                    latest=Max("recorded_at")
+                )["latest"],
+            },
+        }
+
+        serializer = self.get_serializer(data)
+        return Response(serializer.data)
