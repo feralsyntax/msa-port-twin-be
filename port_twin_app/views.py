@@ -26,7 +26,7 @@ from port_twin_app.services.simulation_execution import execute_simulation_run
 
 class VesselListAPIView(generics.ListAPIView):
     """
-    Returns a list of all vessels
+    Get a list of all vessels
     """
 
     queryset = Vessel.objects.all()
@@ -35,7 +35,7 @@ class VesselListAPIView(generics.ListAPIView):
 
 class VesselDetailAPIView(generics.RetrieveAPIView):
     """
-    Returns details of a single vessel identified by its UUID
+    Retrieve details of a single vessel identified by its UUID
     """
 
     queryset = Vessel.objects.all()
@@ -44,7 +44,7 @@ class VesselDetailAPIView(generics.RetrieveAPIView):
 
 class BerthListAPIView(generics.ListAPIView):
     """
-    Returns a list of all berths
+    Get a list of all berths
     """
 
     queryset = Berth.objects.all()
@@ -53,7 +53,7 @@ class BerthListAPIView(generics.ListAPIView):
 
 class BerthDetailAPIView(generics.RetrieveAPIView):
     """
-    Returns details of a single berth identified by its UUID
+    Retrieve details of a single berth identified by its UUID
     """
 
     queryset = Berth.objects.all()
@@ -62,7 +62,7 @@ class BerthDetailAPIView(generics.RetrieveAPIView):
 
 class VesselPositionListAPIView(generics.ListAPIView):
     """
-    Returns either all vessel positions or the position of one vessel
+    Retrieve either all vessel positions or the position of one vessel
     """
 
     serializer_class = VesselPositionSerializer
@@ -80,7 +80,7 @@ class VesselPositionListAPIView(generics.ListAPIView):
 
 class MarineConditionListAPIView(generics.ListAPIView):
     """
-    Returns all marine-condition records and records filtered by source
+    Retrieve all marine-condition records and records filtered by source
     """
 
     serializer_class = MarineConditionSerializer
@@ -98,7 +98,7 @@ class MarineConditionListAPIView(generics.ListAPIView):
 
 class ScenarioSimulationView(APIView):
     """
-    Executes a simulation for a saved scenario.
+    Execute a simulation for a saved scenario.
     """
 
     @extend_schema(
@@ -155,7 +155,7 @@ class ScenarioSimulationView(APIView):
 
 class SimulationDetailView(APIView):
     """
-    Retrieves a simulation run and its persisted results.
+    Retrieve a simulation run and its persisted results.
     """
 
     @extend_schema(
