@@ -18,6 +18,7 @@ from port_twin_app.serializers import (
     BerthSerializer,
     MarineConditionSerializer,
     OperationsOverviewSerializer,
+    ScenarioSerializer,
     ScenarioSimulationResponseSerializer,
     SimulationDetailResponseSerializer,
     VesselPositionSerializer,
@@ -96,6 +97,24 @@ class MarineConditionListAPIView(generics.ListAPIView):
             queryset = queryset.filter(source=source)
 
         return queryset
+
+
+class ScenarioListCreateAPIView(generics.ListCreateAPIView):
+    """
+    List saved scenarios or create a new scenario.
+    """
+
+    queryset = Scenario.objects.all()
+    serializer_class = ScenarioSerializer
+
+
+class ScenarioDetailAPIView(generics.RetrieveUpdateAPIView):
+    """
+    Retrieve or update a scenario identified by its UUID.
+    """
+
+    queryset = Scenario.objects.all()
+    serializer_class = ScenarioSerializer
 
 
 class ScenarioSimulationView(GenericAPIView):
