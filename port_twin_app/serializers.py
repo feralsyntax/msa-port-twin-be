@@ -127,6 +127,12 @@ class ScenarioSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def validate_parameters(self, value):
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Parameters must be a JSON object.")
+
+        return value
+
 
 class SimulationSummarySerializer(serializers.Serializer):
     total_arrivals = serializers.IntegerField()
