@@ -2,7 +2,13 @@ import re
 
 from rest_framework import serializers
 
-from port_twin_app.models import Berth, MarineCondition, Vessel, VesselPosition
+from port_twin_app.models import (
+    Berth,
+    MarineCondition,
+    Scenario,
+    Vessel,
+    VesselPosition,
+)
 
 
 class VesselSerializer(serializers.ModelSerializer):
@@ -109,6 +115,17 @@ class MarineConditionSerializer(serializers.ModelSerializer):
 
     def get_latitude(self, obj) -> float:
         return obj.location.y
+
+
+class ScenarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Scenario
+        fields = "__all__"
+        read_only_fields = [  # noqa: RUF012
+            "id",
+            "created_at",
+            "updated_at",
+        ]
 
 
 class SimulationSummarySerializer(serializers.Serializer):
