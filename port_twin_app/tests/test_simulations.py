@@ -177,3 +177,27 @@ class SimulationEngineTests(SimpleTestCase):
         self.assertEqual(output.summary.vessels_waiting, 1)
         self.assertEqual(output.summary.vessels_in_service, 1)
         self.assertEqual(output.vessel_results[2].waiting_hours, 5)
+
+    def test_allocates_vessel_to_berth_available_soonest(self):
+        berths = [
+            SimulationBerth("B1", 220, 12),
+            SimulationBerth("B2", 220, 12),
+        ]
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+            SimulationVessel("V3", 150, 8),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=3,
+            arrival_interval_hours=1,
+            service_time_hours=4,
+        )
+
+        output = run_simulation(vessels, berths, config)
+
+        self.assertEqual(output.vessel_results[0].berth_id, "B1")
+        self.assertEqual(output.vessel_results[1].berth_id, "B2")
+        self.assertEqual(output.vessel_results[2].berth_id, "B1")
+        self.assertEqual(output.vessel_results[2].waiting_hours, 2)
