@@ -176,3 +176,4 @@ class SimulationEngineTests(SimpleTestCase):
         self.assertAlmostEqual(output.summary.average_waiting_hours, 1.5)
         self.assertEqual(output.summary.vessels_waiting, 1)
         self.assertEqual(output.summary.vessels_in_service, 1)
+        self.assertEqual(output.vessel_results[2].waiting_hours, 5)
