@@ -129,11 +129,6 @@ def run_simulation(
                 "Berth capacity limits must be finite numbers greater than zero."
             )
 
-    # Berth identifiers must be unique for correct availability tracking.
-    berth_ids = [berth.berth_id for berth in berths]
-    if len(berth_ids) != len(set(berth_ids)):
-        raise ValueError("Berth identifiers must be unique.")
-
     # Track the next available hour for each berth.
     berth_available_at = {berth.berth_id: 0.0 for berth in berths}
 
