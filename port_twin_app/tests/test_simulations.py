@@ -54,7 +54,7 @@ class SimulationEngineTests(SimpleTestCase):
 
         with self.assertRaises(ValueError):
             run_simulation(self.vessels, self.berths, config)
-    
+
     def test_rejects_negative_expected_arrivals(self):
         config = SimulationConfig(24, -1, 2, 8)
 
