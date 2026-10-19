@@ -142,9 +142,14 @@ class SimulationEngineTests(SimpleTestCase):
             SimulationConfig(24, 1, 2, 8),
         )
 
+        result = output.vessel_results[0]
+
+        self.assertEqual(result.status, "incompatible_berth")
+        self.assertIsNone(result.berth_id)
         self.assertEqual(
-            output.vessel_results[0].status,
-            "incompatible_berth",
+            result.reason,
+            "Vessel length exceeds all berth limits. "
+            "Vessel draft exceeds all berth limits.",
         )
 
     def test_calculates_utilization(self):
@@ -250,6 +255,10 @@ class SimulationEngineTests(SimpleTestCase):
         self.assertEqual(output.summary.average_waiting_hours, 0.0)
         self.assertEqual(output.summary.average_turnaround_hours, 0.0)
         self.assertEqual(output.summary.berth_utilization_percent, 0.0)
+        self.assertEqual(
+            output.vessel_results[0].reason,
+            "No berths are configured.",
+        )
 
         self.assertTrue(
             all(
