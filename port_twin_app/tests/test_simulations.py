@@ -155,3 +155,22 @@ class SimulationEngineTests(SimpleTestCase):
             output.summary.berth_utilization_percent,
             100.0,
         )
+
+    def test_excludes_vessels_still_waiting_from_average_waiting_time(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+            SimulationVessel("V3", 150, 8),
+        ]
+        config = SimulationConfig(
+            duration_hours=10,
+            expected_arrivals=3,
+            arrival_interval_hours=2,
+            service_time_hours=8,
+        )
+
+        output = run_simulation(vessels, self.berths, config)
+
+        # V1 starts at hour 0; V2 is still waiting at the horizon.
+        # V3 arrives at hour 4 and is also still waiting.
+        self.assertEqual(output.summary.average_waiting_hours, 0.0)
