@@ -201,3 +201,17 @@ class SimulationEngineTests(SimpleTestCase):
         self.assertEqual(output.vessel_results[1].berth_id, "B2")
         self.assertEqual(output.vessel_results[2].berth_id, "B1")
         self.assertEqual(output.vessel_results[2].waiting_hours, 2)
+
+    def test_simulation_produces_reproducible_results(self):
+        first_output = run_simulation(
+            self.vessels,
+            self.berths,
+            self.config,
+        )
+        second_output = run_simulation(
+            self.vessels,
+            self.berths,
+            self.config,
+        )
+
+        self.assertEqual(first_output, second_output)
