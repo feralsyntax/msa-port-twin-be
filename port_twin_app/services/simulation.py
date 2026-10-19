@@ -41,6 +41,7 @@ class VesselSimulationResult:
     departure_hour: float | None
     waiting_hours: float | None
     status: str
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
