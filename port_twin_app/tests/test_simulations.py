@@ -55,6 +55,84 @@ class SimulationEngineTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             run_simulation(self.vessels, self.berths, config)
 
+    def test_rejects_negative_expected_arrivals(self):
+        config = SimulationConfig(24, -1, 2, 8)
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Expected arrivals cannot be negative.",
+        ):
+            run_simulation(self.vessels, self.berths, config)
+
+    def test_rejects_non_integer_expected_arrivals(self):
+        config = SimulationConfig(24, 1.5, 2, 8)
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Expected arrivals must be an integer.",
+        ):
+            run_simulation(self.vessels, self.berths, config)
+
+    def test_rejects_non_finite_simulation_duration(self):
+        config = SimulationConfig(float("inf"), 3, 2, 8)
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Simulation duration must be a finite number greater than zero.",
+        ):
+            run_simulation(self.vessels, self.berths, config)
+
+    def test_rejects_duplicate_vessel_identifiers(self):
+        duplicate_vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V1", 180, 9),
+        ]
+        config = SimulationConfig(24, 2, 2, 8)
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Vessel identifiers must be unique.",
+        ):
+            run_simulation(duplicate_vessels, self.berths, config)
+
+    def test_rejects_duplicate_berth_identifiers(self):
+        duplicate_berths = [
+            SimulationBerth("B1", 220, 12),
+            SimulationBerth("B1", 250, 15),
+        ]
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Berth identifiers must be unique.",
+        ):
+            run_simulation(self.vessels, duplicate_berths, self.config)
+
+    def test_rejects_non_positive_vessel_dimensions(self):
+        invalid_vessels = [
+            SimulationVessel("V1", 0, 10),
+        ]
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Vessel length and draft must be finite numbers greater than zero.",
+        ):
+            run_simulation(
+                invalid_vessels,
+                self.berths,
+                SimulationConfig(24, 1, 2, 8),
+            )
+
+    def test_rejects_non_positive_berth_capacity(self):
+        invalid_berths = [
+            SimulationBerth("B1", 220, 0),
+        ]
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Berth capacity limits must be finite numbers greater than zero.",
+        ):
+            run_simulation(self.vessels, invalid_berths, self.config)
+
     def test_identifies_vessels_with_no_compatible_berth(self):
         small_berth = SimulationBerth("B2", 100, 5)
 

@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 
 
@@ -71,37 +72,62 @@ def run_simulation(
     """Simulate vessel arrivals and allocation to compatible berths."""
 
     # Validate simulation configuration.
-    if config.duration_hours <= 0:
-        raise ValueError("Simulation duration must be greater than zero.")
+    config_values = {
+        "Simulation duration": config.duration_hours,
+        "Arrival interval": config.arrival_interval_hours,
+        "Service time": config.service_time_hours,
+    }
+
+    for name, value in config_values.items():
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError(f"{name} must be a finite number greater than zero.")
+
+    if isinstance(config.expected_arrivals, bool) or not isinstance(
+        config.expected_arrivals, int
+    ):
+        raise ValueError("Expected arrivals must be an integer.")  # noqa: TRY004
 
     if config.expected_arrivals < 0:
         raise ValueError("Expected arrivals cannot be negative.")
-
-    if config.arrival_interval_hours <= 0:
-        raise ValueError("Arrival interval must be greater than zero.")
-
-    if config.service_time_hours <= 0:
-        raise ValueError("Service time must be greater than zero.")
 
     if config.expected_arrivals > len(vessels):
         raise ValueError(
             "The number of expected arrivals cannot exceed the supplied vessels."
         )
 
-    # Validate vessel dimensions.
-    if any(v.length <= 0 or v.draft <= 0 for v in vessels):
-        raise ValueError("Vessel length and draft must be greater than zero.")
+    # Validate vessel dimensions and identifiers.
+    vessel_ids = [vessel.vessel_id for vessel in vessels]
 
-    # Validate berth capacity limits.
-    if any(
-        berth.max_vessel_length <= 0 or berth.max_vessel_draft <= 0 for berth in berths
-    ):
-        raise ValueError("Berth capacity limits must be greater than zero.")
+    if len(vessel_ids) != len(set(vessel_ids)):
+        raise ValueError("Vessel identifiers must be unique.")
 
-    # Berth identifiers must be unique for correct availability tracking.
+    for vessel in vessels:
+        if (
+            not math.isfinite(vessel.length)
+            or not math.isfinite(vessel.draft)
+            or vessel.length <= 0
+            or vessel.draft <= 0
+        ):
+            raise ValueError(
+                "Vessel length and draft must be finite numbers greater than zero."
+            )
+
+    # Validate berth capacity limits and identifiers.
     berth_ids = [berth.berth_id for berth in berths]
+
     if len(berth_ids) != len(set(berth_ids)):
         raise ValueError("Berth identifiers must be unique.")
+
+    for berth in berths:
+        if (
+            not math.isfinite(berth.max_vessel_length)
+            or not math.isfinite(berth.max_vessel_draft)
+            or berth.max_vessel_length <= 0
+            or berth.max_vessel_draft <= 0
+        ):
+            raise ValueError(
+                "Berth capacity limits must be finite numbers greater than zero."
+            )
 
     # Track the next available hour for each berth.
     berth_available_at = {berth.berth_id: 0.0 for berth in berths}
