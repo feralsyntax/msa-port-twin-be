@@ -158,6 +158,23 @@ def run_simulation(
 
         # No berth can accommodate this vessel.
         if not compatible_berths:
+            reasons = []
+
+            if not any(
+                vessel.length <= berth.max_vessel_length
+                for berth in berths
+            ):
+                reasons.append("Vessel length exceeds all berth limits.")
+
+            if not any(
+                vessel.draft <= berth.max_vessel_draft
+                for berth in berths
+            ):
+                reasons.append("Vessel draft exceeds all berth limits.")
+
+            if not berths:
+                reasons.append("No berths are configured.")
+
             results.append(
                 VesselSimulationResult(
                     vessel_id=vessel.vessel_id,
@@ -167,6 +184,7 @@ def run_simulation(
                     departure_hour=None,
                     waiting_hours=None,
                     status="incompatible_berth",
+                    reason=" ".join(reasons),
                 )
             )
             continue
