@@ -235,3 +235,25 @@ class SimulationEngineTests(SimpleTestCase):
             output.summary.berth_utilization_percent,
             100.0,
         )
+
+    def test_handles_simulation_without_berths(self):
+        output = run_simulation(
+            self.vessels,
+            [],
+            self.config,
+        )
+
+        self.assertEqual(output.summary.total_arrivals, 3)
+        self.assertEqual(output.summary.vessels_served, 0)
+        self.assertEqual(output.summary.vessels_waiting, 0)
+        self.assertEqual(output.summary.vessels_in_service, 0)
+        self.assertEqual(output.summary.average_waiting_hours, 0.0)
+        self.assertEqual(output.summary.average_turnaround_hours, 0.0)
+        self.assertEqual(output.summary.berth_utilization_percent, 0.0)
+
+        self.assertTrue(
+            all(
+                result.status == "incompatible_berth"
+                for result in output.vessel_results
+            )
+        )
