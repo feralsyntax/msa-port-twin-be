@@ -156,21 +156,23 @@ class SimulationEngineTests(SimpleTestCase):
             100.0,
         )
 
-    def test_excludes_vessels_still_waiting_from_average_waiting_time(self):
+    def test_average_waiting_excludes_vessels_not_started_by_horizon(self):
         vessels = [
             SimulationVessel("V1", 200, 10),
             SimulationVessel("V2", 180, 9),
             SimulationVessel("V3", 150, 8),
         ]
         config = SimulationConfig(
-            duration_hours=10,
+            duration_hours=7,
             expected_arrivals=3,
-            arrival_interval_hours=2,
-            service_time_hours=8,
+            arrival_interval_hours=1,
+            service_time_hours=4,
         )
 
         output = run_simulation(vessels, self.berths, config)
 
-        # V1 starts at hour 0; V2 is still waiting at the horizon.
-        # V3 arrives at hour 4 and is also still waiting.
-        self.assertEqual(output.summary.average_waiting_hours, 0.0)
+        # V1 waits 0 hours; V2 waits 3 hours.
+        # V3 has not started service by the 7-hour horizon.
+        self.assertAlmostEqual(output.summary.average_waiting_hours, 1.5)
+        self.assertEqual(output.summary.vessels_waiting, 1)
+        self.assertEqual(output.summary.vessels_in_service, 1)
