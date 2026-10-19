@@ -215,3 +215,23 @@ class SimulationEngineTests(SimpleTestCase):
         )
 
         self.assertEqual(first_output, second_output)
+
+    def test_caps_berth_utilization_at_simulation_horizon(self):
+        config = SimulationConfig(
+            duration_hours=6,
+            expected_arrivals=1,
+            arrival_interval_hours=2,
+            service_time_hours=8,
+        )
+
+        output = run_simulation(
+            [self.vessels[0]],
+            self.berths,
+            config,
+        )
+
+        self.assertEqual(output.vessel_results[0].status, "in_service")
+        self.assertAlmostEqual(
+            output.summary.berth_utilization_percent,
+            100.0,
+        )
