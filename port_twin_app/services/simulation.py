@@ -198,8 +198,9 @@ def run_simulation(
             min(departure, config.duration_hours) - max(service_start, 0.0),
         )
 
-        total_waiting += waiting
-        waiting_count += 1
+        if service_start < config.duration_hours:
+            total_waiting += waiting
+            waiting_count += 1
 
         if departure <= config.duration_hours:
             status = "completed"
