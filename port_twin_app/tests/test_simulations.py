@@ -257,3 +257,25 @@ class SimulationEngineTests(SimpleTestCase):
                 for result in output.vessel_results
             )
         )
+
+    def test_vessel_starting_at_horizon_is_still_waiting(self):
+        config = SimulationConfig(
+            duration_hours=8,
+            expected_arrivals=2,
+            arrival_interval_hours=1,
+            service_time_hours=8,
+        )
+
+        output = run_simulation(
+            self.vessels[:2],
+            self.berths,
+            config,
+        )
+
+        second = output.vessel_results[1]
+
+        self.assertEqual(second.service_start_hour, 8)
+        self.assertEqual(second.status, "waiting")
+        self.assertEqual(second.waiting_hours, 7)
+        self.assertEqual(output.summary.vessels_waiting, 1)
+        self.assertEqual(output.summary.vessels_in_service, 0)
