@@ -155,3 +155,127 @@ class SimulationEngineTests(SimpleTestCase):
             output.summary.berth_utilization_percent,
             100.0,
         )
+
+    def test_average_waiting_excludes_vessels_not_started_by_horizon(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+            SimulationVessel("V3", 150, 8),
+        ]
+        config = SimulationConfig(
+            duration_hours=7,
+            expected_arrivals=3,
+            arrival_interval_hours=1,
+            service_time_hours=4,
+        )
+
+        output = run_simulation(vessels, self.berths, config)
+
+        # V1 waits 0 hours; V2 waits 3 hours.
+        # V3 has not started service by the 7-hour horizon.
+        self.assertAlmostEqual(output.summary.average_waiting_hours, 1.5)
+        self.assertEqual(output.summary.vessels_waiting, 1)
+        self.assertEqual(output.summary.vessels_in_service, 1)
+        self.assertEqual(output.vessel_results[2].waiting_hours, 5)
+
+    def test_allocates_vessel_to_berth_available_soonest(self):
+        berths = [
+            SimulationBerth("B1", 220, 12),
+            SimulationBerth("B2", 220, 12),
+        ]
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+            SimulationVessel("V3", 150, 8),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=3,
+            arrival_interval_hours=1,
+            service_time_hours=4,
+        )
+
+        output = run_simulation(vessels, berths, config)
+
+        self.assertEqual(output.vessel_results[0].berth_id, "B1")
+        self.assertEqual(output.vessel_results[1].berth_id, "B2")
+        self.assertEqual(output.vessel_results[2].berth_id, "B1")
+        self.assertEqual(output.vessel_results[2].waiting_hours, 2)
+
+    def test_simulation_produces_reproducible_results(self):
+        first_output = run_simulation(
+            self.vessels,
+            self.berths,
+            self.config,
+        )
+        second_output = run_simulation(
+            self.vessels,
+            self.berths,
+            self.config,
+        )
+
+        self.assertEqual(first_output, second_output)
+
+    def test_caps_berth_utilization_at_simulation_horizon(self):
+        config = SimulationConfig(
+            duration_hours=6,
+            expected_arrivals=1,
+            arrival_interval_hours=2,
+            service_time_hours=8,
+        )
+
+        output = run_simulation(
+            [self.vessels[0]],
+            self.berths,
+            config,
+        )
+
+        self.assertEqual(output.vessel_results[0].status, "in_service")
+        self.assertAlmostEqual(
+            output.summary.berth_utilization_percent,
+            100.0,
+        )
+
+    def test_handles_simulation_without_berths(self):
+        output = run_simulation(
+            self.vessels,
+            [],
+            self.config,
+        )
+
+        self.assertEqual(output.summary.total_arrivals, 3)
+        self.assertEqual(output.summary.vessels_served, 0)
+        self.assertEqual(output.summary.vessels_waiting, 0)
+        self.assertEqual(output.summary.vessels_in_service, 0)
+        self.assertEqual(output.summary.average_waiting_hours, 0.0)
+        self.assertEqual(output.summary.average_turnaround_hours, 0.0)
+        self.assertEqual(output.summary.berth_utilization_percent, 0.0)
+
+        self.assertTrue(
+            all(
+                result.status == "incompatible_berth"
+                for result in output.vessel_results
+            )
+        )
+
+    def test_vessel_starting_at_horizon_is_still_waiting(self):
+        config = SimulationConfig(
+            duration_hours=8,
+            expected_arrivals=2,
+            arrival_interval_hours=1,
+            service_time_hours=8,
+        )
+
+        output = run_simulation(
+            self.vessels[:2],
+            self.berths,
+            config,
+        )
+
+        second = output.vessel_results[1]
+
+        self.assertEqual(second.service_start_hour, 8)
+        self.assertEqual(second.status, "waiting")
+        self.assertEqual(second.waiting_hours, 7)
+        self.assertEqual(output.summary.vessels_waiting, 1)
+        self.assertEqual(output.summary.vessels_in_service, 0)
