@@ -190,6 +190,9 @@ def run_simulation(
         departure = service_start + config.service_time_hours
         waiting = service_start - arrival_hour
 
+        if service_start >= config.duration_hours:
+            waiting = config.duration_hours - arrival_hour
+
         berth_available_at[berth.berth_id] = departure
 
         # Count only service hours occurring within the simulation horizon.
