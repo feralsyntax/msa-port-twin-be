@@ -21,6 +21,7 @@ from port_twin_app.serializers import (
     ScenarioSerializer,
     ScenarioSimulationResponseSerializer,
     SimulationDetailResponseSerializer,
+    SimulationHistoryItemSerializer,
     VesselPositionSerializer,
     VesselSerializer,
 )
@@ -200,6 +201,16 @@ class SimulationDetailView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class SimulationHistoryListAPIView(generics.ListAPIView):
+    serializer_class = SimulationHistoryItemSerializer
+
+    queryset = (
+        SimulationRun.objects.select_related("scenario")
+        .prefetch_related("results")
+        .all()
+    )
 
 
 class OperationsOverviewView(GenericAPIView):
