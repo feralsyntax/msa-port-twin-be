@@ -48,6 +48,11 @@ urlpatterns = [
         name="simulation-detail",
     ),
     path(
+        "simulations/",
+        views.SimulationHistoryListAPIView.as_view(),
+        name="simulation-history",
+    ),
+    path(
         "overview/",
         views.OperationsOverviewView.as_view(),
         name="operations-overview",
