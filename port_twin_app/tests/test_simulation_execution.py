@@ -109,3 +109,83 @@ class SimulationExecutionTests(TestCase):
         self.assertFalse(
             SimulationResult.objects.filter(simulation_run=self.simulation_run).exists()
         )
+
+    def test_completed_run_cannot_be_executed_again(self):
+        self.simulation_run.status = SimulationRun.Status.COMPLETED
+        self.simulation_run.save(update_fields=["status"])
+
+        with (
+            patch(
+                "port_twin_app.services.simulation_execution.run_scenario_simulation"
+            ) as mock_simulation,
+            self.assertRaisesMessage(
+                ValueError,
+                "Only pending simulation runs can be executed.",
+            ),
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        mock_simulation.assert_not_called()
+
+    def test_failed_run_cannot_be_executed_again(self):
+        self.simulation_run.status = SimulationRun.Status.FAILED
+        self.simulation_run.save(update_fields=["status"])
+
+        with (
+            patch(
+                "port_twin_app.services.simulation_execution.run_scenario_simulation"
+            ) as mock_simulation,
+            self.assertRaisesMessage(
+                ValueError,
+                "Only pending simulation runs can be executed.",
+            ),
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        mock_simulation.assert_not_called()
+
+    def test_failed_run_does_not_persist_partial_results(self):
+        from port_twin_app.services.simulation import (
+            SimulationOutput,
+            SimulationSummary,
+        )
+
+        output = SimulationOutput(
+            vessel_results=(),
+            summary=SimulationSummary(
+                total_arrivals=0,
+                vessels_served=0,
+                vessels_waiting=0,
+                vessels_in_service=0,
+                average_waiting_hours=0,
+                average_turnaround_hours=0,
+                berth_utilization_percent=0,
+            ),
+        )
+
+        with (
+            patch(
+                "port_twin_app.services.simulation_execution.run_scenario_simulation",
+                return_value=output,
+            ),
+            patch(
+                "port_twin_app.services.simulation_execution.SimulationResult.objects.create",
+                side_effect=[None, RuntimeError("Result persistence failed")],
+            ),
+            self.assertRaisesMessage(
+                RuntimeError,
+                "Result persistence failed",
+            ),
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        self.simulation_run.refresh_from_db()
+
+        self.assertEqual(self.simulation_run.status, SimulationRun.Status.FAILED)
+        self.assertEqual(
+            self.simulation_run.error_message,
+            "Result persistence failed",
+        )
+        self.assertFalse(
+            SimulationResult.objects.filter(simulation_run=self.simulation_run).exists()
+        )
