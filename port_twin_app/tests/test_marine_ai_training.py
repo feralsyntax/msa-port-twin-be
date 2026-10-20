@@ -17,15 +17,21 @@ from port_twin_app.services.marine_ai.dataset import (
     MarineDatasetSample,
     split_dataset,
 )
-from port_twin_app.services.marine_ai.model import MarineFNO
+from port_twin_app.services.marine_ai.model import (
+    MarineFNO,
+    load_checkpoint,
+)
 from port_twin_app.services.marine_ai.training import (
     TrainingConfig,
+    _fit_target_normalization,
     _target_tensor,
     train_model,
 )
 
 
 def make_sample(sample_id, start_time, offset=0.0):
+    """Create a small synthetic sample for testing training behavior."""
+
     steps, ny, nx = 2, 8, 8
 
     request = MarinePredictionRequest(
@@ -79,7 +85,7 @@ class MarineTrainingTests(SimpleTestCase):
         torch.manual_seed(7)
         start = datetime.fromisoformat("2026-01-01T00:00:00+00:00")
 
-        # Wide gaps ensure the forecast windows do not cross split boundaries.
+        # Wide gaps prevent forecast windows from crossing split boundaries.
         samples = [
             make_sample(
                 f"sample-{index}",
@@ -88,6 +94,7 @@ class MarineTrainingTests(SimpleTestCase):
             )
             for index in range(20)
         ]
+
         self.dataset = split_dataset(samples)
         self.model = MarineFNO(
             width=4,
@@ -101,6 +108,7 @@ class MarineTrainingTests(SimpleTestCase):
         target = _target_tensor(sample.target, "cpu")
 
         self.assertEqual(tuple(target.shape), (1, 2, 3, 8, 8))
+
         self.assertAlmostEqual(
             target[0, 0, 0, 0, 0].item(),
             sample.target.water_level_m[0][0][0],
@@ -113,6 +121,18 @@ class MarineTrainingTests(SimpleTestCase):
             target[0, 0, 2, 0, 0].item(),
             sample.target.current_v_ms[0][0][0],
         )
+
+    def test_target_normalization_uses_training_samples(self):
+        mean, std = _fit_target_normalization(
+            self.dataset.train,
+            "cpu",
+        )
+
+        self.assertEqual(tuple(mean.shape), (1, 1, 3, 1, 1))
+        self.assertEqual(tuple(std.shape), (1, 1, 3, 1, 1))
+        self.assertTrue(torch.isfinite(mean).all())
+        self.assertTrue(torch.isfinite(std).all())
+        self.assertTrue(torch.all(std > 0))
 
     def test_training_updates_model_and_saves_best_checkpoint(self):
         before = [parameter.detach().clone() for parameter in self.model.parameters()]
@@ -152,14 +172,30 @@ class MarineTrainingTests(SimpleTestCase):
                 min(result.validation_losses),
             )
 
-            from port_twin_app.services.marine_ai.model import load_checkpoint
-
             restored_model, checkpoint = load_checkpoint(checkpoint_path)
-            self.assertEqual(
-                checkpoint["epoch"],
-                result.validation_losses.index(result.best_validation_loss) + 1,
+
+            # The saved epoch should be the first epoch attaining the
+            # best validation loss, because checkpoints use strict improvement.
+            expected_best_epoch = (
+                result.validation_losses.index(result.best_validation_loss) + 1
             )
+            self.assertEqual(checkpoint["epoch"], expected_best_epoch)
             self.assertIsInstance(restored_model, MarineFNO)
+
+            # Normalization statistics must accompany the saved model.
+            self.assertIn("target_mean", checkpoint)
+            self.assertIn("target_std", checkpoint)
+            self.assertEqual(
+                tuple(checkpoint["target_mean"].shape),
+                (1, 1, 3, 1, 1),
+            )
+            self.assertEqual(
+                tuple(checkpoint["target_std"].shape),
+                (1, 1, 3, 1, 1),
+            )
+            self.assertTrue(torch.isfinite(checkpoint["target_mean"]).all())
+            self.assertTrue(torch.isfinite(checkpoint["target_std"]).all())
+            self.assertTrue(torch.all(checkpoint["target_std"] > 0))
 
         self.assertTrue(
             any(
