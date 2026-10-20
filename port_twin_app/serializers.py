@@ -153,6 +153,10 @@ class VesselSimulationResultSerializer(serializers.Serializer):
     departure_hour = serializers.FloatField(allow_null=True)
     waiting_hours = serializers.FloatField(allow_null=True)
     status = serializers.CharField()
+    reason = serializers.CharField(
+        allow_null=True,
+        required=False,
+    )
 
 
 class VesselResultsSerializer(serializers.Serializer):
