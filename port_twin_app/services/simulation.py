@@ -158,22 +158,33 @@ def run_simulation(
 
         # No berth can accommodate this vessel.
         if not compatible_berths:
-            reasons = []
-
-            if not any(
-                vessel.length <= berth.max_vessel_length
-                for berth in berths
-            ):
-                reasons.append("Vessel length exceeds all berth limits.")
-
-            if not any(
-                vessel.draft <= berth.max_vessel_draft
-                for berth in berths
-            ):
-                reasons.append("Vessel draft exceeds all berth limits.")
-
             if not berths:
-                reasons.append("No berths are configured.")
+                reason = "No berths are configured."
+            else:
+                reasons = []
+
+                length_fits_some_berth = any(
+                    vessel.length <= berth.max_vessel_length
+                    for berth in berths
+                )
+                draft_fits_some_berth = any(
+                    vessel.draft <= berth.max_vessel_draft
+                    for berth in berths
+                )
+
+                if not length_fits_some_berth:
+                    reasons.append("Vessel length exceeds all berth limits.")
+
+                if not draft_fits_some_berth:
+                    reasons.append("Vessel draft exceeds all berth limits.")
+
+                if length_fits_some_berth and draft_fits_some_berth:
+                    reasons.append(
+                        "No single berth can accommodate both the vessel's "
+                        "length and draft."
+                    )
+
+                reason = " ".join(reasons)
 
             results.append(
                 VesselSimulationResult(
@@ -184,7 +195,7 @@ def run_simulation(
                     departure_hour=None,
                     waiting_hours=None,
                     status="incompatible_berth",
-                    reason=" ".join(reasons),
+                    reason=reason,
                 )
             )
             continue
