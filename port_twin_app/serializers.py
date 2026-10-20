@@ -225,6 +225,31 @@ class SimulationHistoryItemSerializer(serializers.ModelSerializer):
         return SimulationSummarySerializer(summary_result.data).data
 
 
+class SimulationComparisonQuerySerializer(serializers.Serializer):
+    run_a = serializers.UUIDField()
+    run_b = serializers.UUIDField()
+
+    def validate(self, attrs):
+        if attrs["run_a"] == attrs["run_b"]:
+            raise serializers.ValidationError(
+                "Select two different simulation runs to compare."
+            )
+
+        return attrs
+
+
+class SimulationComparisonRunSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    scenario_name = serializers.CharField()
+    summary = SimulationSummarySerializer()
+
+
+class SimulationComparisonResponseSerializer(serializers.Serializer):
+    run_a = SimulationComparisonRunSerializer()
+    run_b = SimulationComparisonRunSerializer()
+    differences = SimulationSummarySerializer()
+
+
 class OperationsBerthOverviewSerializer(serializers.Serializer):
     total = serializers.IntegerField()
     active = serializers.IntegerField()
