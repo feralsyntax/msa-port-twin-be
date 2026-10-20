@@ -119,7 +119,8 @@ def _calculate_metrics(
     metrics = {}
 
     for channel, field_name in enumerate(OUTPUT_FIELDS):
-        field_errors = errors[:, :, channel, :, :]
+        # Shape: [total_steps, 3, ny, nx].
+        field_errors = errors[:, channel, :, :]
 
         mae = field_errors.abs().mean().item()
         rmse = field_errors.square().mean().sqrt().item()
