@@ -78,6 +78,10 @@ class SimulationDetailAPITests(TestCase):
             response.data["vessel_results"]["vessels"][0]["vessel_id"],
             "test-vessel-1",
         )
+        self.assertEqual(
+            response.data["vessel_results"]["vessels"][0]["reason"],
+            "No compatible berth was available.",
+        )
 
     def test_nonexistent_simulation_returns_404(self):
         response = self.client.get(f"/api/v1/simulations/{uuid.uuid4()}/")
