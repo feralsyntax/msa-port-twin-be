@@ -46,7 +46,9 @@ def make_sample(sample_id, start_time, offset=0.0):
         initial_water_level_m=[[0.5 + offset for _ in range(nx)] for _ in range(ny)],
         wind_u_ms=[[[2.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
         wind_v_ms=[[[1.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
-        boundary_conditions={},
+        boundary_conditions={
+            "west": {"water_level_m": [0.1] * steps},
+        },
     )
 
     target = MarinePredictionResult(
