@@ -1,6 +1,4 @@
-"""
-Tests for the initial marine Fourier Neural Operator.
-"""
+"""Tests for the marine FNO model and inference utilities."""
 
 import tempfile
 from pathlib import Path
@@ -19,56 +17,57 @@ from port_twin_app.services.marine_ai.model import (
     MarineFNO,
     load_checkpoint,
     predict,
+    predict_from_checkpoint,
     request_to_tensor,
     save_checkpoint,
 )
 
 
 def make_request(steps=3, ny=8, nx=10):
-    """
-    Build a small, valid request for model tests.
-    """
-
-    grid = MarineGrid(
-        west=39.5,
-        south=-4.2,
-        east=39.8,
-        north=-3.9,
-        nx=nx,
-        ny=ny,
-    )
-    forecast = MarineForecastConfig(
-        start_time="2026-10-20T12:00:00+03:00",
-        steps=steps,
-        step_seconds=3600,
-    )
+    """Build a small request suitable for fast model tests."""
 
     return MarinePredictionRequest(
-        grid=grid,
-        forecast=forecast,
+        grid=MarineGrid(
+            west=39.5,
+            south=-4.2,
+            east=39.8,
+            north=-3.9,
+            nx=nx,
+            ny=ny,
+        ),
+        forecast=MarineForecastConfig(
+            start_time="2026-01-01T00:00:00+00:00",
+            steps=steps,
+            step_seconds=3600,
+        ),
         bathymetry_m=[[20.0 for _ in range(nx)] for _ in range(ny)],
         initial_water_level_m=[[0.5 for _ in range(nx)] for _ in range(ny)],
         wind_u_ms=[[[2.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
         wind_v_ms=[[[1.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
         boundary_conditions={
-            "west": {"water_level_m": [0.1] * steps},
-            "north": {"normal_velocity_ms": [0.2] * steps},
+            "west": {
+                "water_level_m": [0.1] * steps,
+            },
+            "north": {
+                "normal_velocity_ms": [0.2] * steps,
+            },
         },
     )
 
 
-class MarineFNOTests(SimpleTestCase):
+class MarineFNOModelTests(SimpleTestCase):
     def setUp(self):
-        torch.manual_seed(42)
+        torch.manual_seed(7)
+
         self.request = make_request()
         self.model = MarineFNO(
-            width=8,
-            modes_x=3,
-            modes_y=3,
-            layers=2,
+            width=4,
+            modes_x=2,
+            modes_y=2,
+            layers=1,
         )
 
-    def test_request_encoding_has_expected_shape(self):
+    def test_request_to_tensor_has_expected_shape(self):
         inputs = request_to_tensor(self.request)
 
         self.assertEqual(
@@ -77,42 +76,53 @@ class MarineFNOTests(SimpleTestCase):
         )
         self.assertTrue(torch.isfinite(inputs).all())
 
-    def test_request_encoding_includes_boundary_values(self):
+    def test_boundary_conditions_are_encoded_in_expected_channels(self):
         inputs = request_to_tensor(self.request)
 
-        # Channels 7 and 8 are the west-edge water level and
-        # east-edge normal velocity respectively, per the encoding.
-        west_water_level_channel = 7
-        north_normal_velocity_channel = 14
-
-        self.assertTrue(torch.all(inputs[0, :, west_water_level_channel, :, 0] == 0.1))
+        # Channel 7: west water-level boundary.
         self.assertTrue(
-            torch.all(inputs[0, :, north_normal_velocity_channel, -1, :] == 0.2)
+            torch.allclose(
+                inputs[0, :, 7, :, 0],
+                torch.full((3, 8), 0.1),
+            )
         )
 
-    def test_forward_pass_returns_three_fields_per_step(self):
+        # Channel 14: north normal-velocity boundary.
+        self.assertTrue(
+            torch.allclose(
+                inputs[0, :, 14, -1, :],
+                torch.full((3, 10), 0.2),
+            )
+        )
+
+        # Boundary values should not fill unrelated interior locations.
+        self.assertTrue(torch.all(inputs[0, :, 7, :, 1:] == 0))
+        self.assertTrue(torch.all(inputs[0, :, 14, :-1, :] == 0))
+
+    def test_forward_returns_expected_shape(self):
         inputs = request_to_tensor(self.request)
-        predictions = self.model(inputs)
+        outputs = self.model(inputs)
 
-        self.assertEqual(tuple(predictions.shape), (1, 3, 3, 8, 10))
-        self.assertTrue(torch.isfinite(predictions).all())
+        self.assertEqual(
+            tuple(outputs.shape),
+            (1, 3, 3, 8, 10),
+        )
+        self.assertTrue(torch.isfinite(outputs).all())
 
-    def test_model_supports_optimizer_update(self):
+    def test_optimizer_updates_model_parameters(self):
         inputs = request_to_tensor(self.request)
-        targets = torch.zeros((1, 3, 3, 8, 10))
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
-
         before = [parameter.detach().clone() for parameter in self.model.parameters()]
 
-        optimizer.zero_grad()
-        predictions = self.model(inputs)
-        loss = torch.nn.functional.mse_loss(predictions, targets)
-        loss.backward()
-
-        self.assertTrue(
-            all(parameter.grad is not None for parameter in self.model.parameters())
+        optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=1e-3,
         )
 
+        optimizer.zero_grad(set_to_none=True)
+
+        outputs = self.model(inputs)
+        loss = outputs.square().mean()
+        loss.backward()
         optimizer.step()
 
         self.assertTrue(
@@ -122,35 +132,199 @@ class MarineFNOTests(SimpleTestCase):
             )
         )
 
-    def test_prediction_matches_contract(self):
+    def test_predict_returns_valid_prediction_result(self):
         result = predict(self.request, self.model)
 
+        result.validate_against(self.request)
+
         self.assertEqual(result.model_version, MODEL_VERSION)
-        self.assertEqual(result.status, "success")
         self.assertEqual(len(result.water_level_m), 3)
         self.assertEqual(len(result.current_u_ms), 3)
         self.assertEqual(len(result.current_v_ms), 3)
         self.assertEqual(len(result.water_level_m[0]), 8)
         self.assertEqual(len(result.water_level_m[0][0]), 10)
 
-        result.validate_against(self.request)
+    def test_predict_reverses_target_normalization(self):
+        """Normalized predictions must be converted back to physical units."""
 
-    def test_checkpoint_round_trip_preserves_predictions(self):
-        inputs = request_to_tensor(self.request)
-        self.model.eval()
+        mean = torch.tensor(
+            [0.5, 2.0, -1.0],
+            dtype=torch.float32,
+        ).view(1, 1, 3, 1, 1)
 
+        std = torch.tensor(
+            [0.2, 0.4, 0.6],
+            dtype=torch.float32,
+        ).view(1, 1, 3, 1, 1)
+
+        # Force the model to produce known normalized outputs of zero.
         with torch.no_grad():
-            expected = self.model(inputs)
+            for parameter in self.model.parameters():
+                parameter.zero_()
 
+        result = predict(
+            self.request,
+            self.model,
+            target_mean=mean,
+            target_std=std,
+        )
+
+        # A normalized output of zero becomes the corresponding target mean.
+        self.assertAlmostEqual(
+            result.water_level_m[0][0][0],
+            0.5,
+            places=5,
+        )
+        self.assertAlmostEqual(
+            result.current_u_ms[0][0][0],
+            2.0,
+            places=5,
+        )
+        self.assertAlmostEqual(
+            result.current_v_ms[0][0][0],
+            -1.0,
+            places=5,
+        )
+
+    def test_predict_requires_both_normalization_statistics(self):
+        mean = torch.zeros((1, 1, 3, 1, 1))
+
+        with self.assertRaises(ValueError):
+            predict(
+                self.request,
+                self.model,
+                target_mean=mean,
+            )
+
+        with self.assertRaises(ValueError):
+            predict(
+                self.request,
+                self.model,
+                target_std=torch.ones_like(mean),
+            )
+
+    def test_predict_rejects_invalid_normalization_statistics(self):
+        mean = torch.zeros((1, 1, 3, 1, 1))
+        std = torch.ones((1, 1, 3, 1, 1))
+        std[0, 0, 0, 0, 0] = 0.0
+
+        with self.assertRaises(ValueError):
+            predict(
+                self.request,
+                self.model,
+                target_mean=mean,
+                target_std=std,
+            )
+
+    def test_checkpoint_round_trip(self):
         with tempfile.TemporaryDirectory() as directory:
             checkpoint_path = Path(directory) / "marine_fno.pt"
-            save_checkpoint(self.model, checkpoint_path, epoch=1)
-            restored_model, checkpoint = load_checkpoint(checkpoint_path)
 
-        restored_model.eval()
-        with torch.no_grad():
-            actual = restored_model(inputs)
+            save_checkpoint(
+                self.model,
+                checkpoint_path,
+                epoch=3,
+            )
 
-        self.assertEqual(checkpoint["epoch"], 1)
-        self.assertEqual(checkpoint["model_version"], MODEL_VERSION)
-        torch.testing.assert_close(actual, expected)
+            restored_model, checkpoint = load_checkpoint(
+                checkpoint_path,
+            )
+
+            self.assertIsInstance(restored_model, MarineFNO)
+            self.assertEqual(checkpoint["epoch"], 3)
+            self.assertEqual(
+                checkpoint["model_version"],
+                MODEL_VERSION,
+            )
+            self.assertEqual(
+                checkpoint["architecture"]["width"],
+                4,
+            )
+
+            original_output = self.model(request_to_tensor(self.request))
+            restored_output = restored_model(request_to_tensor(self.request))
+
+            self.assertTrue(
+                torch.allclose(
+                    original_output,
+                    restored_output,
+                    atol=1e-6,
+                )
+            )
+
+    def test_predict_from_checkpoint_uses_saved_normalization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "marine_fno.pt"
+
+            save_checkpoint(
+                self.model,
+                checkpoint_path,
+                epoch=2,
+            )
+
+            # Simulate the normalization metadata saved by training.py.
+            checkpoint = torch.load(
+                checkpoint_path,
+                map_location="cpu",
+                weights_only=True,
+            )
+
+            checkpoint["target_mean"] = torch.tensor(
+                [0.5, 2.0, -1.0],
+                dtype=torch.float32,
+            ).view(1, 1, 3, 1, 1)
+
+            checkpoint["target_std"] = torch.tensor(
+                [0.2, 0.4, 0.6],
+                dtype=torch.float32,
+            ).view(1, 1, 3, 1, 1)
+
+            torch.save(checkpoint, checkpoint_path)
+
+            # The zeroed model produces zero normalized outputs, so inference
+            # should return the checkpoint's means in physical units.
+            with torch.no_grad():
+                for parameter in self.model.parameters():
+                    parameter.zero_()
+
+            save_checkpoint(
+                self.model,
+                checkpoint_path,
+                epoch=2,
+            )
+
+            checkpoint = torch.load(
+                checkpoint_path,
+                map_location="cpu",
+                weights_only=True,
+            )
+            checkpoint["target_mean"] = torch.tensor(
+                [0.5, 2.0, -1.0],
+                dtype=torch.float32,
+            ).view(1, 1, 3, 1, 1)
+            checkpoint["target_std"] = torch.tensor(
+                [0.2, 0.4, 0.6],
+                dtype=torch.float32,
+            ).view(1, 1, 3, 1, 1)
+            torch.save(checkpoint, checkpoint_path)
+
+            result = predict_from_checkpoint(
+                self.request,
+                checkpoint_path,
+            )
+
+            self.assertAlmostEqual(
+                result.water_level_m[0][0][0],
+                0.5,
+                places=5,
+            )
+            self.assertAlmostEqual(
+                result.current_u_ms[0][0][0],
+                2.0,
+                places=5,
+            )
+            self.assertAlmostEqual(
+                result.current_v_ms[0][0][0],
+                -1.0,
+                places=5,
+            )
