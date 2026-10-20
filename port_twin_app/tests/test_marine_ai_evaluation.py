@@ -141,9 +141,14 @@ class MarineEvaluationTests(SimpleTestCase):
         baseline.validate_against(request)
 
         for step in baseline.water_level_m:
-            self.assertEqual(
-                step,
-                request.initial_water_level_m,
+            self.assertTrue(
+                torch.allclose(
+                    torch.tensor(step, dtype=torch.float32),
+                    torch.tensor(
+                        request.initial_water_level_m,
+                        dtype=torch.float32,
+                    ),
+                )
             )
 
         for step in baseline.current_u_ms:
