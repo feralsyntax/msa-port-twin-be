@@ -53,6 +53,11 @@ urlpatterns = [
         name="simulation-history",
     ),
     path(
+        "simulations/compare/",
+        views.SimulationComparisonView.as_view(),
+        name="simulation-comparison",
+    ),
+    path(
         "overview/",
         views.OperationsOverviewView.as_view(),
         name="operations-overview",
