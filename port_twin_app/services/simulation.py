@@ -41,6 +41,7 @@ class VesselSimulationResult:
     departure_hour: float | None
     waiting_hours: float | None
     status: str
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -157,6 +158,34 @@ def run_simulation(
 
         # No berth can accommodate this vessel.
         if not compatible_berths:
+            if not berths:
+                reason = "No berths are configured."
+            else:
+                reasons = []
+
+                length_fits_some_berth = any(
+                    vessel.length <= berth.max_vessel_length
+                    for berth in berths
+                )
+                draft_fits_some_berth = any(
+                    vessel.draft <= berth.max_vessel_draft
+                    for berth in berths
+                )
+
+                if not length_fits_some_berth:
+                    reasons.append("Vessel length exceeds all berth limits.")
+
+                if not draft_fits_some_berth:
+                    reasons.append("Vessel draft exceeds all berth limits.")
+
+                if length_fits_some_berth and draft_fits_some_berth:
+                    reasons.append(
+                        "No single berth can accommodate both the vessel's "
+                        "length and draft."
+                    )
+
+                reason = " ".join(reasons)
+
             results.append(
                 VesselSimulationResult(
                     vessel_id=vessel.vessel_id,
@@ -166,6 +195,7 @@ def run_simulation(
                     departure_hour=None,
                     waiting_hours=None,
                     status="incompatible_berth",
+                    reason=reason,
                 )
             )
             continue
