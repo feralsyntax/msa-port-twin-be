@@ -6,6 +6,7 @@ from port_twin_app.models import (
     Berth,
     MarineCondition,
     Scenario,
+    SimulationRun,
     Vessel,
     VesselPosition,
 )
@@ -185,6 +186,39 @@ class SimulationErrorResponseSerializer(serializers.Serializer):
     scenario_id = serializers.UUIDField()
     status = serializers.CharField()
     error = serializers.CharField()
+
+
+class SimulationHistoryItemSerializer(serializers.ModelSerializer):
+    scenario_name = serializers.CharField(
+        source="scenario.name",
+        read_only=True,
+    )
+    summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SimulationRun
+        fields = [  # noqa: RUF012
+            "id",
+            "scenario_id",
+            "scenario_name",
+            "status",
+            "started_at",
+            "completed_at",
+            "error_message",
+            "created_at",
+            "summary",
+        ]
+
+    def get_summary(self, obj):
+        summary_result = next(
+            (result for result in obj.results.all() if result.result_type == "summary"),
+            None,
+        )
+
+        if summary_result is None:
+            return None
+
+        return SimulationSummarySerializer(summary_result.data).data
 
 
 class OperationsBerthOverviewSerializer(serializers.Serializer):
