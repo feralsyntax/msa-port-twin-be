@@ -6,6 +6,7 @@ from port_twin_app.models import (
     Berth,
     MarineCondition,
     Scenario,
+    SimulationRun,
     Vessel,
     VesselPosition,
 )
@@ -152,6 +153,10 @@ class VesselSimulationResultSerializer(serializers.Serializer):
     departure_hour = serializers.FloatField(allow_null=True)
     waiting_hours = serializers.FloatField(allow_null=True)
     status = serializers.CharField()
+    reason = serializers.CharField(
+        allow_null=True,
+        required=False,
+    )
 
 
 class VesselResultsSerializer(serializers.Serializer):
@@ -185,6 +190,64 @@ class SimulationErrorResponseSerializer(serializers.Serializer):
     scenario_id = serializers.UUIDField()
     status = serializers.CharField()
     error = serializers.CharField()
+
+
+class SimulationHistoryItemSerializer(serializers.ModelSerializer):
+    scenario_name = serializers.CharField(
+        source="scenario.name",
+        read_only=True,
+    )
+    summary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SimulationRun
+        fields = [  # noqa: RUF012
+            "id",
+            "scenario_id",
+            "scenario_name",
+            "status",
+            "started_at",
+            "completed_at",
+            "error_message",
+            "created_at",
+            "summary",
+        ]
+
+    def get_summary(self, obj):
+        summary_result = next(
+            (result for result in obj.results.all() if result.result_type == "summary"),
+            None,
+        )
+
+        if summary_result is None:
+            return None
+
+        return SimulationSummarySerializer(summary_result.data).data
+
+
+class SimulationComparisonQuerySerializer(serializers.Serializer):
+    run_a = serializers.UUIDField()
+    run_b = serializers.UUIDField()
+
+    def validate(self, attrs):
+        if attrs["run_a"] == attrs["run_b"]:
+            raise serializers.ValidationError(
+                "Select two different simulation runs to compare."
+            )
+
+        return attrs
+
+
+class SimulationComparisonRunSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    scenario_name = serializers.CharField()
+    summary = SimulationSummarySerializer()
+
+
+class SimulationComparisonResponseSerializer(serializers.Serializer):
+    run_a = SimulationComparisonRunSerializer()
+    run_b = SimulationComparisonRunSerializer()
+    differences = SimulationSummarySerializer()
 
 
 class OperationsBerthOverviewSerializer(serializers.Serializer):

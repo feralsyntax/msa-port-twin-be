@@ -20,7 +20,11 @@ from port_twin_app.serializers import (
     OperationsOverviewSerializer,
     ScenarioSerializer,
     ScenarioSimulationResponseSerializer,
+    SimulationComparisonQuerySerializer,
+    SimulationComparisonResponseSerializer,
     SimulationDetailResponseSerializer,
+    SimulationHistoryItemSerializer,
+    SimulationSummarySerializer,
     VesselPositionSerializer,
     VesselSerializer,
 )
@@ -198,6 +202,95 @@ class SimulationDetailView(APIView):
                 "summary": results.get("summary"),
                 "vessel_results": results.get("vessel_results"),
             },
+            status=status.HTTP_200_OK,
+        )
+
+
+class SimulationHistoryListAPIView(generics.ListAPIView):
+    serializer_class = SimulationHistoryItemSerializer
+
+    queryset = (
+        SimulationRun.objects.select_related("scenario")
+        .prefetch_related("results")
+        .all()
+    )
+
+
+class SimulationComparisonView(APIView):
+    def get(self, request):
+        query_serializer = SimulationComparisonQuerySerializer(
+            data=request.query_params,
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        run_a_id = query_serializer.validated_data["run_a"]
+        run_b_id = query_serializer.validated_data["run_b"]
+
+        run_a = get_object_or_404(
+            SimulationRun.objects.select_related("scenario"),
+            pk=run_a_id,
+        )
+        run_b = get_object_or_404(
+            SimulationRun.objects.select_related("scenario"),
+            pk=run_b_id,
+        )
+
+        for simulation_run in (run_a, run_b):
+            if simulation_run.status != SimulationRun.Status.COMPLETED:
+                return Response(
+                    {
+                        "detail": (
+                            f"Simulation run {simulation_run.id} has not completed."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        summary_a_result = run_a.results.filter(
+            result_type="summary",
+        ).first()
+        summary_b_result = run_b.results.filter(
+            result_type="summary",
+        ).first()
+
+        if summary_a_result is None or summary_b_result is None:
+            return Response(
+                {"detail": "Both runs must have stored summary results."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        summary_a = SimulationSummarySerializer(
+            summary_a_result.data,
+        ).data
+        summary_b = SimulationSummarySerializer(
+            summary_b_result.data,
+        ).data
+
+        differences = {
+            metric: summary_b[metric] - summary_a[metric] for metric in summary_a
+        }
+
+        response_data = {
+            "run_a": {
+                "id": run_a.id,
+                "scenario_name": run_a.scenario.name,
+                "summary": summary_a,
+            },
+            "run_b": {
+                "id": run_b.id,
+                "scenario_name": run_b.scenario.name,
+                "summary": summary_b,
+            },
+            "differences": differences,
+        }
+
+        response_serializer = SimulationComparisonResponseSerializer(
+            data=response_data,
+        )
+        response_serializer.is_valid(raise_exception=True)
+
+        return Response(
+            response_serializer.data,
             status=status.HTTP_200_OK,
         )
 

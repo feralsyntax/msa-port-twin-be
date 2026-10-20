@@ -48,6 +48,7 @@ class SimulationDetailAPITests(TestCase):
                         "departure_hour": 8.0,
                         "waiting_hours": 0.0,
                         "status": "completed",
+                        "reason": "No compatible berth was available.",
                     }
                 ]
             },
@@ -76,6 +77,10 @@ class SimulationDetailAPITests(TestCase):
         self.assertEqual(
             response.data["vessel_results"]["vessels"][0]["vessel_id"],
             "test-vessel-1",
+        )
+        self.assertEqual(
+            response.data["vessel_results"]["vessels"][0]["reason"],
+            "No compatible berth was available.",
         )
 
     def test_nonexistent_simulation_returns_404(self):
