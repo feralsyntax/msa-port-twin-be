@@ -284,3 +284,80 @@ class OperationsOverviewSerializer(serializers.Serializer):
         allow_null=True,
     )
     data_status = OperationsDataStatusSerializer()
+
+
+from port_twin_app.models import MarinePrediction
+from port_twin_app.services.marine_ai.contracts import (
+    MarineForecastConfig,
+    MarineGrid,
+    MarinePredictionRequest,
+)
+
+
+class MarineGridInputSerializer(serializers.Serializer):
+    west = serializers.FloatField()
+    south = serializers.FloatField()
+    east = serializers.FloatField()
+    north = serializers.FloatField()
+    nx = serializers.IntegerField(min_value=2)
+    ny = serializers.IntegerField(min_value=2)
+    crs = serializers.CharField(default="EPSG:4326")
+
+
+class MarineForecastInputSerializer(serializers.Serializer):
+    start_time = serializers.DateTimeField()
+    steps = serializers.IntegerField(min_value=1)
+    step_seconds = serializers.IntegerField(min_value=1)
+
+
+class MarinePredictionRequestSerializer(serializers.Serializer):
+    grid = MarineGridInputSerializer()
+    forecast = MarineForecastInputSerializer()
+    bathymetry_m = serializers.JSONField()
+    initial_water_level_m = serializers.JSONField()
+    wind_u_ms = serializers.JSONField()
+    wind_v_ms = serializers.JSONField()
+    boundary_conditions = serializers.JSONField()
+
+    def validate(self, attrs):
+        try:
+            grid = MarineGrid(**attrs["grid"])
+
+            forecast = MarineForecastConfig(
+                start_time=attrs["forecast"]["start_time"].isoformat(),
+                steps=attrs["forecast"]["steps"],
+                step_seconds=attrs["forecast"]["step_seconds"],
+            )
+
+            prediction_request = MarinePredictionRequest(
+                grid=grid,
+                forecast=forecast,
+                bathymetry_m=attrs["bathymetry_m"],
+                initial_water_level_m=attrs["initial_water_level_m"],
+                wind_u_ms=attrs["wind_u_ms"],
+                wind_v_ms=attrs["wind_v_ms"],
+                boundary_conditions=attrs["boundary_conditions"],
+            )
+        except (TypeError, ValueError) as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+        attrs["_prediction_request"] = prediction_request
+        return attrs
+
+
+class MarinePredictionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarinePrediction
+        fields = [  # noqa: RUF012
+            "id",
+            "grid",
+            "forecast",
+            "input_data",
+            "result_data",
+            "model_version",
+            "contract_version",
+            "status",
+            "error_message",
+            "created_at",
+        ]
+        read_only_fields = fields
