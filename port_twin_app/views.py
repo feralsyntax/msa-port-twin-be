@@ -2,6 +2,7 @@ from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
+from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -9,6 +10,7 @@ from rest_framework.views import APIView
 from port_twin_app.models import (
     Berth,
     MarineCondition,
+    MarinePrediction,
     Scenario,
     SimulationRun,
     Vessel,
@@ -17,6 +19,8 @@ from port_twin_app.models import (
 from port_twin_app.serializers import (
     BerthSerializer,
     MarineConditionSerializer,
+    MarinePredictionRequestSerializer,
+    MarinePredictionSerializer,
     OperationsOverviewSerializer,
     ScenarioSerializer,
     ScenarioSimulationResponseSerializer,
@@ -28,7 +32,9 @@ from port_twin_app.serializers import (
     VesselPositionSerializer,
     VesselSerializer,
 )
+from port_twin_app.services.marine_ai.django_service import get_marine_inference_service
 from port_twin_app.services.simulation_execution import execute_simulation_run
+from port_twin_proj import settings
 
 
 class VesselListAPIView(generics.ListAPIView):
@@ -358,3 +364,89 @@ class OperationsOverviewView(GenericAPIView):
 
         serializer = self.get_serializer(data)
         return Response(serializer.data)
+
+
+class MarinePredictionServiceUnavailable(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = (
+        "Marine prediction service is unavailable. Check the configured AI checkpoint."
+    )
+    default_code = "marine_prediction_unavailable"
+
+
+class MarinePredictionListCreateAPIView(APIView):
+    """
+    List stored marine forecasts or generate and store a new forecast.
+    """
+
+    def get(self, request):
+        predictions = MarinePrediction.objects.all()
+        page = (
+            self.paginate_queryset(predictions)
+            if hasattr(self, "paginate_queryset")
+            else None
+        )
+
+        if page is not None:
+            serializer = MarinePredictionSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        from rest_framework.pagination import PageNumberPagination
+
+        paginator = PageNumberPagination()
+        page = paginator.paginate_queryset(predictions, request, view=self)
+
+        if page is not None:
+            serializer = MarinePredictionSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        serializer = MarinePredictionSerializer(predictions, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        request_serializer = MarinePredictionRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+
+        prediction_request = request_serializer.validated_data["_prediction_request"]
+
+        try:
+            inference_service = get_marine_inference_service(
+                settings.MARINE_AI_CHECKPOINT
+            )
+        except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
+            raise MarinePredictionServiceUnavailable() from exc
+
+        result = inference_service.predict(prediction_request)
+
+        prediction = MarinePrediction.objects.create(
+            grid=request.data["grid"],
+            forecast=request.data["forecast"],
+            input_data={
+                key: value
+                for key, value in request.data.items()
+                if key not in {"grid", "forecast"}
+            },
+            result_data={
+                "water_level_m": result.water_level_m,
+                "current_u_ms": result.current_u_ms,
+                "current_v_ms": result.current_v_ms,
+                "status": result.status,
+            },
+            model_version=result.model_version,
+            contract_version=result.contract_version,
+            status=MarinePrediction.Status.COMPLETED,
+        )
+
+        response_serializer = MarinePredictionSerializer(prediction)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MarinePredictionDetailAPIView(generics.RetrieveAPIView):
+    """Retrieve a previously stored marine forecast."""
+
+    queryset = MarinePrediction.objects.all()
+    serializer_class = MarinePredictionSerializer
