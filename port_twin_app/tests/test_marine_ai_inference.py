@@ -50,27 +50,35 @@ def make_request():
     )
 
 
+def create_test_checkpoint(directory):
+    """Create a small synthetic checkpoint for reuse across tests."""
+
+    torch.manual_seed(7)
+
+    checkpoint_path = Path(directory) / "marine_fno.pt"
+
+    model = MarineFNO(
+        width=4,
+        modes_x=2,
+        modes_y=2,
+        layers=1,
+    )
+
+    save_checkpoint(
+        model,
+        checkpoint_path,
+        epoch=1,
+    )
+
+    return checkpoint_path
+
+
 class MarineInferenceServiceTests(SimpleTestCase):
     def setUp(self):
-        torch.manual_seed(7)
-
         self.temp_directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_directory.cleanup)
 
-        self.checkpoint_path = Path(self.temp_directory.name) / "marine_fno.pt"
-
-        self.model = MarineFNO(
-            width=4,
-            modes_x=2,
-            modes_y=2,
-            layers=1,
-        )
-
-        save_checkpoint(
-            self.model,
-            self.checkpoint_path,
-            epoch=1,
-        )
+        self.checkpoint_path = create_test_checkpoint(self.temp_directory.name)
 
         self.request = make_request()
 
@@ -129,7 +137,10 @@ class MarineInferenceServiceTests(SimpleTestCase):
         second_result = service.predict(self.request)
 
         self.assertIs(service.model, loaded_model)
-        self.assertEqual(first_result.model_version, second_result.model_version)
+        self.assertEqual(
+            first_result.model_version,
+            second_result.model_version,
+        )
         self.assertEqual(
             first_result.water_level_m,
             second_result.water_level_m,
@@ -164,7 +175,10 @@ class MarineInferenceServiceTests(SimpleTestCase):
         result = service.predict(self.request)
         result.validate_against(self.request)
 
-        self.assertEqual(result.model_version, checkpoint["model_version"])
+        self.assertEqual(
+            result.model_version,
+            checkpoint["model_version"],
+        )
 
     def test_missing_checkpoint_raises_loading_error(self):
         missing_path = Path(self.temp_directory.name) / "missing.pt"
