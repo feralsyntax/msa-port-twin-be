@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -34,7 +35,6 @@ from port_twin_app.serializers import (
 )
 from port_twin_app.services.marine_ai.django_service import get_marine_inference_service
 from port_twin_app.services.simulation_execution import execute_simulation_run
-from port_twin_proj import settings
 
 
 class VesselListAPIView(generics.ListAPIView):

@@ -32,7 +32,7 @@ def make_api_payload():
             "crs": grid.crs,
         },
         "forecast": {
-            "start_time": forecast.start_time.isoformat(),
+            "start_time": forecast.start_time,
             "steps": forecast.steps,
             "step_seconds": forecast.step_seconds,
         },
