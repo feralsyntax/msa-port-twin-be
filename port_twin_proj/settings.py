@@ -72,9 +72,7 @@ ROOT_URLCONF = "port_twin_proj.urls"
 # Rest Framework Configs
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-    "DEFAULT_PAGINATION_CLASS": (
-        "rest_framework.pagination.PageNumberPagination"
-    ),
+    "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
     "PAGE_SIZE": 20,
 }
 
@@ -166,3 +164,17 @@ MAILERS = {
         "BACKEND": "django.core.mail.backends.console.EmailBackend",
     },
 }
+
+# Checkpoint configs for the trained AI model
+
+MARINE_AI_CHECKPOINT = config(
+    "MARINE_AI_CHECKPOINT",
+    default=str(
+        BASE_DIR
+        / "port_twin_app"
+        / "services"
+        / "marine_ai"
+        / "checkpoints"
+        / "marine_fno.pt"
+    ),
+)
