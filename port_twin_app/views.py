@@ -374,34 +374,10 @@ class MarinePredictionServiceUnavailable(APIException):
     default_code = "marine_prediction_unavailable"
 
 
-class MarinePredictionListCreateAPIView(APIView):
+class MarinePredictionCreateAPIView(APIView):
     """
     List stored marine forecasts or generate and store a new forecast.
     """
-
-    def get(self, request):
-        predictions = MarinePrediction.objects.all()
-        page = (
-            self.paginate_queryset(predictions)
-            if hasattr(self, "paginate_queryset")
-            else None
-        )
-
-        if page is not None:
-            serializer = MarinePredictionSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        from rest_framework.pagination import PageNumberPagination
-
-        paginator = PageNumberPagination()
-        page = paginator.paginate_queryset(predictions, request, view=self)
-
-        if page is not None:
-            serializer = MarinePredictionSerializer(page, many=True)
-            return paginator.get_paginated_response(serializer.data)
-
-        serializer = MarinePredictionSerializer(predictions, many=True)
-        return Response(serializer.data)
 
     def post(self, request):
         request_serializer = MarinePredictionRequestSerializer(data=request.data)
