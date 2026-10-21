@@ -300,3 +300,51 @@ class SimulationResult(models.Model):
 
     def __str__(self):
         return f"{self.result_type} - {self.simulation_run}"
+
+
+class MarinePrediction(models.Model):
+    """
+    Stores a complete AI-generated marine forecast and its inputs.
+    """
+
+    class Status(models.TextChoices):
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    grid = models.JSONField(
+        help_text="Geographic bounds, resolution, and CRS.",
+    )
+    forecast = models.JSONField(
+        help_text="Forecast start time, steps, and time interval.",
+    )
+    input_data = models.JSONField(
+        help_text="Inputs used to generate the prediction.",
+    )
+    result_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Predicted water levels and current components.",
+    )
+    model_version = models.CharField(max_length=100)
+    contract_version = models.CharField(max_length=20)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.COMPLETED,
+    )
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]  # noqa: RUF012
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Marine prediction {self.id} ({self.status})"
