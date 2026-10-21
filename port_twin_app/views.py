@@ -376,7 +376,7 @@ class MarinePredictionServiceUnavailable(APIException):
 
 class MarinePredictionCreateAPIView(APIView):
     """
-    List stored marine forecasts or generate and store a new forecast.
+    Generate and store a new forecast.
     """
 
     def post(self, request):
