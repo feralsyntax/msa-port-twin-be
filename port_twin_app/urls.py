@@ -62,4 +62,19 @@ urlpatterns = [
         views.OperationsOverviewView.as_view(),
         name="operations-overview",
     ),
+    path(
+        "marine-predictions/",
+        views.MarinePredictionListAPIView.as_view(),
+        name="marine-prediction-list",
+    ),
+    path(
+        "marine-predictions/create/",
+        views.MarinePredictionCreateAPIView.as_view(),
+        name="marine-prediction-create",
+    ),
+    path(
+        "marine-predictions/<uuid:pk>/",
+        views.MarinePredictionDetailAPIView.as_view(),
+        name="marine-prediction-detail",
+    ),
 ]
