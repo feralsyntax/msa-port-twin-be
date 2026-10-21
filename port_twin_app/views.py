@@ -450,3 +450,10 @@ class MarinePredictionDetailAPIView(generics.RetrieveAPIView):
 
     queryset = MarinePrediction.objects.all()
     serializer_class = MarinePredictionSerializer
+
+
+class MarinePredictionListAPIView(generics.ListAPIView):
+    """List stored marine forecasts."""
+
+    queryset = MarinePrediction.objects.all()
+    serializer_class = MarinePredictionSerializer
