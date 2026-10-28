@@ -178,3 +178,29 @@ MARINE_AI_CHECKPOINT = config(
         / "marine_fno.pt"
     ),
 )
+
+MARINE_AI_BACKEND = config(
+    "MARINE_AI_BACKEND",
+    default="local",
+).lower()
+
+MARINE_AI_MODELARTS_ENDPOINT = config(
+    "MARINE_AI_MODELARTS_ENDPOINT",
+    default="",
+)
+
+MARINE_AI_MODELARTS_TOKEN = config(
+    "MARINE_AI_MODELARTS_TOKEN",
+    default="",
+)
+
+MARINE_AI_MODELARTS_TIMEOUT = config(
+    "MARINE_AI_MODELARTS_TIMEOUT",
+    default=30.0,
+    cast=float,
+)
+
+MARINE_AI_MODELARTS_VERSION = config(
+    "MARINE_AI_MODELARTS_VERSION",
+    default="modelarts-unknown",
+)
