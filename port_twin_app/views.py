@@ -1,4 +1,3 @@
-from django.conf import settings
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -33,7 +32,9 @@ from port_twin_app.serializers import (
     VesselPositionSerializer,
     VesselSerializer,
 )
-from port_twin_app.services.marine_ai.django_service import get_marine_inference_service
+from port_twin_app.services.marine_ai.django_service import (
+    get_configured_marine_inference_service,
+)
 from port_twin_app.services.simulation_execution import execute_simulation_run
 
 
@@ -369,7 +370,7 @@ class OperationsOverviewView(GenericAPIView):
 class MarinePredictionServiceUnavailable(APIException):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     default_detail = (
-        "Marine prediction service is unavailable. Check the configured AI checkpoint."
+        "Marine prediction service is unavailable. Check the configured AI backend."
     )
     default_code = "marine_prediction_unavailable"
 
@@ -386,13 +387,15 @@ class MarinePredictionCreateAPIView(APIView):
         prediction_request = request_serializer.validated_data["_prediction_request"]
 
         try:
-            inference_service = get_marine_inference_service(
-                settings.MARINE_AI_CHECKPOINT
-            )
-        except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
+            inference_service = get_configured_marine_inference_service()
+            result = inference_service.predict(prediction_request)
+        except (
+            FileNotFoundError,
+            OSError,
+            ValueError,
+            RuntimeError,
+        ) as exc:
             raise MarinePredictionServiceUnavailable() from exc
-
-        result = inference_service.predict(prediction_request)
 
         prediction = MarinePrediction.objects.create(
             grid=request.data["grid"],
