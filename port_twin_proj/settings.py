@@ -26,6 +26,7 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", cast=Csv())
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", cast=Csv())
 DEBUG = config("DEBUG", default=False, cast=bool)
 MODE = config("MODE", default="dev", cast=str)
+IS_PRODUCTION = MODE == "prod"
 SECRET_KEY = config("SECRET_KEY")
 
 # Database Configurations
@@ -66,6 +67,29 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Deployment security
+SESSION_COOKIE_SECURE = IS_PRODUCTION
+CSRF_COOKIE_SECURE = IS_PRODUCTION
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+
+# Enable HSTS only when production HTTPS is configured correctly.
+SECURE_HSTS_SECONDS = config(
+    "SECURE_HSTS_SECONDS",
+    default=31536000 if IS_PRODUCTION else 0,
+    cast=int,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = IS_PRODUCTION
+SECURE_HSTS_PRELOAD = False
+
+# Configure this explicitly if HTTPS terminates at a trusted reverse proxy.
+SECURE_SSL_REDIRECT = config(
+    "SECURE_SSL_REDIRECT",
+    default=False,
+    cast=bool,
+)
 
 ROOT_URLCONF = "port_twin_proj.urls"
 
