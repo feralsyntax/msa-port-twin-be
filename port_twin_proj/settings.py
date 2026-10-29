@@ -98,6 +98,13 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
     "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_CLASSES": (
+        ["rest_framework.throttling.ScopedRateThrottle"] if IS_PRODUCTION else []
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "simulation": "10/hour",
+        "marine_prediction": "5/hour",
+    },
 }
 
 # drf-spectacular configs
