@@ -148,6 +148,24 @@ class MarineFNOModelTests(SimpleTestCase):
         with self.assertRaisesRegex(ValueError, "contains non-finite values"):
             request_to_tensor(request)
 
+    def test_request_to_tensor_rejects_invalid_wind_v_shape(self):
+        request = make_request()
+        object.__setattr__(request, "wind_v_ms", [])
+
+        with self.assertRaisesRegex(ValueError, "wind_v_ms must have shape"):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_finite_wind_u_values(self):
+        request = make_request()
+        object.__setattr__(
+            request,
+            "wind_u_ms",
+            [[[float("nan") for _ in range(10)] for _ in range(8)] for _ in range(3)],
+        )
+
+        with self.assertRaisesRegex(ValueError, "wind_u_ms contains non-finite"):
+            request_to_tensor(request)
+
     def test_boundary_conditions_are_encoded_in_expected_channels(self):
         inputs = request_to_tensor(self.request)
 
