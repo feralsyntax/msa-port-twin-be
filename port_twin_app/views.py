@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -38,6 +40,8 @@ from port_twin_app.services.marine_ai.django_service import (
     get_configured_marine_inference_service,
 )
 from port_twin_app.services.simulation_execution import execute_simulation_run
+
+logger = logging.getLogger(__name__)
 
 
 class VesselListAPIView(generics.ListAPIView):
@@ -413,6 +417,11 @@ class MarinePredictionCreateAPIView(APIView):
             ValueError,
             RuntimeError,
         ) as exc:
+            logger.error(
+                "Marine prediction failed: path=%s exception_type=%s",
+                request.path,
+                type(exc).__name__,
+            )
             raise MarinePredictionServiceUnavailable() from exc
 
         prediction = MarinePrediction.objects.create(
