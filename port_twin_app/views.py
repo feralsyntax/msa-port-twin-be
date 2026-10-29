@@ -1,6 +1,8 @@
 import logging
+from pathlib import Path
 
-from django.db.models import Max
+from django.conf import settings
+from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -21,6 +23,7 @@ from port_twin_app.models import (
 )
 from port_twin_app.serializers import (
     BerthSerializer,
+    DataStatusSerializer,
     MarineConditionSerializer,
     MarinePredictionRequestSerializer,
     MarinePredictionSerializer,
@@ -380,6 +383,107 @@ class OperationsOverviewView(GenericAPIView):
 
         serializer = self.get_serializer(data)
         return Response(serializer.data)
+
+
+class DataStatusAPIView(APIView):
+    """Expose data provenance, freshness, and marine AI readiness."""
+
+    serializer_class = DataStatusSerializer
+
+    @extend_schema(
+        responses={200: DataStatusSerializer},
+        description=(
+            "Returns marine data provenance, ingestion timestamps, "
+            "vessel position freshness, and marine AI configuration status."
+        ),
+    )
+    def get(self, request):
+        marine_conditions = MarineCondition.objects.all()
+        vessel_positions = VesselPosition.objects.all()
+
+        latest_marine_condition = marine_conditions.order_by("-recorded_at").first()
+        latest_marine_ingestion = marine_conditions.order_by("-created_at").first()
+
+        latest_position = vessel_positions.order_by("-recorded_at").first()
+        latest_position_ingestion = vessel_positions.order_by("-created_at").first()
+
+        source_counts = list(
+            marine_conditions.values("source")
+            .annotate(count=Count("id"))
+            .order_by("source")
+        )
+        source_counts = [
+            {"source": item["source"], "count": item["count"]} for item in source_counts
+        ]
+
+        backend = settings.MARINE_AI_BACKEND
+        checkpoint_path = Path(settings.MARINE_AI_CHECKPOINT)
+        endpoint_configured = bool(settings.MARINE_AI_MODELARTS_ENDPOINT.strip())
+
+        if backend == "local":
+            configured = checkpoint_path.is_file()
+            readiness = "ready" if configured else "unavailable"
+            configured_version = ""
+        elif backend == "modelarts":
+            configured = endpoint_configured
+            readiness = "configured" if configured else "unconfigured"
+            configured_version = settings.MARINE_AI_MODELARTS_VERSION
+        else:
+            configured = False
+            readiness = "unsupported_backend"
+            configured_version = ""
+
+        latest_prediction = MarinePrediction.objects.order_by("-created_at").first()
+
+        data = {
+            "generated_at": timezone.now(),
+            "marine_conditions": {
+                "total_records": marine_conditions.count(),
+                "source_counts": source_counts,
+                "latest_recorded_at": (
+                    latest_marine_condition.recorded_at
+                    if latest_marine_condition
+                    else None
+                ),
+                "latest_ingested_at": (
+                    latest_marine_ingestion.created_at
+                    if latest_marine_ingestion
+                    else None
+                ),
+            },
+            "vessel_positions": {
+                "total_records": vessel_positions.count(),
+                "latest_recorded_at": (
+                    latest_position.recorded_at if latest_position else None
+                ),
+                "latest_ingested_at": (
+                    latest_position_ingestion.created_at
+                    if latest_position_ingestion
+                    else None
+                ),
+            },
+            "ai": {
+                "backend": backend,
+                "configured": configured,
+                "readiness": readiness,
+                "configured_model_version": configured_version,
+                "latest_prediction_status": (
+                    latest_prediction.status if latest_prediction else None
+                ),
+                "latest_prediction_model_version": (
+                    latest_prediction.model_version if latest_prediction else None
+                ),
+                "latest_prediction_contract_version": (
+                    latest_prediction.contract_version if latest_prediction else None
+                ),
+                "latest_prediction_at": (
+                    latest_prediction.created_at if latest_prediction else None
+                ),
+            },
+        }
+
+        serializer = DataStatusSerializer(data)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class MarinePredictionServiceUnavailable(APIException):
