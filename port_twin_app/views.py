@@ -134,6 +134,7 @@ class ScenarioSimulationView(GenericAPIView):
     """
 
     serializer_class = ScenarioSimulationResponseSerializer
+    throttle_scope = "simulation"
 
     def post(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
@@ -379,6 +380,8 @@ class MarinePredictionCreateAPIView(APIView):
     """
     Generate and store a new forecast.
     """
+
+    throttle_scope = "marine_prediction"
 
     def post(self, request):
         request_serializer = MarinePredictionRequestSerializer(data=request.data)
