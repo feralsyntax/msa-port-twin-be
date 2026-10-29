@@ -22,7 +22,7 @@ class SimulationHistoryAPITests(TestCase):
         cls.newer_run = SimulationRun.objects.create(
             scenario=cls.scenario,
             status="failed",
-            error_message="Test simulation failure",
+            error_message="Simulation execution failed. Check server logs for details.",
         )
 
     def setUp(self):
