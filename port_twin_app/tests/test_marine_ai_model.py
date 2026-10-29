@@ -76,7 +76,7 @@ class MarineFNOModelTests(SimpleTestCase):
             (1, 3, INPUT_CHANNELS, 8, 10),
         )
         self.assertTrue(torch.isfinite(inputs).all())
-        
+
     def test_request_to_tensor_rejects_invalid_grid_shape(self):
         request = make_request()
         object.__setattr__(request, "bathymetry_m", [[20.0, 30.0]])
@@ -102,6 +102,51 @@ class MarineFNOModelTests(SimpleTestCase):
 
         with self.assertRaisesRegex(ValueError, "wind_v_ms contains non-finite"):
             request_to_tensor(self.request)
+
+    def test_request_to_tensor_rejects_boundary_series_with_wrong_length(self):
+        request = make_request()
+        object.__setattr__(
+            request,
+            "boundary_conditions",
+            {
+                "west": {
+                    "water_level_m": [0.1],
+                },
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "sequence of length 3"):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_numeric_boundary_values(self):
+        request = make_request()
+        object.__setattr__(
+            request,
+            "boundary_conditions",
+            {
+                "west": {
+                    "water_level_m": [0.1, "invalid", 0.3],
+                },
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "must contain numeric values"):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_finite_boundary_values(self):
+        request = make_request()
+        object.__setattr__(
+            request,
+            "boundary_conditions",
+            {
+                "west": {
+                    "water_level_m": [0.1, float("inf"), 0.3],
+                },
+            },
+        )
+
+        with self.assertRaisesRegex(ValueError, "contains non-finite values"):
+            request_to_tensor(request)
 
     def test_boundary_conditions_are_encoded_in_expected_channels(self):
         inputs = request_to_tensor(self.request)
@@ -375,8 +420,6 @@ class MarineFNOModelTests(SimpleTestCase):
 
         with self.assertRaisesRegex(ValueError, "Expected 15 input channels"):
             self.model(inputs)
-
-    
 
     def test_load_checkpoint_rejects_incompatible_contract(self):
         with tempfile.TemporaryDirectory() as directory:
