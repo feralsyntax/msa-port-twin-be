@@ -1,6 +1,7 @@
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import generics, status
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
@@ -27,6 +28,7 @@ from port_twin_app.serializers import (
     SimulationComparisonQuerySerializer,
     SimulationComparisonResponseSerializer,
     SimulationDetailResponseSerializer,
+    SimulationErrorResponseSerializer,
     SimulationHistoryItemSerializer,
     SimulationSummarySerializer,
     VesselPositionSerializer,
@@ -225,6 +227,13 @@ class SimulationHistoryListAPIView(generics.ListAPIView):
 
 
 class SimulationComparisonView(APIView):
+    @extend_schema(
+        parameters=[SimulationComparisonQuerySerializer],
+        responses={
+            200: SimulationComparisonResponseSerializer,
+            400: SimulationErrorResponseSerializer,
+        },
+    )
     def get(self, request):
         query_serializer = SimulationComparisonQuerySerializer(
             data=request.query_params,
@@ -383,6 +392,12 @@ class MarinePredictionCreateAPIView(APIView):
 
     throttle_scope = "marine_prediction"
 
+    @extend_schema(
+        request=MarinePredictionRequestSerializer,
+        responses={
+            201: MarinePredictionSerializer,
+        },
+    )
     def post(self, request):
         request_serializer = MarinePredictionRequestSerializer(data=request.data)
         request_serializer.is_valid(raise_exception=True)
