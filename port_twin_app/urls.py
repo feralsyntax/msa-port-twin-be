@@ -63,6 +63,11 @@ urlpatterns = [
         name="operations-overview",
     ),
     path(
+        "data-status/",
+        views.DataStatusAPIView.as_view(),
+        name="data-status",
+    ),
+    path(
         "marine-predictions/",
         views.MarinePredictionListAPIView.as_view(),
         name="marine-prediction-list",
