@@ -173,6 +173,7 @@ REST_FRAMEWORK = {
         "simulation": "10/hour",
         "marine_prediction": "5/hour",
     },
+    "EXCEPTION_HANDLER": "port_twin_app.exceptions.custom_exception_handler",
 }
 
 # drf-spectacular configs
