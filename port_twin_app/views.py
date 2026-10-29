@@ -156,7 +156,7 @@ class ScenarioSimulationView(GenericAPIView):
                     "id": str(simulation_run.id),
                     "scenario_id": str(scenario.id),
                     "status": simulation_run.status,
-                    "error": "Simulation could not be completed. Check the scenario configuration.",
+                    "error": "Invalid simulation configuration",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
