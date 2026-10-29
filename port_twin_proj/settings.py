@@ -79,11 +79,19 @@ X_FRAME_OPTIONS = "DENY"
 # Enable HSTS only when production HTTPS is configured correctly.
 SECURE_HSTS_SECONDS = config(
     "SECURE_HSTS_SECONDS",
-    default=31536000 if IS_PRODUCTION else 0,
+    default=0,
     cast=int,
 )
-SECURE_HSTS_INCLUDE_SUBDOMAINS = IS_PRODUCTION
-SECURE_HSTS_PRELOAD = False
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    default=False,
+    cast=bool,
+)
+SECURE_HSTS_PRELOAD = config(
+    "SECURE_HSTS_PRELOAD",
+    default=False,
+    cast=bool,
+)
 
 # Configure this explicitly if HTTPS terminates at a trusted reverse proxy.
 SECURE_SSL_REDIRECT = config(
