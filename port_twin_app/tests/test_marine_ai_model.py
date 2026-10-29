@@ -76,6 +76,32 @@ class MarineFNOModelTests(SimpleTestCase):
             (1, 3, INPUT_CHANNELS, 8, 10),
         )
         self.assertTrue(torch.isfinite(inputs).all())
+        
+    def test_request_to_tensor_rejects_invalid_grid_shape(self):
+        request = make_request()
+        object.__setattr__(request, "bathymetry_m", [[20.0, 30.0]])
+
+        with self.assertRaisesRegex(ValueError, "bathymetry_m must have shape"):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_finite_grid_values(self):
+        self.request.bathymetry_m[0][0] = float("nan")
+
+        with self.assertRaisesRegex(ValueError, "bathymetry_m contains non-finite"):
+            request_to_tensor(self.request)
+
+    def test_request_to_tensor_rejects_invalid_wind_shape(self):
+        request = make_request()
+        object.__setattr__(request, "wind_u_ms", [])
+
+        with self.assertRaisesRegex(ValueError, "wind_u_ms must have shape"):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_finite_wind_values(self):
+        self.request.wind_v_ms[0][0][0] = float("inf")
+
+        with self.assertRaisesRegex(ValueError, "wind_v_ms contains non-finite"):
+            request_to_tensor(self.request)
 
     def test_boundary_conditions_are_encoded_in_expected_channels(self):
         inputs = request_to_tensor(self.request)
@@ -350,31 +376,7 @@ class MarineFNOModelTests(SimpleTestCase):
         with self.assertRaisesRegex(ValueError, "Expected 15 input channels"):
             self.model(inputs)
 
-    def test_request_to_tensor_rejects_invalid_grid_shape(self):
-        request = make_request()
-        object.__setattr__(request, "bathymetry_m", [[20.0, 30.0]])
-
-        with self.assertRaisesRegex(ValueError, "bathymetry_m must have shape"):
-            request_to_tensor(request)
-
-    def test_request_to_tensor_rejects_non_finite_grid_values(self):
-        self.request.bathymetry_m[0][0] = float("nan")
-
-        with self.assertRaisesRegex(ValueError, "bathymetry_m contains non-finite"):
-            request_to_tensor(self.request)
-
-    def test_request_to_tensor_rejects_invalid_wind_shape(self):
-        request = make_request()
-        object.__setattr__(request, "wind_u_ms", [])
-
-        with self.assertRaisesRegex(ValueError, "wind_u_ms must have shape"):
-            request_to_tensor(request)
-
-    def test_request_to_tensor_rejects_non_finite_wind_values(self):
-        self.request.wind_v_ms[0][0][0] = float("inf")
-
-        with self.assertRaisesRegex(ValueError, "wind_v_ms contains non-finite"):
-            request_to_tensor(self.request)
+    
 
     def test_load_checkpoint_rejects_incompatible_contract(self):
         with tempfile.TemporaryDirectory() as directory:
