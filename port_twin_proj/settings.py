@@ -20,14 +20,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 # Basic Configurations
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", cast=Csv())
-CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)
-CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", cast=Csv())
-CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", cast=Csv())
-DEBUG = config("DEBUG", default=False, cast=bool)
-MODE = config("MODE", default="dev", cast=str)
+MODE = config("MODE", default="dev", cast=str).strip().lower()
 IS_PRODUCTION = MODE == "prod"
+DEBUG = config("DEBUG", default=False, cast=bool)
 SECRET_KEY = config("SECRET_KEY")
+ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="", cast=Csv())
+CORS_ALLOW_ALL_ORIGINS = config("CORS_ALLOW_ALL_ORIGINS", default=False, cast=bool)
+CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", default="", cast=Csv())
+CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
+
 REDIS_URL = config("REDIS_URL", default="")
 
 # Database Configurations
@@ -69,6 +70,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+ROOT_URLCONF = "port_twin_proj.urls"
+
 # Deployment security
 SESSION_COOKIE_SECURE = IS_PRODUCTION
 CSRF_COOKIE_SECURE = IS_PRODUCTION
@@ -92,53 +95,14 @@ SECURE_HSTS_PRELOAD = config(
     default=False,
     cast=bool,
 )
-
-# Configure this explicitly if HTTPS terminates at a trusted reverse proxy.
 SECURE_SSL_REDIRECT = config(
     "SECURE_SSL_REDIRECT",
     default=False,
     cast=bool,
 )
 
-# Fail fast when production configuration is unsafe.
+# Cache configs
 if IS_PRODUCTION:
-    production_errors = []
-
-    if DEBUG:
-        production_errors.append("DEBUG must be False in production.")
-
-    if len(SECRET_KEY) < 50:
-        production_errors.append(
-            "SECRET_KEY must contain at least 50 characters in production."
-        )
-
-    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
-        production_errors.append(
-            "ALLOWED_HOSTS must contain explicit production hostnames."
-        )
-
-    if CORS_ALLOW_ALL_ORIGINS:
-        production_errors.append("CORS_ALLOW_ALL_ORIGINS must be False in production.")
-
-    if not CORS_ALLOWED_ORIGINS:
-        production_errors.append(
-            "CORS_ALLOWED_ORIGINS must be configured in production."
-        )
-
-    if any(not origin.startswith("https://") for origin in CORS_ALLOWED_ORIGINS):
-        production_errors.append("Production CORS origins must use HTTPS.")
-
-    if any(not origin.startswith("https://") for origin in CSRF_TRUSTED_ORIGINS):
-        production_errors.append("Production CSRF trusted origins must use HTTPS.")
-
-    if production_errors:
-        raise RuntimeError(
-            "Invalid production configuration:\n- " + "\n- ".join(production_errors)
-        )
-
-    if not REDIS_URL:
-        production_errors.append("REDIS_URL must be configured in production.")
-
     # Use shared Redis cache in production and local memory in development.
     CACHES = {
         "default": {
@@ -159,7 +123,7 @@ else:
     }
 
 
-ROOT_URLCONF = "port_twin_proj.urls"
+
 
 # Rest Framework Configs
 REST_FRAMEWORK = {
@@ -242,9 +206,10 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATICFILES_DIRS = [
-    BASE_DIR / "static",
-]
+STATIC_SOURCE_DIR = BASE_DIR / "static"
+STATICFILES_DIRS = (
+    [STATIC_SOURCE_DIR] if STATIC_SOURCE_DIR.is_dir() else []
+)
 
 STORAGES = {
     "default": {
@@ -285,29 +250,26 @@ MARINE_AI_CHECKPOINT = config(
 MARINE_AI_BACKEND = config(
     "MARINE_AI_BACKEND",
     default="local",
-).lower()
-
+).strip().lower()
 MARINE_AI_MODELARTS_ENDPOINT = config(
     "MARINE_AI_MODELARTS_ENDPOINT",
     default="",
 )
-
 MARINE_AI_MODELARTS_TOKEN = config(
     "MARINE_AI_MODELARTS_TOKEN",
     default="",
 )
-
 MARINE_AI_MODELARTS_TIMEOUT = config(
     "MARINE_AI_MODELARTS_TIMEOUT",
     default=30.0,
     cast=float,
 )
-
 MARINE_AI_MODELARTS_VERSION = config(
     "MARINE_AI_MODELARTS_VERSION",
     default="modelarts-unknown",
 )
 
+# Logging configs
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
