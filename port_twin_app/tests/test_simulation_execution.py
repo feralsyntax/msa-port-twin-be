@@ -102,7 +102,7 @@ class SimulationExecutionTests(TestCase):
         self.assertEqual(self.simulation_run.status, "failed")
         self.assertEqual(
             self.simulation_run.error_message,
-            "Test simulation failure",
+            "Simulation execution failed. Check server logs for details.",
         )
         self.assertIsNotNone(self.simulation_run.completed_at)
 
@@ -184,7 +184,7 @@ class SimulationExecutionTests(TestCase):
         self.assertEqual(self.simulation_run.status, SimulationRun.Status.FAILED)
         self.assertEqual(
             self.simulation_run.error_message,
-            "Result persistence failed",
+            "Simulation execution failed. Check server logs for details.",
         )
         self.assertFalse(
             SimulationResult.objects.filter(simulation_run=self.simulation_run).exists()

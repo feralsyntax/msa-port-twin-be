@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models import Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -33,11 +35,14 @@ from port_twin_app.serializers import (
     SimulationSummarySerializer,
     VesselPositionSerializer,
     VesselSerializer,
+    safe_simulation_error_message,
 )
 from port_twin_app.services.marine_ai.django_service import (
     get_configured_marine_inference_service,
 )
 from port_twin_app.services.simulation_execution import execute_simulation_run
+
+logger = logging.getLogger(__name__)
 
 
 class VesselListAPIView(generics.ListAPIView):
@@ -148,7 +153,7 @@ class ScenarioSimulationView(GenericAPIView):
         try:
             execute_simulation_run(simulation_run)
 
-        except ValueError as exc:
+        except ValueError:
             simulation_run.refresh_from_db()
 
             return Response(
@@ -156,7 +161,7 @@ class ScenarioSimulationView(GenericAPIView):
                     "id": str(simulation_run.id),
                     "scenario_id": str(scenario.id),
                     "status": simulation_run.status,
-                    "error": str(exc),
+                    "error": "Invalid simulation configuration",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
@@ -207,7 +212,7 @@ class SimulationDetailView(APIView):
                 "status": simulation_run.status,
                 "started_at": simulation_run.started_at,
                 "completed_at": simulation_run.completed_at,
-                "error_message": simulation_run.error_message,
+                "error_message": safe_simulation_error_message(simulation_run),
                 "created_at": simulation_run.created_at,
                 "summary": results.get("summary"),
                 "vessel_results": results.get("vessel_results"),
@@ -413,6 +418,11 @@ class MarinePredictionCreateAPIView(APIView):
             ValueError,
             RuntimeError,
         ) as exc:
+            logger.error(
+                "Marine prediction failed: path=%s exception_type=%s",
+                request.path,
+                type(exc).__name__,
+            )
             raise MarinePredictionServiceUnavailable() from exc
 
         prediction = MarinePrediction.objects.create(

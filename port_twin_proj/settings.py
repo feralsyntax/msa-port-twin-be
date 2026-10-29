@@ -173,6 +173,7 @@ REST_FRAMEWORK = {
         "simulation": "10/hour",
         "marine_prediction": "5/hour",
     },
+    "EXCEPTION_HANDLER": "port_twin_app.exceptions.custom_exception_handler",
 }
 
 # drf-spectacular configs
@@ -306,3 +307,40 @@ MARINE_AI_MODELARTS_VERSION = config(
     "MARINE_AI_MODELARTS_VERSION",
     default="modelarts-unknown",
 )
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": ("%(asctime)s %(levelname)s %(name)s %(message)s"),
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+        "port_twin_app": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
