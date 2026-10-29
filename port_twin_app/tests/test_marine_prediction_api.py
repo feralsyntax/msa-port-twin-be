@@ -54,7 +54,12 @@ class MarinePredictionAPITests(APITestCase):
         self.checkpoint_path = create_test_checkpoint(self.temp_dir.name)
 
         self.settings_override = override_settings(
-            MARINE_AI_CHECKPOINT=str(self.checkpoint_path)
+            MARINE_AI_CHECKPOINT=str(self.checkpoint_path),
+            MARINE_AI_BACKEND="local",
+            MARINE_AI_MODELARTS_ENDPOINT="",
+            MARINE_AI_MODELARTS_TOKEN="",
+            MARINE_AI_MODELARTS_TIMEOUT=30.0,
+            MARINE_AI_MODELARTS_VERSION="modelarts-test",
         )
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)
