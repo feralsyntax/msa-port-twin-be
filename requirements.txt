@@ -11,6 +11,7 @@ djangorestframework==3.18.3
 drf-spectacular==0.30.0
 filelock==4.2.4
 fsspec==2026.9.0
+gunicorn==26.2.0
 inflection==0.5.1
 Jinja2==3.1.6
 jsonschema==4.26.0
