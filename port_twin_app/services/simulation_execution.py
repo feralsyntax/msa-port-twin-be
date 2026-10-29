@@ -1,8 +1,12 @@
+import logging
+
 from django.db import transaction
 from django.utils import timezone
 
 from port_twin_app.models import SimulationResult, SimulationRun
 from port_twin_app.services.simulation_runner import run_scenario_simulation
+
+logger = logging.getLogger(__name__)
 
 
 def execute_simulation_run(simulation_run: SimulationRun):
@@ -28,6 +32,12 @@ def execute_simulation_run(simulation_run: SimulationRun):
         )
 
     simulation_run.refresh_from_db()
+
+    logger.info(
+        "Simulation started: run_id=%s scenario_id=%s",
+        simulation_run.pk,
+        simulation_run.scenario_id,
+    )
 
     try:
         output = run_scenario_simulation(simulation_run.scenario)
@@ -82,13 +92,20 @@ def execute_simulation_run(simulation_run: SimulationRun):
                 ]
             )
 
+        logger.info(
+            "Simulation completed: run_id=%s scenario_id=%s",
+            simulation_run.pk,
+            simulation_run.scenario_id,
+        )
         return simulation_run
 
     except Exception as exc:
         with transaction.atomic():
             simulation_run.status = SimulationRun.Status.FAILED
             simulation_run.completed_at = timezone.now()
-            simulation_run.error_message = str(exc)
+            simulation_run.error_message = (
+                "Simulation execution failed. Check server logs for details."
+            )
             simulation_run.save(
                 update_fields=[
                     "status",
@@ -96,4 +113,13 @@ def execute_simulation_run(simulation_run: SimulationRun):
                     "error_message",
                 ]
             )
+
+        # Log identifiers and the exception class, not its potentially sensitive
+        # message or traceback.
+        logger.error(
+            "Simulation failed: run_id=%s scenario_id=%s exception_type=%s",
+            simulation_run.pk,
+            simulation_run.scenario_id,
+            type(exc).__name__,
+        )
         raise
