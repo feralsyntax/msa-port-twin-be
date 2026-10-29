@@ -148,7 +148,7 @@ class ScenarioSimulationView(GenericAPIView):
         try:
             execute_simulation_run(simulation_run)
 
-        except ValueError as exc:
+        except ValueError:
             simulation_run.refresh_from_db()
 
             return Response(
@@ -156,7 +156,7 @@ class ScenarioSimulationView(GenericAPIView):
                     "id": str(simulation_run.id),
                     "scenario_id": str(scenario.id),
                     "status": simulation_run.status,
-                    "error": str(exc),
+                    "error": "Simulation could not be completed. Check the scenario configuration.",
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
