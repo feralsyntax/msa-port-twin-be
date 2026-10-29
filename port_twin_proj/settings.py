@@ -127,11 +127,9 @@ if IS_PRODUCTION:
         raise RuntimeError(
             "Invalid production configuration:\n- " + "\n- ".join(production_errors)
         )
-    
+
     if not REDIS_URL:
-        production_errors.append(
-            "REDIS_URL must be configured in production."
-        )
+        production_errors.append("REDIS_URL must be configured in production.")
 
     # Use shared Redis cache in production and local memory in development.
     CACHES = {
@@ -151,7 +149,6 @@ else:
             "LOCATION": "msa-port-twin-dev",
         },
     }
-
 
 
 ROOT_URLCONF = "port_twin_proj.urls"
@@ -255,7 +252,10 @@ STORAGES = {
 
 MAILERS = {
     "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
+        "BACKEND": config(
+            "MAIL_BACKEND",
+            default="django.core.mail.backends.console.EmailBackend",
+        ),
     },
 }
 
