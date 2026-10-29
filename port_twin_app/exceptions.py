@@ -1,6 +1,6 @@
 import logging
 
-from rest_framework import status
+from rest_framework import serializers, status
 from rest_framework.exceptions import APIException
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_exception_handler
@@ -15,6 +15,9 @@ def custom_exception_handler(exc, context):
     request = context.get("request")
 
     if response is not None:
+        if isinstance(exc, serializers.ValidationError):
+            return response
+
         if isinstance(exc, APIException):
             message = str(exc.detail)
             code = exc.default_code
@@ -31,8 +34,6 @@ def custom_exception_handler(exc, context):
         }
         return response
 
-    # Unexpected exceptions aren't handled by DRF's default handler.
-    # Log safe request metadata only; never log request data or exception text.
     logger.error(
         "Unhandled API exception: method=%s path=%s exception_type=%s",
         getattr(request, "method", "unknown"),
