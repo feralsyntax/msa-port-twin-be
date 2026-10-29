@@ -11,6 +11,16 @@ from port_twin_app.models import (
     VesselPosition,
 )
 
+SAFE_SIMULATION_ERROR_MESSAGE = (
+    "Simulation execution failed. Check server logs for details."
+)
+
+
+def safe_simulation_error_message(simulation_run):
+    if simulation_run.status == "failed":
+        return SAFE_SIMULATION_ERROR_MESSAGE
+    return ""
+
 
 class VesselSerializer(serializers.ModelSerializer):
     class Meta:
@@ -198,6 +208,7 @@ class SimulationHistoryItemSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     summary = serializers.SerializerMethodField()
+    error_message = serializers.SerializerMethodField()
 
     class Meta:
         model = SimulationRun
@@ -223,6 +234,9 @@ class SimulationHistoryItemSerializer(serializers.ModelSerializer):
             return None
 
         return SimulationSummarySerializer(summary_result.data).data
+
+    def get_error_message(self, obj):
+        return safe_simulation_error_message(obj)
 
 
 class SimulationComparisonQuerySerializer(serializers.Serializer):
