@@ -35,6 +35,7 @@ from port_twin_app.serializers import (
     SimulationSummarySerializer,
     VesselPositionSerializer,
     VesselSerializer,
+    safe_simulation_error_message,
 )
 from port_twin_app.services.marine_ai.django_service import (
     get_configured_marine_inference_service,
@@ -211,7 +212,7 @@ class SimulationDetailView(APIView):
                 "status": simulation_run.status,
                 "started_at": simulation_run.started_at,
                 "completed_at": simulation_run.completed_at,
-                "error_message": simulation_run.error_message,
+                "error_message": safe_simulation_error_message(simulation_run),
                 "created_at": simulation_run.created_at,
                 "summary": results.get("summary"),
                 "vessel_results": results.get("vessel_results"),
