@@ -12,6 +12,7 @@ from port_twin_app.services.marine_ai.contracts import (
     MarinePredictionRequest,
 )
 from port_twin_app.services.marine_ai.model import (
+    CONTRACT_VERSION,
     INPUT_CHANNELS,
     MODEL_VERSION,
     MarineFNO,
@@ -328,3 +329,71 @@ class MarineFNOModelTests(SimpleTestCase):
                 -1.0,
                 places=5,
             )
+
+    def test_model_rejects_invalid_architecture_parameters(self):
+        with self.assertRaisesRegex(ValueError, "width must be positive"):
+            MarineFNO(width=0)
+
+        with self.assertRaisesRegex(ValueError, "layers must be positive"):
+            MarineFNO(layers=0)
+
+        with self.assertRaisesRegex(ValueError, "Fourier mode counts must be positive"):
+            MarineFNO(modes_x=0)
+
+    def test_forward_rejects_invalid_input_dimensions(self):
+        with self.assertRaisesRegex(ValueError, "Inputs must have shape"):
+            self.model(torch.zeros(1, 3, 8, 10))
+
+    def test_forward_rejects_invalid_channel_count(self):
+        inputs = torch.zeros(1, 3, INPUT_CHANNELS - 1, 8, 10)
+
+        with self.assertRaisesRegex(ValueError, "Expected 15 input channels"):
+            self.model(inputs)
+
+    def test_request_to_tensor_rejects_invalid_grid_shape(self):
+        request = make_request()
+        object.__setattr__(request, "bathymetry_m", [[20.0, 30.0]])
+
+        with self.assertRaisesRegex(ValueError, "bathymetry_m must have shape"):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_finite_grid_values(self):
+        self.request.bathymetry_m[0][0] = float("nan")
+
+        with self.assertRaisesRegex(ValueError, "bathymetry_m contains non-finite"):
+            request_to_tensor(self.request)
+
+    def test_request_to_tensor_rejects_invalid_wind_shape(self):
+        request = make_request()
+        object.__setattr__(request, "wind_u_ms", [])
+
+        with self.assertRaisesRegex(ValueError, "wind_u_ms must have shape"):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_finite_wind_values(self):
+        self.request.wind_v_ms[0][0][0] = float("inf")
+
+        with self.assertRaisesRegex(ValueError, "wind_v_ms contains non-finite"):
+            request_to_tensor(self.request)
+
+    def test_load_checkpoint_rejects_incompatible_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "invalid.pt"
+            torch.save(
+                {"contract_version": "incompatible"},
+                checkpoint_path,
+            )
+
+            with self.assertRaisesRegex(ValueError, "contract version"):
+                load_checkpoint(checkpoint_path)
+
+    def test_load_checkpoint_rejects_missing_architecture(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "invalid.pt"
+            torch.save(
+                {"contract_version": CONTRACT_VERSION},
+                checkpoint_path,
+            )
+
+            with self.assertRaisesRegex(ValueError, "architecture metadata"):
+                load_checkpoint(checkpoint_path)
