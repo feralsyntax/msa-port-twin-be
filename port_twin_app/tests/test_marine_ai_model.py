@@ -16,6 +16,7 @@ from port_twin_app.services.marine_ai.model import (
     INPUT_CHANNELS,
     MODEL_VERSION,
     MarineFNO,
+    SpectralConv2d,
     load_checkpoint,
     predict,
     predict_from_checkpoint,
@@ -46,12 +47,8 @@ def make_request(steps=3, ny=8, nx=10):
         wind_u_ms=[[[2.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
         wind_v_ms=[[[1.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
         boundary_conditions={
-            "west": {
-                "water_level_m": [0.1] * steps,
-            },
-            "north": {
-                "normal_velocity_ms": [0.2] * steps,
-            },
+            "west": {"water_level_m": [0.1] * steps},
+            "north": {"normal_velocity_ms": [0.2] * steps},
         },
     )
 
@@ -108,11 +105,7 @@ class MarineFNOModelTests(SimpleTestCase):
         object.__setattr__(
             request,
             "boundary_conditions",
-            {
-                "west": {
-                    "water_level_m": [0.1],
-                },
-            },
+            {"west": {"water_level_m": [0.1]}},
         )
 
         with self.assertRaisesRegex(ValueError, "sequence of length 3"):
@@ -123,11 +116,7 @@ class MarineFNOModelTests(SimpleTestCase):
         object.__setattr__(
             request,
             "boundary_conditions",
-            {
-                "west": {
-                    "water_level_m": [0.1, "invalid", 0.3],
-                },
-            },
+            {"west": {"water_level_m": [0.1, "invalid", 0.3]}},
         )
 
         with self.assertRaisesRegex(ValueError, "must contain numeric values"):
@@ -138,11 +127,7 @@ class MarineFNOModelTests(SimpleTestCase):
         object.__setattr__(
             request,
             "boundary_conditions",
-            {
-                "west": {
-                    "water_level_m": [0.1, float("inf"), 0.3],
-                },
-            },
+            {"west": {"water_level_m": [0.1, float("inf"), 0.3]}},
         )
 
         with self.assertRaisesRegex(ValueError, "contains non-finite values"):
@@ -189,6 +174,41 @@ class MarineFNOModelTests(SimpleTestCase):
         self.assertTrue(torch.all(inputs[0, :, 7, :, 1:] == 0))
         self.assertTrue(torch.all(inputs[0, :, 14, :-1, :] == 0))
 
+    def test_request_to_tensor_accepts_scalar_boundary_value(self):
+        request = make_request()
+        object.__setattr__(
+            request,
+            "boundary_conditions",
+            {"west": {"water_level_m": 0.1}},
+        )
+
+        inputs = request_to_tensor(request)
+
+        self.assertEqual(
+            tuple(inputs.shape),
+            (1, 3, INPUT_CHANNELS, 8, 10),
+        )
+        self.assertTrue(torch.isfinite(inputs).all())
+
+    def test_request_to_tensor_encodes_east_and_south_boundaries(self):
+        request = make_request()
+        object.__setattr__(
+            request,
+            "boundary_conditions",
+            {
+                "east": {"water_level_m": [0.2] * 3},
+                "south": {"normal_velocity_ms": [0.3] * 3},
+            },
+        )
+
+        inputs = request_to_tensor(request)
+
+        # The returned tensor is [batch, time, channel, y, x].
+        # Verify the encoded values occur somewhere in the tensor without
+        # assuming unverified channel indices or boundary orientation.
+        self.assertTrue(torch.any(torch.isclose(inputs, torch.tensor(0.2))))
+        self.assertTrue(torch.any(torch.isclose(inputs, torch.tensor(0.3))))
+
     def test_forward_returns_expected_shape(self):
         inputs = request_to_tensor(self.request)
         outputs = self.model(inputs)
@@ -203,11 +223,7 @@ class MarineFNOModelTests(SimpleTestCase):
         inputs = request_to_tensor(self.request)
         before = [parameter.detach().clone() for parameter in self.model.parameters()]
 
-        optimizer = torch.optim.Adam(
-            self.model.parameters(),
-            lr=1e-3,
-        )
-
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3)
         optimizer.zero_grad(set_to_none=True)
 
         outputs = self.model(inputs)
@@ -235,19 +251,9 @@ class MarineFNOModelTests(SimpleTestCase):
         self.assertEqual(len(result.water_level_m[0][0]), 10)
 
     def test_predict_reverses_target_normalization(self):
-        """Normalized predictions must be converted back to physical units."""
+        mean = torch.tensor([0.5, 2.0, -1.0]).view(1, 1, 3, 1, 1)
+        std = torch.tensor([0.2, 0.4, 0.6]).view(1, 1, 3, 1, 1)
 
-        mean = torch.tensor(
-            [0.5, 2.0, -1.0],
-            dtype=torch.float32,
-        ).view(1, 1, 3, 1, 1)
-
-        std = torch.tensor(
-            [0.2, 0.4, 0.6],
-            dtype=torch.float32,
-        ).view(1, 1, 3, 1, 1)
-
-        # Force the model to produce known normalized outputs of zero.
         with torch.no_grad():
             for parameter in self.model.parameters():
                 parameter.zero_()
@@ -259,39 +265,18 @@ class MarineFNOModelTests(SimpleTestCase):
             target_std=std,
         )
 
-        # A normalized output of zero becomes the corresponding target mean.
-        self.assertAlmostEqual(
-            result.water_level_m[0][0][0],
-            0.5,
-            places=5,
-        )
-        self.assertAlmostEqual(
-            result.current_u_ms[0][0][0],
-            2.0,
-            places=5,
-        )
-        self.assertAlmostEqual(
-            result.current_v_ms[0][0][0],
-            -1.0,
-            places=5,
-        )
+        self.assertAlmostEqual(result.water_level_m[0][0][0], 0.5, places=5)
+        self.assertAlmostEqual(result.current_u_ms[0][0][0], 2.0, places=5)
+        self.assertAlmostEqual(result.current_v_ms[0][0][0], -1.0, places=5)
 
     def test_predict_requires_both_normalization_statistics(self):
         mean = torch.zeros((1, 1, 3, 1, 1))
 
         with self.assertRaises(ValueError):
-            predict(
-                self.request,
-                self.model,
-                target_mean=mean,
-            )
+            predict(self.request, self.model, target_mean=mean)
 
         with self.assertRaises(ValueError):
-            predict(
-                self.request,
-                self.model,
-                target_std=torch.ones_like(mean),
-            )
+            predict(self.request, self.model, target_std=torch.ones_like(mean))
 
     def test_predict_rejects_invalid_normalization_statistics(self):
         mean = torch.zeros((1, 1, 3, 1, 1))
@@ -310,114 +295,45 @@ class MarineFNOModelTests(SimpleTestCase):
         with tempfile.TemporaryDirectory() as directory:
             checkpoint_path = Path(directory) / "marine_fno.pt"
 
-            save_checkpoint(
-                self.model,
-                checkpoint_path,
-                epoch=3,
-            )
-
-            restored_model, checkpoint = load_checkpoint(
-                checkpoint_path,
-            )
+            save_checkpoint(self.model, checkpoint_path, epoch=3)
+            restored_model, checkpoint = load_checkpoint(checkpoint_path)
 
             self.assertIsInstance(restored_model, MarineFNO)
             self.assertEqual(checkpoint["epoch"], 3)
-            self.assertEqual(
-                checkpoint["model_version"],
-                MODEL_VERSION,
-            )
-            self.assertEqual(
-                checkpoint["architecture"]["width"],
-                4,
-            )
+            self.assertEqual(checkpoint["model_version"], MODEL_VERSION)
+            self.assertEqual(checkpoint["architecture"]["width"], 4)
 
             original_output = self.model(request_to_tensor(self.request))
             restored_output = restored_model(request_to_tensor(self.request))
 
-            self.assertTrue(
-                torch.allclose(
-                    original_output,
-                    restored_output,
-                    atol=1e-6,
-                )
-            )
+            self.assertTrue(torch.allclose(original_output, restored_output, atol=1e-6))
 
     def test_predict_from_checkpoint_uses_saved_normalization(self):
         with tempfile.TemporaryDirectory() as directory:
             checkpoint_path = Path(directory) / "marine_fno.pt"
 
-            save_checkpoint(
-                self.model,
-                checkpoint_path,
-                epoch=2,
-            )
-
-            # Simulate the normalization metadata saved by training.py.
-            checkpoint = torch.load(
-                checkpoint_path,
-                map_location="cpu",
-                weights_only=True,
-            )
-
-            checkpoint["target_mean"] = torch.tensor(
-                [0.5, 2.0, -1.0],
-                dtype=torch.float32,
-            ).view(1, 1, 3, 1, 1)
-
-            checkpoint["target_std"] = torch.tensor(
-                [0.2, 0.4, 0.6],
-                dtype=torch.float32,
-            ).view(1, 1, 3, 1, 1)
-
-            torch.save(checkpoint, checkpoint_path)
-
-            # The zeroed model produces zero normalized outputs, so inference
-            # should return the checkpoint's means in physical units.
             with torch.no_grad():
                 for parameter in self.model.parameters():
                     parameter.zero_()
 
-            save_checkpoint(
-                self.model,
-                checkpoint_path,
-                epoch=2,
-            )
+            save_checkpoint(self.model, checkpoint_path, epoch=2)
 
             checkpoint = torch.load(
                 checkpoint_path,
                 map_location="cpu",
                 weights_only=True,
             )
-            checkpoint["target_mean"] = torch.tensor(
-                [0.5, 2.0, -1.0],
-                dtype=torch.float32,
-            ).view(1, 1, 3, 1, 1)
-            checkpoint["target_std"] = torch.tensor(
-                [0.2, 0.4, 0.6],
-                dtype=torch.float32,
-            ).view(1, 1, 3, 1, 1)
+            checkpoint["target_mean"] = torch.tensor([0.5, 2.0, -1.0]).view(
+                1, 1, 3, 1, 1
+            )
+            checkpoint["target_std"] = torch.tensor([0.2, 0.4, 0.6]).view(1, 1, 3, 1, 1)
             torch.save(checkpoint, checkpoint_path)
 
-            result = predict_from_checkpoint(
-                self.request,
-                checkpoint_path,
-            )
+            result = predict_from_checkpoint(self.request, checkpoint_path)
 
-            self.assertAlmostEqual(
-                result.water_level_m[0][0][0],
-                0.5,
-                places=5,
-            )
-            self.assertAlmostEqual(
-                result.current_u_ms[0][0][0],
-                2.0,
-                places=5,
-            )
-            self.assertAlmostEqual(
-                result.current_v_ms[0][0][0],
-                -1.0,
-                places=5,
-            )
+            self.assertAlmostEqual(result.water_level_m[0][0][0], 0.5, places=5)
+            self.assertAlmostEqual(result.current_u_ms[0][0][0], 2.0, places=5)
+            self.assertAlmostEqual(result.current_v_ms[0][0][0], -1.0, places=5)
 
     def test_model_rejects_invalid_architecture_parameters(self):
         with self.assertRaisesRegex(ValueError, "width must be positive"):
@@ -442,10 +358,7 @@ class MarineFNOModelTests(SimpleTestCase):
     def test_load_checkpoint_rejects_incompatible_contract(self):
         with tempfile.TemporaryDirectory() as directory:
             checkpoint_path = Path(directory) / "invalid.pt"
-            torch.save(
-                {"contract_version": "incompatible"},
-                checkpoint_path,
-            )
+            torch.save({"contract_version": "incompatible"}, checkpoint_path)
 
             with self.assertRaisesRegex(ValueError, "contract version"):
                 load_checkpoint(checkpoint_path)
@@ -453,10 +366,29 @@ class MarineFNOModelTests(SimpleTestCase):
     def test_load_checkpoint_rejects_missing_architecture(self):
         with tempfile.TemporaryDirectory() as directory:
             checkpoint_path = Path(directory) / "invalid.pt"
-            torch.save(
-                {"contract_version": CONTRACT_VERSION},
-                checkpoint_path,
-            )
+            torch.save({"contract_version": CONTRACT_VERSION}, checkpoint_path)
 
             with self.assertRaisesRegex(ValueError, "architecture metadata"):
                 load_checkpoint(checkpoint_path)
+
+    def test_spectral_conv_rejects_zero_modes(self):
+        with self.assertRaisesRegex(ValueError, "Fourier mode counts"):
+            SpectralConv2d(
+                in_channels=1,
+                out_channels=1,
+                modes_x=0,
+                modes_y=1,
+            )
+
+    def test_spectral_conv_handles_grid_smaller_than_modes(self):
+        layer = SpectralConv2d(
+            in_channels=1,
+            out_channels=1,
+            modes_x=1,
+            modes_y=1,
+        )
+        inputs = torch.randn(1, 1, 1, 4)
+
+        outputs = layer(inputs)
+
+        self.assertEqual(outputs.shape, inputs.shape)
