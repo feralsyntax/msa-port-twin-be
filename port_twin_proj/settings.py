@@ -26,7 +26,9 @@ CORS_ALLOWED_ORIGINS = config("CORS_ALLOWED_ORIGINS", cast=Csv())
 CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", cast=Csv())
 DEBUG = config("DEBUG", default=False, cast=bool)
 MODE = config("MODE", default="dev", cast=str)
+IS_PRODUCTION = MODE == "prod"
 SECRET_KEY = config("SECRET_KEY")
+REDIS_URL = config("REDIS_URL", default="")
 
 # Database Configurations
 
@@ -67,6 +69,96 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# Deployment security
+SESSION_COOKIE_SECURE = IS_PRODUCTION
+CSRF_COOKIE_SECURE = IS_PRODUCTION
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+
+# Enable HSTS only when production HTTPS is configured correctly.
+SECURE_HSTS_SECONDS = config(
+    "SECURE_HSTS_SECONDS",
+    default=0,
+    cast=int,
+)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config(
+    "SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    default=False,
+    cast=bool,
+)
+SECURE_HSTS_PRELOAD = config(
+    "SECURE_HSTS_PRELOAD",
+    default=False,
+    cast=bool,
+)
+
+# Configure this explicitly if HTTPS terminates at a trusted reverse proxy.
+SECURE_SSL_REDIRECT = config(
+    "SECURE_SSL_REDIRECT",
+    default=False,
+    cast=bool,
+)
+
+# Fail fast when production configuration is unsafe.
+if IS_PRODUCTION:
+    production_errors = []
+
+    if DEBUG:
+        production_errors.append("DEBUG must be False in production.")
+
+    if len(SECRET_KEY) < 50:
+        production_errors.append(
+            "SECRET_KEY must contain at least 50 characters in production."
+        )
+
+    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
+        production_errors.append(
+            "ALLOWED_HOSTS must contain explicit production hostnames."
+        )
+
+    if CORS_ALLOW_ALL_ORIGINS:
+        production_errors.append("CORS_ALLOW_ALL_ORIGINS must be False in production.")
+
+    if not CORS_ALLOWED_ORIGINS:
+        production_errors.append(
+            "CORS_ALLOWED_ORIGINS must be configured in production."
+        )
+
+    if any(not origin.startswith("https://") for origin in CORS_ALLOWED_ORIGINS):
+        production_errors.append("Production CORS origins must use HTTPS.")
+
+    if any(not origin.startswith("https://") for origin in CSRF_TRUSTED_ORIGINS):
+        production_errors.append("Production CSRF trusted origins must use HTTPS.")
+
+    if production_errors:
+        raise RuntimeError(
+            "Invalid production configuration:\n- " + "\n- ".join(production_errors)
+        )
+
+    if not REDIS_URL:
+        production_errors.append("REDIS_URL must be configured in production.")
+
+    # Use shared Redis cache in production and local memory in development.
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "socket_connect_timeout": 5,
+                "socket_timeout": 5,
+            },
+        },
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "msa-port-twin-dev",
+        },
+    }
+
+
 ROOT_URLCONF = "port_twin_proj.urls"
 
 # Rest Framework Configs
@@ -74,6 +166,13 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": ("rest_framework.pagination.PageNumberPagination"),
     "PAGE_SIZE": 20,
+    "DEFAULT_THROTTLE_CLASSES": (
+        ["rest_framework.throttling.ScopedRateThrottle"] if IS_PRODUCTION else []
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "simulation": "10/hour",
+        "marine_prediction": "5/hour",
+    },
 }
 
 # drf-spectacular configs
@@ -161,7 +260,10 @@ STORAGES = {
 
 MAILERS = {
     "default": {
-        "BACKEND": "django.core.mail.backends.console.EmailBackend",
+        "BACKEND": config(
+            "MAIL_BACKEND",
+            default="django.core.mail.backends.console.EmailBackend",
+        ),
     },
 }
 

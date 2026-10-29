@@ -213,7 +213,7 @@ class SimulationHistoryItemSerializer(serializers.ModelSerializer):
             "summary",
         ]
 
-    def get_summary(self, obj):
+    def get_summary(self, obj) -> dict | None:
         summary_result = next(
             (result for result in obj.results.all() if result.result_type == "summary"),
             None,
