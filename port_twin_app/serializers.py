@@ -375,3 +375,39 @@ class MarinePredictionSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+class DataSourceCountSerializer(serializers.Serializer):
+    source = serializers.CharField()
+    count = serializers.IntegerField()
+
+
+class MarineDataProvenanceSerializer(serializers.Serializer):
+    total_records = serializers.IntegerField()
+    source_counts = DataSourceCountSerializer(many=True)
+    latest_recorded_at = serializers.DateTimeField(allow_null=True)
+    latest_ingested_at = serializers.DateTimeField(allow_null=True)
+
+
+class VesselPositionDataStatusSerializer(serializers.Serializer):
+    total_records = serializers.IntegerField()
+    latest_recorded_at = serializers.DateTimeField(allow_null=True)
+    latest_ingested_at = serializers.DateTimeField(allow_null=True)
+
+
+class AIModelStatusSerializer(serializers.Serializer):
+    backend = serializers.CharField()
+    configured = serializers.BooleanField()
+    readiness = serializers.CharField()
+    configured_model_version = serializers.CharField(allow_blank=True)
+    latest_prediction_status = serializers.CharField(allow_null=True)
+    latest_prediction_model_version = serializers.CharField(allow_null=True)
+    latest_prediction_contract_version = serializers.CharField(allow_null=True)
+    latest_prediction_at = serializers.DateTimeField(allow_null=True)
+
+
+class DataStatusSerializer(serializers.Serializer):
+    generated_at = serializers.DateTimeField()
+    marine_conditions = MarineDataProvenanceSerializer()
+    vessel_positions = VesselPositionDataStatusSerializer()
+    ai = AIModelStatusSerializer()
