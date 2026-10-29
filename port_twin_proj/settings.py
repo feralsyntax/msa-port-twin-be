@@ -28,6 +28,7 @@ DEBUG = config("DEBUG", default=False, cast=bool)
 MODE = config("MODE", default="dev", cast=str)
 IS_PRODUCTION = MODE == "prod"
 SECRET_KEY = config("SECRET_KEY")
+REDIS_URL = config("REDIS_URL", default="")
 
 # Database Configurations
 
@@ -109,36 +110,49 @@ if IS_PRODUCTION:
         )
 
     if CORS_ALLOW_ALL_ORIGINS:
-        production_errors.append(
-            "CORS_ALLOW_ALL_ORIGINS must be False in production."
-        )
+        production_errors.append("CORS_ALLOW_ALL_ORIGINS must be False in production.")
 
     if not CORS_ALLOWED_ORIGINS:
         production_errors.append(
             "CORS_ALLOWED_ORIGINS must be configured in production."
         )
 
-    if any(
-        not origin.startswith("https://")
-        for origin in CORS_ALLOWED_ORIGINS
-    ):
-        production_errors.append(
-            "Production CORS origins must use HTTPS."
-        )
+    if any(not origin.startswith("https://") for origin in CORS_ALLOWED_ORIGINS):
+        production_errors.append("Production CORS origins must use HTTPS.")
 
-    if any(
-        not origin.startswith("https://")
-        for origin in CSRF_TRUSTED_ORIGINS
-    ):
-        production_errors.append(
-            "Production CSRF trusted origins must use HTTPS."
-        )
+    if any(not origin.startswith("https://") for origin in CSRF_TRUSTED_ORIGINS):
+        production_errors.append("Production CSRF trusted origins must use HTTPS.")
 
     if production_errors:
         raise RuntimeError(
-            "Invalid production configuration:\n- "
-            + "\n- ".join(production_errors)
+            "Invalid production configuration:\n- " + "\n- ".join(production_errors)
         )
+    
+    if not REDIS_URL:
+        production_errors.append(
+            "REDIS_URL must be configured in production."
+        )
+
+    # Use shared Redis cache in production and local memory in development.
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "socket_connect_timeout": 5,
+                "socket_timeout": 5,
+            },
+        },
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "msa-port-twin-dev",
+        },
+    }
+
+
 
 ROOT_URLCONF = "port_twin_proj.urls"
 
