@@ -59,6 +59,6 @@ class SimulationHistoryAPITests(TestCase):
         self.assertEqual(newer_run_data["status"], "failed")
         self.assertEqual(
             newer_run_data["error_message"],
-            "Test simulation failure",
+            "Simulation execution failed. Check server logs for details.",
         )
         self.assertIsNone(newer_run_data["summary"])
