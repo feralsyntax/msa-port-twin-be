@@ -91,6 +91,55 @@ SECURE_SSL_REDIRECT = config(
     cast=bool,
 )
 
+# Fail fast when production configuration is unsafe.
+if IS_PRODUCTION:
+    production_errors = []
+
+    if DEBUG:
+        production_errors.append("DEBUG must be False in production.")
+
+    if len(SECRET_KEY) < 50:
+        production_errors.append(
+            "SECRET_KEY must contain at least 50 characters in production."
+        )
+
+    if not ALLOWED_HOSTS or "*" in ALLOWED_HOSTS:
+        production_errors.append(
+            "ALLOWED_HOSTS must contain explicit production hostnames."
+        )
+
+    if CORS_ALLOW_ALL_ORIGINS:
+        production_errors.append(
+            "CORS_ALLOW_ALL_ORIGINS must be False in production."
+        )
+
+    if not CORS_ALLOWED_ORIGINS:
+        production_errors.append(
+            "CORS_ALLOWED_ORIGINS must be configured in production."
+        )
+
+    if any(
+        not origin.startswith("https://")
+        for origin in CORS_ALLOWED_ORIGINS
+    ):
+        production_errors.append(
+            "Production CORS origins must use HTTPS."
+        )
+
+    if any(
+        not origin.startswith("https://")
+        for origin in CSRF_TRUSTED_ORIGINS
+    ):
+        production_errors.append(
+            "Production CSRF trusted origins must use HTTPS."
+        )
+
+    if production_errors:
+        raise RuntimeError(
+            "Invalid production configuration:\n- "
+            + "\n- ".join(production_errors)
+        )
+
 ROOT_URLCONF = "port_twin_proj.urls"
 
 # Rest Framework Configs
