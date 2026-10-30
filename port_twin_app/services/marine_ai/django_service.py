@@ -5,9 +5,6 @@ from pathlib import Path
 
 from django.conf import settings
 
-from port_twin_app.services.marine_ai.inference import (
-    MarineInferenceService,
-)
 from port_twin_app.services.marine_ai.modelarts import (
     ModelArtsInferenceService,
 )
@@ -24,6 +21,10 @@ def get_marine_inference_service(
 ):
     """Return the configured local or remote inference service."""
     if backend == "local":
+        from port_twin_app.services.marine_ai.inference import (
+            MarineInferenceService,
+        )
+
         return MarineInferenceService(
             checkpoint_path=Path(checkpoint_path),
         )
