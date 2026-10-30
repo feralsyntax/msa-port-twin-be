@@ -53,3 +53,6 @@ Replace [the_name_of_the_test_file] with the actual test file you want. For exam
 ```bash
 python manage.py test port_twin_app.tests.test_simulations
 ```
+
+# Deployment
+A deployment guide is available in this project's docs. Navigate to `./docs/deployment.md`
