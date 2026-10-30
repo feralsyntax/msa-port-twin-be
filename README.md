@@ -1,6 +1,17 @@
 # msa-port-twin-be
 API powering an AI-powered maritime digital twin for port monitoring, vessel simulation, berth scheduling, and scenario analysis.
 
+# Set up Instructions
+Install requirements
+- Development mode
+    ```bash
+    pip install -r requirements-dev.txt
+    ```
+- Production mode
+    ```bash
+    pip install -r requirements.txt
+    ```
+
 # Demonstration Data
 
 MSA Port Twin provides synthetic demonstration data for local development and application demonstrations.
@@ -42,3 +53,6 @@ Replace [the_name_of_the_test_file] with the actual test file you want. For exam
 ```bash
 python manage.py test port_twin_app.tests.test_simulations
 ```
+
+# Deployment
+A deployment guide is available in this project's docs. Navigate to `./docs/deployment.md`
