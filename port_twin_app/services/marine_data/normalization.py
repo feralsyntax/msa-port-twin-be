@@ -106,3 +106,69 @@ def normalize_copernicus_dataset(dataset: xr.Dataset) -> xr.Dataset:
     normalized.attrs["vertical_reference"] = "geoid"
 
     return normalized
+
+
+def normalize_gebco_bathymetry(dataset: xr.Dataset) -> xr.Dataset:
+    """
+    Normalize GEBCO elevation into positive-downward bathymetry.
+
+    Input:
+        elevation_m: GEBCO elevation relative to mean sea level,
+                     with positive values upwards.
+
+    Output:
+        bathymetry_m: Seafloor depth in metres, positive downwards.
+
+    Land and sea-level boundary cells are masked with NaN.
+    Original elevation values and source metadata are preserved.
+    """
+
+    if "elevation_m" not in dataset.data_vars:
+        raise ValueError("GEBCO dataset is missing the elevation_m variable.")
+
+    elevation = dataset["elevation_m"]
+
+    if elevation.attrs.get("units") != "m":
+        raise ValueError("GEBCO elevation must be in metres.")
+
+    if elevation.dims != ("latitude", "longitude"):
+        raise ValueError(f"Elevation has unexpected dimensions: {elevation.dims}.")
+
+    values = elevation.values
+    valid_values = values[np.isfinite(values)]
+
+    if valid_values.size == 0:
+        raise ValueError("GEBCO elevation contains no valid numerical values.")
+
+    # GEBCO uses positive-up elevation.
+    # Convert underwater elevations to positive-downward depth.
+    # Land and zero-elevation cells are excluded from ocean bathymetry.
+    bathymetry = xr.where(
+        elevation < 0,
+        -elevation,
+        np.nan,
+    )
+
+    normalized = dataset.copy()
+
+    normalized["bathymetry_m"] = bathymetry
+
+    normalized["bathymetry_m"].attrs = {
+        "long_name": "Seafloor bathymetric depth",
+        "units": "m",
+        "positive": "down",
+        "source_variable": "elevation_m",
+        "source_vertical_reference": dataset.attrs.get(
+            "vertical_reference",
+            "unspecified",
+        ),
+    }
+
+    if not np.isfinite(normalized["bathymetry_m"].values).any():
+        raise ValueError("GEBCO dataset contains no valid underwater bathymetry.")
+
+    normalized.attrs["normalization_source"] = "GEBCO"
+    normalized.attrs["bathymetry_positive"] = "down"
+    normalized.attrs["bathymetry_units"] = "m"
+
+    return normalized
