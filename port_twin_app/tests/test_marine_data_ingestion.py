@@ -276,3 +276,77 @@ class CopernicusMarineSourceTests(SimpleTestCase):
 
         with self.assertRaises(ValueError):
             self.source._resolve_dataset_version()
+
+    @patch(
+        "port_twin_app.services.marine_data.sources.copernicus.copernicusmarine.subset"
+    )
+    @patch(
+        "port_twin_app.services.marine_data.sources.copernicus.copernicusmarine.describe"
+    )
+    def test_fetch_uses_resolved_dataset_version(
+        self,
+        mock_describe,
+        mock_subset,
+    ):
+
+        mock_describe.return_value = SimpleNamespace(
+            products=[
+                SimpleNamespace(
+                    datasets=[
+                        SimpleNamespace(
+                            dataset_id=self.source.dataset_id,
+                            versions=[SimpleNamespace(label="202311")],
+                        )
+                    ]
+                )
+            ]
+        )
+
+        with TemporaryDirectory() as temp_dir:
+            source = CopernicusMarineSource(output_directory=temp_dir)
+
+            def create_downloaded_file(**kwargs):
+                dataset = xr.Dataset(
+                    {
+                        "zos": (
+                            ("time", "latitude", "longitude"),
+                            np.array([[[0.48]]]),
+                        )
+                    },
+                    coords={
+                        "time": [np.datetime64("2020-01-01")],
+                        "latitude": [-4.0],
+                        "longitude": [39.7],
+                    },
+                )
+
+                file_path = (
+                    Path(kwargs["output_directory"]) / f"{kwargs['output_filename']}.nc"
+                )
+
+                dataset.to_netcdf(file_path)
+
+            mock_subset.side_effect = create_downloaded_file
+
+            request = MarineDataRequest(
+                west=39.5,
+                south=-4.3,
+                east=40.0,
+                north=-3.7,
+                start_time=datetime(2020, 1, 1),
+                end_time=datetime(2020, 1, 1),
+                variables=("zos",),
+            )
+
+            result = source.fetch(request)
+
+            self.assertEqual(
+                mock_subset.call_args.kwargs["dataset_version"],
+                "202311",
+            )
+            self.assertEqual(
+                result.attrs["source_dataset_version"],
+                "202311",
+            )
+
+            mock_describe.assert_called_once()
