@@ -24,6 +24,7 @@ from port_twin_app.services.marine_data.sources.copernicus import (
     CopernicusMarineSource,
 )
 from port_twin_app.services.marine_data.validation import (
+    validate_bathymetry_dataset,
     validate_marine_dataset,
 )
 
@@ -576,3 +577,111 @@ class CopernicusMarineSourceTests(SimpleTestCase):
             )
 
             mock_describe.assert_called_once()
+
+
+class BathymetryValidationTests(SimpleTestCase):
+    def create_valid_dataset(self):
+        """Create a normalized GEBCO bathymetry dataset."""
+
+        return normalize_gebco_bathymetry(create_test_gebco_dataset())
+
+    def test_accepts_valid_bathymetry_dataset(self):
+        dataset = self.create_valid_dataset()
+
+        validate_bathymetry_dataset(dataset)
+
+    def test_accepts_missing_values(self):
+        dataset = self.create_valid_dataset()
+
+        validate_bathymetry_dataset(dataset)
+
+    def test_rejects_missing_bathymetry_variable(self):
+        dataset = self.create_valid_dataset().drop_vars("bathymetry_m")
+
+        with self.assertRaisesRegex(ValueError, "bathymetry_m"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_missing_coordinates(self):
+        dataset = self.create_valid_dataset().drop_vars("longitude")
+
+        with self.assertRaisesRegex(ValueError, "longitude"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_insufficient_spatial_grid(self):
+        dataset = self.create_valid_dataset().isel(latitude=[0])
+
+        with self.assertRaisesRegex(ValueError, "at least 2 points"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_non_finite_coordinates(self):
+        dataset = self.create_valid_dataset()
+        dataset = dataset.assign_coords(latitude=[-4.1, np.nan])
+
+        with self.assertRaisesRegex(ValueError, "non-finite"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_non_increasing_coordinates(self):
+        dataset = self.create_valid_dataset()
+        dataset = dataset.assign_coords(latitude=[-4.0, -4.1])
+
+        with self.assertRaisesRegex(ValueError, "strictly increasing"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_invalid_latitude(self):
+        dataset = self.create_valid_dataset()
+        dataset = dataset.assign_coords(latitude=[-91.0, -90.0])
+
+        with self.assertRaisesRegex(ValueError, "Latitude"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_invalid_longitude(self):
+        dataset = self.create_valid_dataset()
+        dataset = dataset.assign_coords(longitude=[39.6, 361.0, 362.0])
+
+        with self.assertRaisesRegex(ValueError, "Longitude"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_unexpected_bathymetry_dimensions(self):
+        dataset = self.create_valid_dataset()
+        dataset["bathymetry_m"] = dataset["bathymetry_m"].transpose(
+            "longitude",
+            "latitude",
+        )
+
+        with self.assertRaisesRegex(ValueError, "unexpected dimensions"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_unsupported_bathymetry_units(self):
+        dataset = self.create_valid_dataset()
+        dataset["bathymetry_m"].attrs["units"] = "feet"
+
+        with self.assertRaisesRegex(ValueError, "metres"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_wrong_positive_direction(self):
+        dataset = self.create_valid_dataset()
+        dataset["bathymetry_m"].attrs["positive"] = "up"
+
+        with self.assertRaisesRegex(ValueError, "positive-down"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_infinite_bathymetry_values(self):
+        dataset = self.create_valid_dataset()
+        dataset["bathymetry_m"].values[0, 0] = np.inf
+
+        with self.assertRaisesRegex(ValueError, "infinite"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_non_positive_bathymetry_depths(self):
+        dataset = self.create_valid_dataset()
+        dataset["bathymetry_m"].values[0, 0] = 0.0
+
+        with self.assertRaisesRegex(ValueError, "greater than zero"):
+            validate_bathymetry_dataset(dataset)
+
+    def test_rejects_dataset_without_valid_bathymetry(self):
+        dataset = self.create_valid_dataset()
+        dataset["bathymetry_m"][:] = np.nan
+
+        with self.assertRaisesRegex(ValueError, "no valid underwater"):
+            validate_bathymetry_dataset(dataset)
