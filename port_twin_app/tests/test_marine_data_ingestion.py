@@ -14,6 +14,7 @@ from port_twin_app.services.marine_data.ingestion import (
 )
 from port_twin_app.services.marine_data.normalization import (
     normalize_copernicus_dataset,
+    normalize_gebco_bathymetry,
 )
 from port_twin_app.services.marine_data.sources.base import (
     MarineDataRequest,
@@ -77,6 +78,41 @@ def create_test_dataset():
             "source_dataset_version": "202311",
             "source_version": "GLORYS12V1",
             "source_file_path": "test.nc",
+        },
+    )
+
+
+def create_test_gebco_dataset():
+    """Create a small GEBCO-like bathymetry dataset."""
+
+    return xr.Dataset(
+        {
+            "elevation_m": (
+                ("latitude", "longitude"),
+                np.array(
+                    [
+                        [-100.0, -25.0, 0.0],
+                        [10.0, np.nan, -5.0],
+                    ],
+                    dtype=np.float32,
+                ),
+                {
+                    "units": "m",
+                    "standard_name": "height_above_mean_sea_level",
+                },
+            ),
+        },
+        coords={
+            "latitude": [-4.1, -4.0],
+            "longitude": [39.6, 39.7, 39.8],
+        },
+        attrs={
+            "provider": "GEBCO",
+            "source_dataset_id": "GEBCO",
+            "source_dataset_version": "GEBCO_2026",
+            "vertical_reference": "height_above_mean_sea_level",
+            "vertical_crs": "EPSG:5831",
+            "elevation_positive": "up",
         },
     )
 
@@ -229,6 +265,83 @@ class MarineDataNormalizationTests(SimpleTestCase):
 
         with self.assertRaisesRegex(ValueError, "unsupported units"):
             normalize_copernicus_dataset(dataset)
+
+    def test_normalizes_gebco_elevation_to_positive_downward_depth(self):
+        normalized = normalize_gebco_bathymetry(create_test_gebco_dataset())
+
+        expected = np.array(
+            [
+                [100.0, 25.0, np.nan],
+                [np.nan, np.nan, 5.0],
+            ],
+            dtype=np.float32,
+        )
+
+        np.testing.assert_allclose(
+            normalized["bathymetry_m"].values,
+            expected,
+            equal_nan=True,
+        )
+
+    def test_preserves_original_gebco_elevation(self):
+        dataset = create_test_gebco_dataset()
+        normalized = normalize_gebco_bathymetry(dataset)
+
+        self.assertIn("elevation_m", normalized)
+
+        np.testing.assert_array_equal(
+            normalized["elevation_m"].values,
+            dataset["elevation_m"].values,
+        )
+
+    def test_preserves_missing_values_and_masks_land(self):
+        normalized = normalize_gebco_bathymetry(create_test_gebco_dataset())
+
+        bathymetry = normalized["bathymetry_m"].values
+
+        self.assertTrue(np.isnan(bathymetry[0, 2]))
+        self.assertTrue(np.isnan(bathymetry[1, 0]))
+        self.assertTrue(np.isnan(bathymetry[1, 1]))
+
+    def test_sets_bathymetry_metadata(self):
+        normalized = normalize_gebco_bathymetry(create_test_gebco_dataset())
+
+        self.assertEqual(
+            normalized["bathymetry_m"].attrs["units"],
+            "m",
+        )
+        self.assertEqual(
+            normalized["bathymetry_m"].attrs["positive"],
+            "down",
+        )
+        self.assertEqual(
+            normalized.attrs["normalization_source"],
+            "GEBCO",
+        )
+        self.assertEqual(
+            normalized.attrs["bathymetry_positive"],
+            "down",
+        )
+
+    def test_rejects_missing_elevation_variable(self):
+        dataset = create_test_gebco_dataset().drop_vars("elevation_m")
+
+        with self.assertRaisesRegex(ValueError, "missing the elevation_m"):
+            normalize_gebco_bathymetry(dataset)
+
+    def test_rejects_unsupported_elevation_units(self):
+        dataset = create_test_gebco_dataset()
+        dataset["elevation_m"].attrs["units"] = "feet"
+
+        with self.assertRaisesRegex(ValueError, "must be in metres"):
+            normalize_gebco_bathymetry(dataset)
+
+    def test_rejects_dataset_without_valid_underwater_values(self):
+        dataset = create_test_gebco_dataset()
+        dataset["elevation_m"].values[:] = 10.0
+
+        with self.assertRaisesRegex(ValueError, "no valid underwater"):
+            normalize_gebco_bathymetry(dataset)
 
 
 class MarineDataValidationTests(SimpleTestCase):
