@@ -168,3 +168,33 @@ class MarineDataIngestionTests(SimpleTestCase):
                 self.request,
                 license_name=" ",
             )
+
+    def test_persists_provenance_metadata(self):
+        result = ingest_marine_data(
+            StubMarineDataSource(),
+            self.request,
+            license_name="Test license",
+        )
+
+        import json
+        from pathlib import Path
+
+        provenance_path = Path(
+            result.provenance_file_path
+        )
+
+        self.assertTrue(provenance_path.is_file())
+
+        metadata = json.loads(
+            provenance_path.read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            metadata["provider"],
+            "Copernicus Marine",
+        )
+
+        self.assertEqual(
+            metadata["dataset_version"],
+            "202311",
+        )
