@@ -1,6 +1,6 @@
+import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
-import json
 from pathlib import Path
 
 
@@ -76,7 +76,7 @@ class MarineDataProvenance:
         data["variables"] = list(self.variables)
 
         return data
-    
+
     def save(self) -> str:
         """Persist provenance metadata beside the source dataset."""
 
@@ -85,9 +85,7 @@ class MarineDataProvenance:
         if not self.file_path:
             raise ValueError("A source file path is required.")
 
-        provenance_path = source_path.with_suffix(
-            ".provenance.json"
-        )
+        provenance_path = source_path.with_suffix(".provenance.json")
 
         provenance_path.parent.mkdir(
             parents=True,
