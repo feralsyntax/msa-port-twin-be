@@ -29,8 +29,13 @@ class CopernicusMarineSource(MarineDataSource):
 
         filename = f"copernicus_{uuid4().hex}"
 
+        resolved_dataset_version = (
+            self.dataset_version or self._resolve_dataset_version()
+        )
+
         subset_options = {
             "dataset_id": self.dataset_id,
+            "dataset_version": resolved_dataset_version,
             "variables": list(request.variables),
             "minimum_longitude": request.west,
             "maximum_longitude": request.east,
@@ -43,9 +48,6 @@ class CopernicusMarineSource(MarineDataSource):
             "file_format": "netcdf",
             "coordinates_selection_method": "inside",
         }
-
-        if self.dataset_version is not None:
-            subset_options["dataset_version"] = self.dataset_version
 
         if request.minimum_depth is not None:
             subset_options["minimum_depth"] = request.minimum_depth
@@ -69,11 +71,29 @@ class CopernicusMarineSource(MarineDataSource):
         result.attrs["provider"] = "Copernicus Marine"
         result.attrs["source_file_path"] = str(file_path)
         result.attrs["source_dataset_id"] = self.dataset_id
-        result.attrs["source_dataset_version"] = (
-            self.dataset_version or "unknown"
-        )
-        result.attrs["source_version"] = result.attrs.get(
-            "source", "unknown"
-        )
+        result.attrs["source_dataset_version"] = resolved_dataset_version
+        result.attrs["source_version"] = result.attrs.get("source", "unknown")
 
         return result
+
+    def _resolve_dataset_version(self) -> str:
+        """Resolve the default dataset version from the catalogue."""
+
+        catalogue = copernicusmarine.describe(
+            dataset_id=self.dataset_id,
+            show_all_versions=False,
+            disable_progress_bar=True,
+            raise_on_error=True,
+        )
+
+        for product in catalogue.products:
+            for dataset in product.datasets:
+                if dataset.dataset_id == self.dataset_id:
+                    if not dataset.versions:
+                        raise ValueError(
+                            f"No versions found for dataset {self.dataset_id}."
+                        )
+
+                    return dataset.versions[0].label
+
+        raise ValueError(f"Could not resolve a dataset version for {self.dataset_id}.")
