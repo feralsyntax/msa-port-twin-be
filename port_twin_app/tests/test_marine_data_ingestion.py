@@ -1,4 +1,7 @@
 from datetime import UTC, datetime
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import json
 
 import numpy as np
 import xarray as xr
@@ -74,8 +77,13 @@ def create_test_dataset():
 
 
 class StubMarineDataSource(MarineDataSource):
+    def __init__(self, file_path="test.nc"):
+        self.file_path = str(file_path)
+        
     def fetch(self, request):
-        return create_test_dataset()
+        dataset = create_test_dataset()
+        dataset.attrs["source_file_path"] = self.file_path
+        return dataset
 
 
 class MarineDataNormalizationTests(SimpleTestCase):
@@ -122,6 +130,13 @@ class MarineDataValidationTests(SimpleTestCase):
 
 class MarineDataIngestionTests(SimpleTestCase):
     def setUp(self):
+        self.temp_dir = TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+        self.source_file = (
+            Path(self.temp_dir.name) / "test.nc"
+        )
+        
         self.request = MarineDataRequest(
             west=39.5,
             south=-4.3,
@@ -136,7 +151,7 @@ class MarineDataIngestionTests(SimpleTestCase):
 
     def test_ingests_and_records_provenance(self):
         result = ingest_marine_data(
-            StubMarineDataSource(),
+            StubMarineDataSource(self.source_file),
             self.request,
             license_name="Test license",
         )
@@ -164,37 +179,40 @@ class MarineDataIngestionTests(SimpleTestCase):
     def test_rejects_empty_license(self):
         with self.assertRaises(ValueError):
             ingest_marine_data(
-                StubMarineDataSource(),
+                StubMarineDataSource(self.source_file),
                 self.request,
                 license_name=" ",
             )
 
     def test_persists_provenance_metadata(self):
-        result = ingest_marine_data(
-            StubMarineDataSource(),
-            self.request,
-            license_name="Test license",
-        )
+        with TemporaryDirectory() as temp_dir:
+            source_file = Path(temp_dir) / "test.nc"
+            source_file.touch()
 
-        import json
-        from pathlib import Path
+            result = ingest_marine_data(
+                StubMarineDataSource(source_file),
+                self.request,
+                license_name="Test license",
+            )
 
-        provenance_path = Path(
-            result.provenance_file_path
-        )
+            provenance_path = Path(
+                result.provenance_file_path
+            )
 
-        self.assertTrue(provenance_path.is_file())
+            self.assertTrue(provenance_path.is_file())
 
-        metadata = json.loads(
-            provenance_path.read_text(encoding="utf-8")
-        )
+            import json
 
-        self.assertEqual(
-            metadata["provider"],
-            "Copernicus Marine",
-        )
+            metadata = json.loads(
+                provenance_path.read_text(encoding="utf-8")
+            )
 
-        self.assertEqual(
-            metadata["dataset_version"],
-            "202311",
-        )
+            self.assertEqual(
+                metadata["provider"],
+                "Copernicus Marine",
+            )
+
+            self.assertEqual(
+                metadata["dataset_version"],
+                "202311",
+            )
