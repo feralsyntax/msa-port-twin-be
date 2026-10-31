@@ -1,7 +1,6 @@
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import json
 
 import numpy as np
 import xarray as xr
@@ -79,7 +78,7 @@ def create_test_dataset():
 class StubMarineDataSource(MarineDataSource):
     def __init__(self, file_path="test.nc"):
         self.file_path = str(file_path)
-        
+
     def fetch(self, request):
         dataset = create_test_dataset()
         dataset.attrs["source_file_path"] = self.file_path
@@ -133,10 +132,8 @@ class MarineDataIngestionTests(SimpleTestCase):
         self.temp_dir = TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
 
-        self.source_file = (
-            Path(self.temp_dir.name) / "test.nc"
-        )
-        
+        self.source_file = Path(self.temp_dir.name) / "test.nc"
+
         self.request = MarineDataRequest(
             west=39.5,
             south=-4.3,
@@ -195,17 +192,13 @@ class MarineDataIngestionTests(SimpleTestCase):
                 license_name="Test license",
             )
 
-            provenance_path = Path(
-                result.provenance_file_path
-            )
+            provenance_path = Path(result.provenance_file_path)
 
             self.assertTrue(provenance_path.is_file())
 
             import json
 
-            metadata = json.loads(
-                provenance_path.read_text(encoding="utf-8")
-            )
+            metadata = json.loads(provenance_path.read_text(encoding="utf-8"))
 
             self.assertEqual(
                 metadata["provider"],
