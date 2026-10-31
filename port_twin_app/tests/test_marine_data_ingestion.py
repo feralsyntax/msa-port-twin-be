@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -94,7 +95,7 @@ class MarineDataNormalizationTests(SimpleTestCase):
     def test_normalizes_copernicus_variables(self):
         normalized = normalize_copernicus_dataset(create_test_dataset())
 
-        self.assertIn("water_level_m", normalized)
+        self.assertIn("sea_surface_height_m", normalized)
         self.assertIn("current_u_ms", normalized)
         self.assertIn("current_v_ms", normalized)
 
@@ -108,12 +109,35 @@ class MarineDataNormalizationTests(SimpleTestCase):
     def test_preserves_missing_values(self):
         normalized = normalize_copernicus_dataset(create_test_dataset())
 
-        self.assertTrue(np.isnan(normalized["water_level_m"].values[:, 0, 0]).all())
+        self.assertTrue(
+            np.isnan(normalized["sea_surface_height_m"].values[:, 0, 0]).all()
+        )
 
     def test_rejects_missing_variables(self):
         dataset = create_test_dataset().drop_vars("uo")
 
         with self.assertRaises(ValueError):
+            normalize_copernicus_dataset(dataset)
+
+    def test_rejects_unsupported_sea_surface_height_units(self):
+        dataset = create_test_dataset()
+        dataset["zos"].attrs["units"] = "cm"
+
+        with self.assertRaisesRegex(ValueError, "unsupported units"):
+            normalize_copernicus_dataset(dataset)
+
+    def test_rejects_unsupported_eastward_current_units(self):
+        dataset = create_test_dataset()
+        dataset["uo"].attrs["units"] = "knots"
+
+        with self.assertRaisesRegex(ValueError, "unsupported units"):
+            normalize_copernicus_dataset(dataset)
+
+    def test_rejects_unsupported_northward_current_units(self):
+        dataset = create_test_dataset()
+        dataset["vo"].attrs["units"] = "knots"
+
+        with self.assertRaisesRegex(ValueError, "unsupported units"):
             normalize_copernicus_dataset(dataset)
 
 
@@ -169,7 +193,7 @@ class MarineDataIngestionTests(SimpleTestCase):
         )
 
         self.assertIn(
-            "water_level_m",
+            "sea_surface_height_m",
             result.dataset,
         )
 
@@ -200,8 +224,6 @@ class MarineDataIngestionTests(SimpleTestCase):
             provenance_path = Path(result.provenance_file_path)
 
             self.assertTrue(provenance_path.is_file())
-
-            import json
 
             metadata = json.loads(provenance_path.read_text(encoding="utf-8"))
 
@@ -288,7 +310,6 @@ class CopernicusMarineSourceTests(SimpleTestCase):
         mock_describe,
         mock_subset,
     ):
-
         mock_describe.return_value = SimpleNamespace(
             products=[
                 SimpleNamespace(
@@ -311,6 +332,7 @@ class CopernicusMarineSourceTests(SimpleTestCase):
                         "zos": (
                             ("time", "latitude", "longitude"),
                             np.array([[[0.48]]]),
+                            {"units": "m"},
                         )
                     },
                     coords={
@@ -344,6 +366,7 @@ class CopernicusMarineSourceTests(SimpleTestCase):
                 mock_subset.call_args.kwargs["dataset_version"],
                 "202311",
             )
+
             self.assertEqual(
                 result.attrs["source_dataset_version"],
                 "202311",
