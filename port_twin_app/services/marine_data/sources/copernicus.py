@@ -64,4 +64,16 @@ class CopernicusMarineSource(MarineDataSource):
             )
 
         with xr.open_dataset(file_path) as dataset:
-            return dataset.load()
+            result = dataset.load()
+
+        result.attrs["provider"] = "Copernicus Marine"
+        result.attrs["source_file_path"] = str(file_path)
+        result.attrs["source_dataset_id"] = self.dataset_id
+        result.attrs["source_dataset_version"] = (
+            self.dataset_version or "unknown"
+        )
+        result.attrs["source_version"] = result.attrs.get(
+            "source", "unknown"
+        )
+
+        return result
