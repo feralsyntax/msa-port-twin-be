@@ -1,0 +1,2 @@
+# Marine and geospatial data acquisition
+copernicusmarine==2.5.0
