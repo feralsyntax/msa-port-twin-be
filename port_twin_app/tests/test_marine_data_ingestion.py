@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import xarray as xr
@@ -15,6 +17,9 @@ from port_twin_app.services.marine_data.normalization import (
 from port_twin_app.services.marine_data.sources.base import (
     MarineDataRequest,
     MarineDataSource,
+)
+from port_twin_app.services.marine_data.sources.copernicus import (
+    CopernicusMarineSource,
 )
 from port_twin_app.services.marine_data.validation import (
     validate_marine_dataset,
@@ -209,3 +214,65 @@ class MarineDataIngestionTests(SimpleTestCase):
                 metadata["dataset_version"],
                 "202311",
             )
+
+
+class CopernicusMarineSourceTests(SimpleTestCase):
+    def setUp(self):
+        self.source = CopernicusMarineSource()
+
+    @patch(
+        "port_twin_app.services.marine_data.sources.copernicus.copernicusmarine.describe"
+    )
+    def test_resolves_default_dataset_version(self, mock_describe):
+        mock_describe.return_value = SimpleNamespace(
+            products=[
+                SimpleNamespace(
+                    datasets=[
+                        SimpleNamespace(
+                            dataset_id=self.source.dataset_id,
+                            versions=[SimpleNamespace(label="202311")],
+                        )
+                    ]
+                )
+            ]
+        )
+
+        version = self.source._resolve_dataset_version()
+
+        self.assertEqual(version, "202311")
+
+        mock_describe.assert_called_once_with(
+            dataset_id=self.source.dataset_id,
+            show_all_versions=False,
+            disable_progress_bar=True,
+            raise_on_error=True,
+        )
+
+    @patch(
+        "port_twin_app.services.marine_data.sources.copernicus.copernicusmarine.describe"
+    )
+    def test_raises_error_when_dataset_version_is_missing(self, mock_describe):
+        mock_describe.return_value = SimpleNamespace(
+            products=[
+                SimpleNamespace(
+                    datasets=[
+                        SimpleNamespace(
+                            dataset_id=self.source.dataset_id,
+                            versions=[],
+                        )
+                    ]
+                )
+            ]
+        )
+
+        with self.assertRaises(ValueError):
+            self.source._resolve_dataset_version()
+
+    @patch(
+        "port_twin_app.services.marine_data.sources.copernicus.copernicusmarine.describe"
+    )
+    def test_raises_error_when_dataset_is_not_found(self, mock_describe):
+        mock_describe.return_value = SimpleNamespace(products=[])
+
+        with self.assertRaises(ValueError):
+            self.source._resolve_dataset_version()
