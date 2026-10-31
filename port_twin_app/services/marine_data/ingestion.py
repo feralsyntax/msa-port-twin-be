@@ -2,10 +2,11 @@ from dataclasses import dataclass
 
 import xarray as xr
 
-from .normalization import normalize_copernicus_dataset
+from .normalization import normalize_copernicus_dataset, normalize_gebco_bathymetry
 from .provenance import MarineDataProvenance
 from .sources.base import MarineDataRequest, MarineDataSource
-from .validation import validate_marine_dataset
+from .sources.bathymetry import BathymetryDataSource, BathymetryRequest
+from .validation import validate_bathymetry_dataset, validate_marine_dataset
 
 
 @dataclass
@@ -82,6 +83,62 @@ def ingest_marine_data(
             north=request.north,
             start_time=request.start_time,
             end_time=request.end_time,
+            file_path=raw_dataset.attrs["source_file_path"],
+            license_name=license_name,
+        )
+
+        provenance_file_path = provenance.save()
+
+        return MarineDataImportResult(
+            dataset=normalized_dataset,
+            provenance=provenance,
+            provenance_file_path=provenance_file_path,
+        )
+
+    finally:
+        # Always release the original dataset resources.
+        raw_dataset.close()
+
+
+def ingest_bathymetry_data(
+    source: BathymetryDataSource,
+    request: BathymetryRequest,
+    *,
+    license_name: str,
+) -> MarineDataImportResult:
+    """
+    Fetch, normalize, validate and record static bathymetry provenance.
+    """
+
+    if not isinstance(license_name, str) or not license_name.strip():
+        raise ValueError("A valid data license name is required.")
+
+    # 1. Retrieve the original bathymetry dataset.
+    raw_dataset = source.fetch(request)
+
+    try:
+        # 2. Validate source metadata before processing.
+        validate_source_metadata(raw_dataset)
+
+        # 3. Normalize elevation into positive-downward bathymetry.
+        normalized_dataset = normalize_gebco_bathymetry(raw_dataset)
+
+        # 4. Validate the normalized bathymetry dataset.
+        validate_bathymetry_dataset(normalized_dataset)
+
+        # 5. Capture source metadata.
+        provenance = MarineDataProvenance.create(
+            provider=raw_dataset.attrs["provider"],
+            dataset_id=raw_dataset.attrs["source_dataset_id"],
+            dataset_version=raw_dataset.attrs["source_dataset_version"],
+            source_version=raw_dataset.attrs["source_version"],
+            variables=("elevation_m",),
+            west=request.west,
+            south=request.south,
+            east=request.east,
+            north=request.north,
+            start_time=None,
+            end_time=None,
             file_path=raw_dataset.attrs["source_file_path"],
             license_name=license_name,
         )
