@@ -55,16 +55,14 @@ def ingest_marine_data(
             file_path=raw_dataset.attrs.get("source_file_path", ""),
             license_name=license_name,
         )
+        
+        provenance_file_path = provenance.save()
 
         return MarineDataImportResult(
             dataset=normalized_dataset,
             provenance=provenance,
+            provenance_file_path=provenance_file_path,
         )
 
-    except Exception:
-        raw_dataset.close()
-        raise
-
     finally:
-        if raw_dataset is not None:
-            raw_dataset.close()
+        raw_dataset.close()
