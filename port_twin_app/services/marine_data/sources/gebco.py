@@ -7,7 +7,7 @@ from .bathymetry import BathymetryDataSource, BathymetryRequest
 
 
 class GEBCOBathymetrySource(BathymetryDataSource):
-    """Bathymetry provider backed by a local GEBCO NetCDF file."""
+    """Reads regional bathymetry data from a local GEBCO NetCDF file."""
 
     def __init__(
         self,
@@ -18,39 +18,26 @@ class GEBCOBathymetrySource(BathymetryDataSource):
         self.dataset_version = dataset_version
 
     def fetch(self, request: BathymetryRequest) -> xr.Dataset:
-        """Read and return a geographical subset of the GEBCO grid."""
+        """Load and return GEBCO bathymetry for the requested region."""
 
-        if not self.file_path.is_file():
-            raise FileNotFoundError(f"GEBCO NetCDF file not found: {self.file_path}")
+        if not self.file_path.exists():
+            raise FileNotFoundError(f"GEBCO dataset not found: {self.file_path}")
 
-        with xr.open_dataset(
-            self.file_path,
-            engine="scipy",
-        ) as source:
+        with xr.open_dataset(self.file_path, engine="scipy") as source:
             longitude_name = self._find_coordinate(source, ("lon", "longitude"))
             latitude_name = self._find_coordinate(source, ("lat", "latitude"))
-
             elevation_name = self._find_elevation_variable(
-                source,
-                longitude_name,
-                latitude_name,
+                source, longitude_name, latitude_name
             )
 
-            dataset = source[[elevation_name]].copy()
-
-            # Normalize coordinate and elevation variable names.
-            rename = {}
-
-            if longitude_name != "longitude":
-                rename[longitude_name] = "longitude"
-
-            if latitude_name != "latitude":
-                rename[latitude_name] = "latitude"
-
-            if elevation_name != "elevation_m":
-                rename[elevation_name] = "elevation_m"
-
-            dataset = dataset.rename(rename)
+            # Extract the elevation variable and normalize coordinate names.
+            dataset = source[[elevation_name]].rename(
+                {
+                    longitude_name: "longitude",
+                    latitude_name: "latitude",
+                    elevation_name: "elevation_m",
+                }
+            )
 
             # Ensure coordinates are ordered before selecting slices.
             dataset = dataset.sortby("longitude").sortby("latitude")
@@ -69,14 +56,24 @@ class GEBCOBathymetrySource(BathymetryDataSource):
             longitude_resolution = float(np.median(np.abs(np.diff(longitude))))
             latitude_resolution = float(np.median(np.abs(np.diff(latitude))))
 
+            # Allow a tiny tolerance for floating-point rounding
+            # when comparing requested bounds with grid-cell edges.
+            coordinate_tolerance = 1e-10
+
+            grid_west = longitude.min() - longitude_resolution / 2
+            grid_east = longitude.max() + longitude_resolution / 2
+            grid_south = latitude.min() - latitude_resolution / 2
+            grid_north = latitude.max() + latitude_resolution / 2
+
             if (
-                request.west < longitude.min() - longitude_resolution / 2
-                or request.east > longitude.max() + longitude_resolution / 2
-                or request.south < latitude.min() - latitude_resolution / 2
-                or request.north > latitude.max() + latitude_resolution / 2
+                request.west < grid_west - coordinate_tolerance
+                or request.east > grid_east + coordinate_tolerance
+                or request.south < grid_south - coordinate_tolerance
+                or request.north > grid_north + coordinate_tolerance
             ):
                 raise ValueError("The requested region extends beyond the GEBCO grid.")
 
+            # Select and load the requested region before closing the file.
             dataset = dataset.sel(
                 longitude=slice(request.west, request.east),
                 latitude=slice(request.south, request.north),
@@ -92,14 +89,14 @@ class GEBCOBathymetrySource(BathymetryDataSource):
                     "The selected region contains fewer than two latitude coordinates."
                 )
 
-            values = dataset["elevation_m"].values
+            elevation = dataset["elevation_m"].values
 
-            if not np.isfinite(values).any():
+            if not np.isfinite(elevation).any():
                 raise ValueError(
-                    "The selected GEBCO region contains no valid elevations."
+                    "The selected GEBCO region contains no finite elevation values."
                 )
 
-            # Preserve the source elevation convention and metadata.
+            # Preserve the source elevation values and their sign.
             dataset["elevation_m"].attrs.update(
                 {
                     "units": source[elevation_name].attrs.get("units", "m"),
@@ -107,6 +104,7 @@ class GEBCOBathymetrySource(BathymetryDataSource):
                 }
             )
 
+            # Preserve source metadata and add ingestion provenance.
             dataset.attrs.update(source.attrs)
 
             dataset.attrs.update(
@@ -119,8 +117,7 @@ class GEBCOBathymetrySource(BathymetryDataSource):
                     "vertical_reference": source.attrs.get(
                         "vertical_datum",
                         source[elevation_name].attrs.get(
-                            "standard_name",
-                            "unspecified",
+                            "standard_name", "unspecified"
                         ),
                     ),
                     "vertical_crs": source.attrs.get(
@@ -131,14 +128,11 @@ class GEBCOBathymetrySource(BathymetryDataSource):
                         "geospatial_vertical_positive",
                         "unspecified",
                     ),
-                    "license": source.attrs.get(
-                        "license",
-                        "unspecified",
-                    ),
+                    "license": source.attrs.get("license", "unspecified"),
                 }
             )
 
-            return dataset
+        return dataset
 
     @staticmethod
     def _find_coordinate(
@@ -148,13 +142,12 @@ class GEBCOBathymetrySource(BathymetryDataSource):
         """Find a supported one-dimensional spatial coordinate."""
 
         for name in candidates:
-            if name in dataset.coords:
-                if dataset[name].ndim != 1:
-                    raise ValueError(f"Coordinate {name} must be one-dimensional.")
-
+            if name in dataset.coords and dataset[name].ndim == 1:
                 return name
 
-        raise ValueError(f"Could not find a coordinate matching {candidates}.")
+        raise ValueError(
+            f"GEBCO dataset is missing a supported coordinate: {', '.join(candidates)}."
+        )
 
     @staticmethod
     def _find_elevation_variable(
@@ -162,18 +155,19 @@ class GEBCOBathymetrySource(BathymetryDataSource):
         longitude_name: str,
         latitude_name: str,
     ) -> str:
-        """Identify the elevation variable in the source dataset."""
+        """Find the elevation variable using its name and dimensions."""
 
         candidates = ("elevation", "elev", "Band1")
+        expected_dimensions = {longitude_name, latitude_name}
 
         for name in candidates:
-            if name in dataset.data_vars:
-                variable = dataset[name]
+            if name not in dataset.data_vars:
+                continue
 
-                if set(variable.dims) == {
-                    longitude_name,
-                    latitude_name,
-                }:
-                    return name
+            if set(dataset[name].dims) == expected_dimensions:
+                return name
 
-        raise ValueError("Could not identify a supported GEBCO elevation variable.")
+        raise ValueError(
+            "GEBCO dataset does not contain a supported elevation "
+            "variable with the expected spatial dimensions."
+        )
