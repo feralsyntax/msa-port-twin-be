@@ -89,3 +89,62 @@ def validate_marine_dataset(dataset: xr.Dataset) -> None:
             reference_mask = valid_mask
         elif not np.array_equal(reference_mask, valid_mask):
             raise ValueError("Marine variables have inconsistent missing-data masks.")
+
+
+def validate_bathymetry_dataset(dataset: xr.Dataset) -> None:
+    """Validate a normalized static bathymetry dataset."""
+
+    required_variables = {"bathymetry_m"}
+    required_coordinates = {"latitude", "longitude"}
+
+    missing_variables = required_variables - set(dataset.data_vars)
+    missing_coordinates = required_coordinates - set(dataset.coords)
+
+    if missing_variables:
+        raise ValueError(f"Missing required variables: {sorted(missing_variables)}")
+
+    if missing_coordinates:
+        raise ValueError(f"Missing required coordinates: {sorted(missing_coordinates)}")
+
+    if dataset.sizes["latitude"] < 2 or dataset.sizes["longitude"] < 2:
+        raise ValueError("Spatial grid must contain at least 2 points per axis.")
+
+    for coordinate in ("latitude", "longitude"):
+        values = dataset[coordinate].values
+
+        if not np.isfinite(values).all():
+            raise ValueError(f"{coordinate} contains non-finite values.")
+
+        if np.any(np.diff(values) <= 0):
+            raise ValueError(f"{coordinate} must be strictly increasing.")
+
+    latitude = dataset.latitude.values
+    longitude = dataset.longitude.values
+
+    if np.any((latitude < -90) | (latitude > 90)):
+        raise ValueError("Latitude values must be between -90 and 90.")
+
+    if np.any((longitude < -180) | (longitude > 360)):
+        raise ValueError("Longitude values fall outside supported bounds.")
+
+    bathymetry = dataset["bathymetry_m"]
+
+    if bathymetry.dims != ("latitude", "longitude"):
+        raise ValueError(f"bathymetry_m has unexpected dimensions: {bathymetry.dims}")
+
+    if bathymetry.attrs.get("units") != "m":
+        raise ValueError("Bathymetry must be measured in metres.")
+
+    if bathymetry.attrs.get("positive") != "down":
+        raise ValueError("Bathymetry must use positive-down convention.")
+
+    values = bathymetry.values
+
+    if np.isinf(values).any():
+        raise ValueError("Bathymetry contains infinite values.")
+
+    if not np.isfinite(values).any():
+        raise ValueError("Bathymetry contains no valid underwater observations.")
+
+    if np.any(values[np.isfinite(values)] <= 0):
+        raise ValueError("Valid bathymetry depths must be greater than zero.")
