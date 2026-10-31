@@ -21,7 +21,7 @@ class MarineDataRequest:
 
     minimum_depth: float | None = None
     maximum_depth: float | None = None
-    
+
     def __post_init__(self):
         """Validate geographical, temporal and depth request parameters."""
 
@@ -43,11 +43,22 @@ class MarineDataRequest:
         if self.south >= self.north:
             raise ValueError("Southern latitude must be less than northern latitude.")
 
+        if not isinstance(self.start_time, datetime) or not isinstance(
+            self.end_time, datetime
+        ):
+            raise ValueError("Start and end times must be datetime objects.")  # noqa: TRY004
+
+        if (self.start_time.tzinfo is None) != (self.end_time.tzinfo is None):
+            raise ValueError(
+                "Start and end times must use consistent timezone awareness."
+            )
+
         if self.start_time > self.end_time:
             raise ValueError("Start time must not be later than end time.")
 
         if not self.variables or any(
-            not variable.strip() for variable in self.variables
+            not isinstance(variable, str) or not variable.strip()
+            for variable in self.variables
         ):
             raise ValueError("At least one valid variable must be specified.")
 
@@ -62,9 +73,7 @@ class MarineDataRequest:
             and self.maximum_depth is not None
             and self.minimum_depth > self.maximum_depth
         ):
-            raise ValueError(
-                "Minimum depth cannot exceed maximum depth."
-            )
+            raise ValueError("Minimum depth cannot exceed maximum depth.")
 
 
 class MarineDataSource(ABC):
