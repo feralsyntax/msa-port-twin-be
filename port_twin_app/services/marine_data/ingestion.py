@@ -14,6 +14,7 @@ class MarineDataImportResult:
 
     dataset: xr.Dataset
     provenance: MarineDataProvenance
+    provenance_file_path: str
 
 
 def ingest_marine_data(
