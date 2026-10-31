@@ -20,8 +20,8 @@ class MarineDataProvenance:
     east: float
     north: float
 
-    start_time: datetime
-    end_time: datetime
+    start_time: datetime | None
+    end_time: datetime | None
 
     retrieved_at: datetime
     file_path: str
@@ -41,8 +41,8 @@ class MarineDataProvenance:
         south: float,
         east: float,
         north: float,
-        start_time: datetime,
-        end_time: datetime,
+        start_time: datetime | None,
+        end_time: datetime | None,
         file_path: str,
         license_name: str,
     ) -> "MarineDataProvenance":
@@ -71,7 +71,8 @@ class MarineDataProvenance:
         data = asdict(self)
 
         for field in ("start_time", "end_time", "retrieved_at"):
-            data[field] = data[field].isoformat()
+            value = getattr(self, field)
+            data[field] = value.isoformat() if value is not None else None
 
         data["variables"] = list(self.variables)
 
