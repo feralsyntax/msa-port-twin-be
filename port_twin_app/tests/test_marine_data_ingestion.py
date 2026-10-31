@@ -10,6 +10,7 @@ import xarray as xr
 from django.test import SimpleTestCase
 
 from port_twin_app.services.marine_data.ingestion import (
+    ingest_bathymetry_data,
     ingest_marine_data,
 )
 from port_twin_app.services.marine_data.normalization import (
@@ -23,6 +24,7 @@ from port_twin_app.services.marine_data.sources.base import (
     MarineDataRequest,
     MarineDataSource,
 )
+from port_twin_app.services.marine_data.sources.bathymetry import BathymetryRequest
 from port_twin_app.services.marine_data.sources.copernicus import (
     CopernicusMarineSource,
 )
@@ -128,6 +130,21 @@ class StubMarineDataSource(MarineDataSource):
     def fetch(self, request):
         dataset = create_test_dataset()
         dataset.attrs["source_file_path"] = self.file_path
+        return dataset
+
+
+class StubBathymetryDataSource:
+    def __init__(self, file_path="gebco.nc"):
+        self.file_path = str(file_path)
+
+    def fetch(self, request):
+        dataset = create_test_gebco_dataset()
+        dataset.attrs.update(
+            {
+                "source_version": "GEBCO_2026",
+                "source_file_path": self.file_path,
+            }
+        )
         return dataset
 
 
@@ -745,3 +762,64 @@ class MarineDataProvenanceTests(SimpleTestCase):
         self.assertIsNone(metadata["end_time"])
         self.assertEqual(metadata["provider"], "GEBCO")
         self.assertEqual(metadata["variables"], ["elevation_m"])
+
+
+class BathymetryIngestionTests(SimpleTestCase):
+    def setUp(self):
+        self.temp_dir = TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+        self.source_file = Path(self.temp_dir.name) / "gebco.nc"
+
+        self.request = BathymetryRequest(
+            west=39.5,
+            south=-4.3,
+            east=40.0,
+            north=-3.7,
+        )
+
+    def test_ingests_and_records_bathymetry_provenance(self):
+        result = ingest_bathymetry_data(
+            StubBathymetryDataSource(self.source_file),
+            self.request,
+            license_name="Public domain",
+        )
+
+        self.assertEqual(result.provenance.provider, "GEBCO")
+        self.assertEqual(result.provenance.dataset_version, "GEBCO_2026")
+        self.assertIsNone(result.provenance.start_time)
+        self.assertIsNone(result.provenance.end_time)
+
+        self.assertIn("elevation_m", result.dataset)
+        self.assertIn("bathymetry_m", result.dataset)
+
+        self.assertEqual(
+            result.dataset["bathymetry_m"].attrs["positive"],
+            "down",
+        )
+
+    def test_persists_bathymetry_provenance(self):
+        result = ingest_bathymetry_data(
+            StubBathymetryDataSource(self.source_file),
+            self.request,
+            license_name="Public domain",
+        )
+
+        provenance_path = Path(result.provenance_file_path)
+
+        self.assertTrue(provenance_path.is_file())
+
+        metadata = json.loads(provenance_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(metadata["provider"], "GEBCO")
+        self.assertIsNone(metadata["start_time"])
+        self.assertIsNone(metadata["end_time"])
+        self.assertEqual(metadata["license_name"], "Public domain")
+
+    def test_rejects_empty_license(self):
+        with self.assertRaises(ValueError):
+            ingest_bathymetry_data(
+                StubBathymetryDataSource(self.source_file),
+                self.request,
+                license_name=" ",
+            )
