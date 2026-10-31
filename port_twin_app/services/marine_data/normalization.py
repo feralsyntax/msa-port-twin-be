@@ -37,6 +37,11 @@ def normalize_copernicus_dataset(dataset: xr.Dataset) -> xr.Dataset:
                 depth=0,
                 drop=True,
             )
+            
+    # Remove the standalone depth coordinate after extracting
+    # the selected near-surface level.
+    if "depth" in normalized.coords:
+        normalized = normalized.drop_vars("depth")
 
     normalized = normalized.rename(
         {
