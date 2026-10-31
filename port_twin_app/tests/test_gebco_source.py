@@ -53,7 +53,7 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
             },
         )
 
-        dataset.to_netcdf(self.file_path)
+        dataset.to_netcdf(self.file_path, engine="scipy")
 
     def make_request(self, **overrides):
         parameters = {
@@ -168,7 +168,7 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
             },
         )
 
-        invalid_dataset.to_netcdf(invalid_path)
+        invalid_dataset.to_netcdf(invalid_path, engine="scipy")
 
         with self.assertRaises(ValueError):
             self.make_source(invalid_path).fetch(self.make_request())
@@ -189,7 +189,7 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
             },
         )
 
-        invalid_dataset.to_netcdf(invalid_path)
+        invalid_dataset.to_netcdf(invalid_path, engine="scipy")
 
         with self.assertRaises(ValueError):
             self.make_source(invalid_path).fetch(self.make_request())
@@ -211,7 +211,7 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
             },
         )
 
-        dataset.to_netcdf(alternative_path)
+        dataset.to_netcdf(alternative_path, engine="scipy")
 
         result = self.make_source(alternative_path).fetch(self.make_request())
 
