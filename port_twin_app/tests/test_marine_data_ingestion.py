@@ -172,6 +172,14 @@ class MarineDataRequestTests(SimpleTestCase):
                 maximum_depth=5,
             )
 
+    def test_rejects_non_finite_coordinates(self):
+        with self.assertRaisesRegex(ValueError, "finite"):
+            self.create_request(west=float("nan"))
+
+    def test_rejects_non_finite_depth(self):
+        with self.assertRaisesRegex(ValueError, "finite"):
+            self.create_request(maximum_depth=float("inf"))
+
 
 class MarineDataNormalizationTests(SimpleTestCase):
     def test_normalizes_copernicus_variables(self):
