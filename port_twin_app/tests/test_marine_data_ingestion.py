@@ -91,6 +91,88 @@ class StubMarineDataSource(MarineDataSource):
         return dataset
 
 
+class MarineDataRequestTests(SimpleTestCase):
+    def create_request(self, **overrides):
+        """Create a valid request, allowing individual fields to be overridden."""
+
+        parameters = {
+            "west": 39.5,
+            "south": -4.3,
+            "east": 40.0,
+            "north": -3.7,
+            "start_time": datetime(2020, 1, 1, tzinfo=UTC),
+            "end_time": datetime(2020, 1, 3, tzinfo=UTC),
+            "variables": ("zos", "uo", "vo"),
+            "minimum_depth": 0,
+            "maximum_depth": 1,
+        }
+
+        parameters.update(overrides)
+
+        return MarineDataRequest(**parameters)
+
+    def test_accepts_valid_request(self):
+        request = self.create_request()
+
+        self.assertEqual(request.variables, ("zos", "uo", "vo"))
+
+    def test_rejects_invalid_longitude(self):
+        with self.assertRaisesRegex(ValueError, "longitude"):
+            self.create_request(west=-181)
+
+    def test_rejects_invalid_latitude(self):
+        with self.assertRaisesRegex(ValueError, "latitude"):
+            self.create_request(north=91)
+
+    def test_rejects_reversed_longitude_bounds(self):
+        with self.assertRaisesRegex(ValueError, "Western longitude"):
+            self.create_request(west=40.0, east=39.5)
+
+    def test_rejects_reversed_latitude_bounds(self):
+        with self.assertRaisesRegex(ValueError, "Southern latitude"):
+            self.create_request(south=-3.7, north=-4.3)
+
+    def test_rejects_reversed_time_range(self):
+        with self.assertRaisesRegex(ValueError, "Start time"):
+            self.create_request(
+                start_time=datetime(2020, 1, 3, tzinfo=UTC),
+                end_time=datetime(2020, 1, 1, tzinfo=UTC),
+            )
+
+    def test_rejects_inconsistent_timezone_awareness(self):
+        with self.assertRaisesRegex(ValueError, "timezone awareness"):
+            self.create_request(
+                end_time=datetime(2020, 1, 3),
+            )
+
+    def test_rejects_empty_variables(self):
+        with self.assertRaisesRegex(ValueError, "variable"):
+            self.create_request(variables=())
+
+    def test_rejects_blank_variable_names(self):
+        with self.assertRaisesRegex(ValueError, "variable"):
+            self.create_request(variables=("zos", " "))
+
+    def test_rejects_non_string_variable_names(self):
+        with self.assertRaisesRegex(ValueError, "variable"):
+            self.create_request(variables=("zos", 123))
+
+    def test_rejects_negative_minimum_depth(self):
+        with self.assertRaisesRegex(ValueError, "Minimum depth"):
+            self.create_request(minimum_depth=-1)
+
+    def test_rejects_negative_maximum_depth(self):
+        with self.assertRaisesRegex(ValueError, "Maximum depth"):
+            self.create_request(maximum_depth=-1)
+
+    def test_rejects_reversed_depth_range(self):
+        with self.assertRaisesRegex(ValueError, "Minimum depth"):
+            self.create_request(
+                minimum_depth=10,
+                maximum_depth=5,
+            )
+
+
 class MarineDataNormalizationTests(SimpleTestCase):
     def test_normalizes_copernicus_variables(self):
         normalized = normalize_copernicus_dataset(create_test_dataset())
