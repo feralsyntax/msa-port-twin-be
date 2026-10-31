@@ -16,6 +16,9 @@ from port_twin_app.services.marine_data.normalization import (
     normalize_copernicus_dataset,
     normalize_gebco_bathymetry,
 )
+from port_twin_app.services.marine_data.provenance import (
+    MarineDataProvenance,
+)
 from port_twin_app.services.marine_data.sources.base import (
     MarineDataRequest,
     MarineDataSource,
@@ -685,3 +688,60 @@ class BathymetryValidationTests(SimpleTestCase):
 
         with self.assertRaisesRegex(ValueError, "no valid underwater"):
             validate_bathymetry_dataset(dataset)
+
+
+class MarineDataProvenanceTests(SimpleTestCase):
+    def create_provenance(self, **overrides):
+        parameters = {
+            "provider": "Copernicus Marine",
+            "dataset_id": "test-dataset",
+            "dataset_version": "202311",
+            "source_version": "GLORYS12V1",
+            "variables": ("zos", "uo", "vo"),
+            "west": 39.5,
+            "south": -4.3,
+            "east": 40.0,
+            "north": -3.7,
+            "start_time": datetime(2020, 1, 1, tzinfo=UTC),
+            "end_time": datetime(2020, 1, 3, tzinfo=UTC),
+            "file_path": "data/raw/test.nc",
+            "license_name": "Test license",
+        }
+
+        parameters.update(overrides)
+
+        return MarineDataProvenance.create(**parameters)
+
+    def test_serializes_temporal_provenance(self):
+        provenance = self.create_provenance()
+
+        metadata = provenance.to_dict()
+
+        self.assertEqual(
+            metadata["start_time"],
+            "2020-01-01T00:00:00+00:00",
+        )
+        self.assertEqual(
+            metadata["end_time"],
+            "2020-01-03T00:00:00+00:00",
+        )
+
+    def test_serializes_static_dataset_without_time_range(self):
+        provenance = self.create_provenance(
+            provider="GEBCO",
+            dataset_id="GEBCO",
+            dataset_version="GEBCO_2026",
+            source_version="GEBCO_2026",
+            variables=("elevation_m",),
+            start_time=None,
+            end_time=None,
+            file_path="data/raw/gebco/gebco_2026.nc",
+            license_name="Public domain",
+        )
+
+        metadata = provenance.to_dict()
+
+        self.assertIsNone(metadata["start_time"])
+        self.assertIsNone(metadata["end_time"])
+        self.assertEqual(metadata["provider"], "GEBCO")
+        self.assertEqual(metadata["variables"], ["elevation_m"])
