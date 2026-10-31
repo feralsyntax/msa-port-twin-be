@@ -2,7 +2,7 @@ import numpy as np
 import xarray as xr
 
 REQUIRED_VARIABLES = {
-    "water_level_m",
+    "sea_surface_height_m",
     "current_u_ms",
     "current_v_ms",
 }
