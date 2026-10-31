@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +25,17 @@ class MarineDataRequest:
 
     def __post_init__(self):
         """Validate geographical, temporal and depth request parameters."""
+
+        coordinates = {
+            "west": self.west,
+            "east": self.east,
+            "south": self.south,
+            "north": self.north,
+        }
+
+        for name, value in coordinates.items():
+            if not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError(f"{name} must be a finite numerical value.")
 
         if not -180 <= self.west <= 180:
             raise ValueError("Western longitude must be between -180 and 180.")
@@ -61,6 +73,15 @@ class MarineDataRequest:
             for variable in self.variables
         ):
             raise ValueError("At least one valid variable must be specified.")
+
+        for name, value in (
+            ("minimum_depth", self.minimum_depth),
+            ("maximum_depth", self.maximum_depth),
+        ):
+            if value is not None and (
+                not isinstance(value, (int, float)) or not math.isfinite(value)
+            ):
+                raise ValueError(f"{name} must be a finite numerical value.")
 
         if self.minimum_depth is not None and self.minimum_depth < 0:
             raise ValueError("Minimum depth cannot be negative.")
