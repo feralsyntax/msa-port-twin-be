@@ -224,6 +224,61 @@ class VesselPositionAPITests(APITestCase):
             str(response.data["results"][0]["vessel"]),
             str(self.vessel.pk),
         )
+    
+    def test_retrieve_vessel_position_history(self):
+        response = self.client.get(
+            reverse(
+                "port_twin_app:vessel-position-history",
+                kwargs={"vessel_id": self.vessel.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+
+        position_data = response.data["results"][0]
+
+        self.assertAlmostEqual(position_data["longitude"], 39.66)
+        self.assertAlmostEqual(position_data["latitude"], -4.08)
+        self.assertEqual(
+            float(position_data["speed_over_ground"]),
+            3.8,
+        )
+        self.assertEqual(
+            float(position_data["course_over_ground"]),
+            135,
+        )
+
+
+    def test_retrieve_vessel_position_history_empty(self):
+        vessel_without_positions = Vessel.objects.create(
+            name="Vessel Without Positions",
+            imo_number="4567890",
+        )
+
+        response = self.client.get(
+            reverse(
+                "port_twin_app:vessel-position-history",
+                kwargs={"vessel_id": vessel_without_positions.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(response.data["results"], [])
+
+
+    def test_retrieve_vessel_position_history_vessel_not_found(self):
+        response = self.client.get(
+            reverse(
+                "port_twin_app:vessel-position-history",
+                kwargs={
+                    "vessel_id": "00000000-0000-0000-0000-000000000000",
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class MarineConditionAPITests(APITestCase):
