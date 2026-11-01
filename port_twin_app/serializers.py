@@ -240,7 +240,7 @@ class SimulationHistoryItemSerializer(serializers.ModelSerializer):
 
         return SimulationSummarySerializer(summary_result.data).data
 
-    def get_error_message(self, obj):
+    def get_error_message(self, obj) -> str:
         return safe_simulation_error_message(obj)
 
 
