@@ -74,7 +74,7 @@ paths:
   /api/v1/marine-conditions/:
     get:
       operationId: marine_conditions_list
-      description: Retrieve all marine-condition records and records filtered by source
+      description: Retrieve all marine-condition records and records filtered by source.
       parameters:
       - name: page
         required: false
@@ -82,6 +82,21 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
+      - in: query
+        name: source
+        schema:
+          enum:
+          - observed
+          - ai_prediction
+          - external
+          - demo
+          type: string
+          minLength: 1
+        description: |-
+          * `observed` - Observed
+          * `ai_prediction` - AI Prediction
+          * `external` - External Data Source
+          * `demo` - Demonstration Data
       tags:
       - marine-conditions
       security:
@@ -172,6 +187,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarinePrediction'
           description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
+          description: ''
   /api/v1/overview/:
     get:
       operationId: overview_retrieve
@@ -211,7 +232,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedScenarioList'
+                $ref: '#/components/schemas/PaginatedScenarioResponseList'
           description: ''
     post:
       operationId: scenarios_create
@@ -222,13 +243,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Scenario'
+              $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/Scenario'
+              $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Scenario'
+              $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
         required: true
       security:
       - cookieAuth: []
@@ -239,7 +260,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Scenario'
+                $ref: '#/components/schemas/ScenarioResponse'
           description: ''
   /api/v1/scenarios/{id}/:
     get:
@@ -263,7 +284,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Scenario'
+                $ref: '#/components/schemas/ScenarioResponse'
           description: ''
     put:
       operationId: scenarios_update
@@ -281,13 +302,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Scenario'
+              $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/Scenario'
+              $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Scenario'
+              $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
         required: true
       security:
       - cookieAuth: []
@@ -298,7 +319,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Scenario'
+                $ref: '#/components/schemas/ScenarioResponse'
           description: ''
     patch:
       operationId: scenarios_partial_update
@@ -316,13 +337,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PatchedScenario'
+              $ref: '#/components/schemas/PatchedScenarioCreateUpdateRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/PatchedScenario'
+              $ref: '#/components/schemas/PatchedScenarioCreateUpdateRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/PatchedScenario'
+              $ref: '#/components/schemas/PatchedScenarioCreateUpdateRequest'
       security:
       - cookieAuth: []
       - basicAuth: []
@@ -332,7 +353,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Scenario'
+                $ref: '#/components/schemas/ScenarioResponse'
           description: ''
   /api/v1/scenarios/{id}/simulations/:
     post:
@@ -347,28 +368,22 @@ paths:
         required: true
       tags:
       - scenarios
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ScenarioSimulationResponse'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/ScenarioSimulationResponse'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/ScenarioSimulationResponse'
-        required: true
       security:
       - cookieAuth: []
       - basicAuth: []
       - {}
       responses:
-        '200':
+        '201':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScenarioSimulationResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationErrorResponse'
           description: ''
   /api/v1/simulations/:
     get:
@@ -450,7 +465,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SimulationErrorResponse'
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
   /api/v1/vessel-positions/:
     get:
@@ -463,6 +478,11 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
+      - in: query
+        name: vessel
+        schema:
+          type: string
+          format: uuid
       tags:
       - vessel-positions
       security:
@@ -479,14 +499,14 @@ paths:
   /api/v1/vessels/:
     get:
       operationId: vessels_list
-      description: Get a list of all vessels or register a new vessel
+      description: Retrieve a paginated list of registered vessels.
       parameters:
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
+      - in: query
+        name: page
         schema:
           type: integer
+          minimum: 1
+          default: 1
       tags:
       - vessels
       security:
@@ -498,24 +518,24 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaginatedVesselList'
+                $ref: '#/components/schemas/PaginatedVesselResponseList'
           description: ''
     post:
       operationId: vessels_create
-      description: Get a list of all vessels or register a new vessel
+      description: Register a new vessel.
       tags:
       - vessels
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Vessel'
+              $ref: '#/components/schemas/VesselCreateRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/Vessel'
+              $ref: '#/components/schemas/VesselCreateRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Vessel'
+              $ref: '#/components/schemas/VesselCreateRequest'
         required: true
       security:
       - cookieAuth: []
@@ -526,12 +546,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Vessel'
+                $ref: '#/components/schemas/VesselResponse'
           description: ''
   /api/v1/vessels/{id}/:
     get:
       operationId: vessels_retrieve
-      description: Retrieve details of a single vessel identified by its UUID
+      description: Retrieve details of a registered vessel.
       parameters:
       - in: path
         name: id
@@ -550,7 +570,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Vessel'
+                $ref: '#/components/schemas/VesselResponse'
           description: ''
   /api/v1/vessels/{vessel_id}/positions/:
     get:
@@ -617,6 +637,13 @@ components:
       - latest_prediction_model_version
       - latest_prediction_status
       - readiness
+    APIErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     Berth:
       type: object
       properties:
@@ -653,7 +680,7 @@ components:
           description: Maximum permitted vessel draft in metres.
         status:
           allOf:
-          - $ref: '#/components/schemas/BerthStatusEnum'
+          - $ref: '#/components/schemas/BerthOperationalStatusEnum'
           readOnly: true
         created_at:
           type: string
@@ -673,7 +700,7 @@ components:
       - name
       - status
       - updated_at
-    BerthStatusEnum:
+    BerthOperationalStatusEnum:
       enum:
       - active
       - inactive
@@ -760,7 +787,7 @@ components:
           description: Wind speed in metres per second.
         source:
           allOf:
-          - $ref: '#/components/schemas/SourceEnum'
+          - $ref: '#/components/schemas/MarineConditionDataSourceEnum'
           readOnly: true
         created_at:
           type: string
@@ -777,6 +804,18 @@ components:
       - source
       - water_level
       - wind_speed
+    MarineConditionDataSourceEnum:
+      enum:
+      - observed
+      - ai_prediction
+      - external
+      - demo
+      type: string
+      description: |-
+        * `observed` - Observed
+        * `ai_prediction` - AI Prediction
+        * `external` - External Data Source
+        * `demo` - Demonstration Data
     MarineDataProvenance:
       type: object
       properties:
@@ -1074,7 +1113,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MarinePrediction'
-    PaginatedScenarioList:
+    PaginatedScenarioResponseList:
       type: object
       required:
       - count
@@ -1096,7 +1135,7 @@ components:
         results:
           type: array
           items:
-            $ref: '#/components/schemas/Scenario'
+            $ref: '#/components/schemas/ScenarioResponse'
     PaginatedSimulationHistoryItemList:
       type: object
       required:
@@ -1120,29 +1159,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SimulationHistoryItem'
-    PaginatedVesselList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/Vessel'
     PaginatedVesselPositionList:
       type: object
       required:
@@ -1166,13 +1182,32 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VesselPosition'
-    PatchedScenario:
+    PaginatedVesselResponseList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselResponse'
+    PatchedScenarioCreateUpdateRequest:
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
         name:
           type: string
           maxLength: 200
@@ -1182,21 +1217,9 @@ components:
           description: Configuration values used by the simulation.
         status:
           $ref: '#/components/schemas/ScenarioStatusEnum'
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-    Scenario:
+    ScenarioCreateUpdateRequest:
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
         name:
           type: string
           maxLength: 200
@@ -1206,6 +1229,28 @@ components:
           description: Configuration values used by the simulation.
         status:
           $ref: '#/components/schemas/ScenarioStatusEnum'
+      required:
+      - name
+    ScenarioResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        parameters:
+          readOnly: true
+          description: Configuration values used by the simulation.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/ScenarioStatusEnum'
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -1216,8 +1261,11 @@ components:
           readOnly: true
       required:
       - created_at
+      - description
       - id
       - name
+      - parameters
+      - status
       - updated_at
     ScenarioSimulationResponse:
       type: object
@@ -1362,7 +1410,7 @@ components:
           type: string
           readOnly: true
         status:
-          $ref: '#/components/schemas/SimulationHistoryItemStatusEnum'
+          $ref: '#/components/schemas/SimulationRunStatusEnum'
         started_at:
           type: string
           format: date-time
@@ -1390,7 +1438,7 @@ components:
       - scenario_id
       - scenario_name
       - summary
-    SimulationHistoryItemStatusEnum:
+    SimulationRunStatusEnum:
       enum:
       - pending
       - running
@@ -1430,25 +1478,9 @@ components:
       - vessels_in_service
       - vessels_served
       - vessels_waiting
-    SourceEnum:
-      enum:
-      - observed
-      - ai_prediction
-      - external
-      - demo
-      type: string
-      description: |-
-        * `observed` - Observed
-        * `ai_prediction` - AI Prediction
-        * `external` - External Data Source
-        * `demo` - Demonstration Data
-    Vessel:
+    VesselCreateRequest:
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
         name:
           type: string
           maxLength: 255
@@ -1480,19 +1512,8 @@ components:
           pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
           nullable: true
           description: Vessel draft in metres.
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
       required:
-      - created_at
-      - id
       - name
-      - updated_at
     VesselPosition:
       type: object
       properties:
@@ -1560,6 +1581,68 @@ components:
       - latest_ingested_at
       - latest_recorded_at
       - total_records
+    VesselResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        imo_number:
+          type: string
+          readOnly: true
+          nullable: true
+        mmsi:
+          type: string
+          readOnly: true
+          nullable: true
+        vessel_type:
+          allOf:
+          - $ref: '#/components/schemas/VesselTypeEnum'
+          readOnly: true
+        length_overall:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Vessel length in metres.
+        width:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Vessel width in metres.
+        draft:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Vessel draft in metres.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - draft
+      - id
+      - imo_number
+      - length_overall
+      - mmsi
+      - name
+      - updated_at
+      - vessel_type
+      - width
     VesselResults:
       type: object
       properties:

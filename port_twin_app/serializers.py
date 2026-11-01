@@ -5,10 +5,16 @@ from rest_framework import serializers
 from port_twin_app.models import (
     Berth,
     MarineCondition,
+    MarinePrediction,
     Scenario,
     SimulationRun,
     Vessel,
     VesselPosition,
+)
+from port_twin_app.services.marine_ai.contracts import (
+    MarineForecastConfig,
+    MarineGrid,
+    MarinePredictionRequest,
 )
 
 SAFE_SIMULATION_ERROR_MESSAGE = (
@@ -22,10 +28,22 @@ def safe_simulation_error_message(simulation_run):
     return ""
 
 
-class VesselSerializer(serializers.ModelSerializer):
+class APIErrorResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
+class VesselCreateRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vessel
-        fields = "__all__"
+        fields = [  # noqa: RUF012
+            "name",
+            "imo_number",
+            "mmsi",
+            "vessel_type",
+            "length_overall",
+            "width",
+            "draft",
+        ]
 
     def validate_imo_number(self, value):
         if not value:
@@ -49,6 +67,36 @@ class VesselSerializer(serializers.ModelSerializer):
             )
 
         return normalized_value
+
+
+class VesselResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vessel
+        fields = [  # noqa: RUF012
+            "id",
+            "name",
+            "imo_number",
+            "mmsi",
+            "vessel_type",
+            "length_overall",
+            "width",
+            "draft",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class VesselPositionQuerySerializer(serializers.Serializer):
+    vessel = serializers.UUIDField(required=False)
+
+
+class VesselListQuerySerializer(serializers.Serializer):
+    page = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        default=1,
+    )
 
 
 class BerthSerializer(serializers.ModelSerializer):
@@ -133,14 +181,21 @@ class MarineConditionSerializer(serializers.ModelSerializer):
         return obj.location.y
 
 
-class ScenarioSerializer(serializers.ModelSerializer):
+class MarineConditionQuerySerializer(serializers.Serializer):
+    source = serializers.ChoiceField(
+        choices=MarineCondition.DataSource.choices,
+        required=False,
+    )
+
+
+class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Scenario
-        fields = "__all__"
-        read_only_fields = [  # noqa: RUF012
-            "id",
-            "created_at",
-            "updated_at",
+        fields = [  # noqa: RUF012
+            "name",
+            "description",
+            "parameters",
+            "status",
         ]
 
     def validate_parameters(self, value):
@@ -148,6 +203,21 @@ class ScenarioSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Parameters must be a JSON object.")
 
         return value
+
+
+class ScenarioResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Scenario
+        fields = [  # noqa: RUF012
+            "id",
+            "name",
+            "description",
+            "parameters",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
 
 
 class SimulationSummarySerializer(serializers.Serializer):
@@ -303,14 +373,6 @@ class OperationsOverviewSerializer(serializers.Serializer):
         allow_null=True,
     )
     data_status = OperationsDataStatusSerializer()
-
-
-from port_twin_app.models import MarinePrediction
-from port_twin_app.services.marine_ai.contracts import (
-    MarineForecastConfig,
-    MarineGrid,
-    MarinePredictionRequest,
-)
 
 
 class MarineGridInputSerializer(serializers.Serializer):

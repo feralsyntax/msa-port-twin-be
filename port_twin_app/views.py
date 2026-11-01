@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
@@ -22,13 +22,16 @@ from port_twin_app.models import (
     VesselPosition,
 )
 from port_twin_app.serializers import (
+    APIErrorResponseSerializer,
     BerthSerializer,
     DataStatusSerializer,
+    MarineConditionQuerySerializer,
     MarineConditionSerializer,
     MarinePredictionRequestSerializer,
     MarinePredictionSerializer,
     OperationsOverviewSerializer,
-    ScenarioSerializer,
+    ScenarioCreateUpdateRequestSerializer,
+    ScenarioResponseSerializer,
     ScenarioSimulationResponseSerializer,
     SimulationComparisonQuerySerializer,
     SimulationComparisonResponseSerializer,
@@ -36,8 +39,11 @@ from port_twin_app.serializers import (
     SimulationErrorResponseSerializer,
     SimulationHistoryItemSerializer,
     SimulationSummarySerializer,
+    VesselCreateRequestSerializer,
+    VesselListQuerySerializer,
+    VesselPositionQuerySerializer,
     VesselPositionSerializer,
-    VesselSerializer,
+    VesselResponseSerializer,
     safe_simulation_error_message,
 )
 from port_twin_app.services.marine_ai.django_service import (
@@ -48,22 +54,64 @@ from port_twin_app.services.simulation_execution import execute_simulation_run
 logger = logging.getLogger(__name__)
 
 
+@extend_schema_view(
+    get=extend_schema(
+        parameters=[VesselListQuerySerializer],
+        responses=VesselResponseSerializer(many=True),
+        operation_id="vessels_list",
+        description="Retrieve a paginated list of registered vessels.",
+    ),
+    post=extend_schema(
+        request=VesselCreateRequestSerializer,
+        responses={201: VesselResponseSerializer},
+        operation_id="vessels_create",
+        description="Register a new vessel.",
+    ),
+)
 class VesselListAPIView(generics.ListCreateAPIView):
     """
     Get a list of all vessels or register a new vessel
     """
 
     queryset = Vessel.objects.all()
-    serializer_class = VesselSerializer
+    serializer_class = VesselResponseSerializer
+
+    def create(self, request, *args, **kwargs):
+        request_serializer = VesselCreateRequestSerializer(
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
+        request_serializer.is_valid(raise_exception=True)
+        vessel = request_serializer.save()
+
+        response_serializer = VesselResponseSerializer(
+            vessel,
+            context=self.get_serializer_context(),
+        )
+
+        headers = self.get_success_headers(response_serializer.data)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses=VesselResponseSerializer,
+        operation_id="vessels_retrieve",
+        description="Retrieve details of a registered vessel.",
+    )
+)
 class VesselDetailAPIView(generics.RetrieveAPIView):
     """
     Retrieve details of a single vessel identified by its UUID
     """
 
     queryset = Vessel.objects.all()
-    serializer_class = VesselSerializer
+    serializer_class = VesselResponseSerializer
 
 
 class BerthListAPIView(generics.ListAPIView):
@@ -91,10 +139,20 @@ class VesselPositionListAPIView(generics.ListAPIView):
 
     serializer_class = VesselPositionSerializer
 
-    def get_queryset(self):
-        queryset = VesselPosition.objects.select_related("vessel")
+    @extend_schema(
+        parameters=[VesselPositionQuerySerializer],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
-        vessel_id = self.request.query_params.get("vessel")
+    def get_queryset(self):
+        query_serializer = VesselPositionQuerySerializer(
+            data=self.request.query_params,
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        queryset = VesselPosition.objects.select_related("vessel")
+        vessel_id = query_serializer.validated_data.get("vessel")
 
         if vessel_id:
             queryset = queryset.filter(vessel_id=vessel_id)
@@ -122,15 +180,25 @@ class VesselPositionHistoryAPIView(generics.ListAPIView):
 
 class MarineConditionListAPIView(generics.ListAPIView):
     """
-    Retrieve all marine-condition records and records filtered by source
+    Retrieve all marine-condition records and records filtered by source.
     """
 
     serializer_class = MarineConditionSerializer
 
-    def get_queryset(self):
-        queryset = MarineCondition.objects.all()
+    @extend_schema(
+        parameters=[MarineConditionQuerySerializer],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
-        source = self.request.query_params.get("source")
+    def get_queryset(self):
+        query_serializer = MarineConditionQuerySerializer(
+            data=self.request.query_params,
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        queryset = MarineCondition.objects.all()
+        source = query_serializer.validated_data.get("source")
 
         if source:
             queryset = queryset.filter(source=source)
@@ -138,22 +206,85 @@ class MarineConditionListAPIView(generics.ListAPIView):
         return queryset
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses=ScenarioResponseSerializer(many=True),
+    ),
+    post=extend_schema(
+        request=ScenarioCreateUpdateRequestSerializer,
+        responses={201: ScenarioResponseSerializer},
+    ),
+)
 class ScenarioListCreateAPIView(generics.ListCreateAPIView):
     """
     List saved scenarios or create a new scenario.
     """
 
     queryset = Scenario.objects.all()
-    serializer_class = ScenarioSerializer
+    serializer_class = ScenarioResponseSerializer
+
+    def create(self, request, *args, **kwargs):
+        request_serializer = ScenarioCreateUpdateRequestSerializer(
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
+        request_serializer.is_valid(raise_exception=True)
+        scenario = request_serializer.save()
+
+        response_serializer = ScenarioResponseSerializer(
+            scenario,
+            context=self.get_serializer_context(),
+        )
+
+        headers = self.get_success_headers(response_serializer.data)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses=ScenarioResponseSerializer,
+    ),
+    put=extend_schema(
+        request=ScenarioCreateUpdateRequestSerializer,
+        responses={200: ScenarioResponseSerializer},
+    ),
+    patch=extend_schema(
+        request=ScenarioCreateUpdateRequestSerializer,
+        responses={200: ScenarioResponseSerializer},
+    ),
+)
 class ScenarioDetailAPIView(generics.RetrieveUpdateAPIView):
     """
     Retrieve or update a scenario identified by its UUID.
     """
 
     queryset = Scenario.objects.all()
-    serializer_class = ScenarioSerializer
+    serializer_class = ScenarioResponseSerializer
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+
+        request_serializer = ScenarioCreateUpdateRequestSerializer(
+            instance,
+            data=request.data,
+            partial=partial,
+            context=self.get_serializer_context(),
+        )
+        request_serializer.is_valid(raise_exception=True)
+        scenario = request_serializer.save()
+
+        response_serializer = ScenarioResponseSerializer(
+            scenario,
+            context=self.get_serializer_context(),
+        )
+
+        return Response(response_serializer.data)
 
 
 class ScenarioSimulationView(GenericAPIView):
@@ -164,6 +295,13 @@ class ScenarioSimulationView(GenericAPIView):
     serializer_class = ScenarioSimulationResponseSerializer
     throttle_scope = "simulation"
 
+    @extend_schema(
+        request=None,
+        responses={
+            201: ScenarioSimulationResponseSerializer,
+            400: SimulationErrorResponseSerializer,
+        },
+    )
     def post(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
 
@@ -257,7 +395,7 @@ class SimulationComparisonView(APIView):
         parameters=[SimulationComparisonQuerySerializer],
         responses={
             200: SimulationComparisonResponseSerializer,
-            400: SimulationErrorResponseSerializer,
+            400: APIErrorResponseSerializer,
         },
     )
     def get(self, request):
@@ -523,6 +661,7 @@ class MarinePredictionCreateAPIView(APIView):
         request=MarinePredictionRequestSerializer,
         responses={
             201: MarinePredictionSerializer,
+            503: APIErrorResponseSerializer,
         },
     )
     def post(self, request):
