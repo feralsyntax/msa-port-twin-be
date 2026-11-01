@@ -177,14 +177,14 @@ class MarineConditionSerializer(serializers.ModelSerializer):
         return obj.location.y
 
 
-class ScenarioSerializer(serializers.ModelSerializer):
+class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Scenario
-        fields = "__all__"
-        read_only_fields = [  # noqa: RUF012
-            "id",
-            "created_at",
-            "updated_at",
+        fields = [  # noqa: RUF012
+            "name",
+            "description",
+            "parameters",
+            "status",
         ]
 
     def validate_parameters(self, value):
@@ -192,6 +192,21 @@ class ScenarioSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Parameters must be a JSON object.")
 
         return value
+
+
+class ScenarioResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Scenario
+        fields = [  # noqa: RUF012
+            "id",
+            "name",
+            "description",
+            "parameters",
+            "status",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
 
 
 class SimulationSummarySerializer(serializers.Serializer):
