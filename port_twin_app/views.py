@@ -25,6 +25,7 @@ from port_twin_app.serializers import (
     APIErrorResponseSerializer,
     BerthSerializer,
     DataStatusSerializer,
+    MarineConditionQuerySerializer,
     MarineConditionSerializer,
     MarinePredictionRequestSerializer,
     MarinePredictionSerializer,
@@ -179,15 +180,25 @@ class VesselPositionHistoryAPIView(generics.ListAPIView):
 
 class MarineConditionListAPIView(generics.ListAPIView):
     """
-    Retrieve all marine-condition records and records filtered by source
+    Retrieve all marine-condition records and records filtered by source.
     """
 
     serializer_class = MarineConditionSerializer
 
-    def get_queryset(self):
-        queryset = MarineCondition.objects.all()
+    @extend_schema(
+        parameters=[MarineConditionQuerySerializer],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
-        source = self.request.query_params.get("source")
+    def get_queryset(self):
+        query_serializer = MarineConditionQuerySerializer(
+            data=self.request.query_params,
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        queryset = MarineCondition.objects.all()
+        source = query_serializer.validated_data.get("source")
 
         if source:
             queryset = queryset.filter(source=source)
