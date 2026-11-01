@@ -102,6 +102,24 @@ class VesselPositionListAPIView(generics.ListAPIView):
         return queryset
 
 
+class VesselPositionHistoryAPIView(generics.ListAPIView):
+    """
+    Retrieve the position history of a specific vessel.
+    """
+
+    serializer_class = VesselPositionSerializer
+
+    def get_queryset(self):
+        vessel = get_object_or_404(
+            Vessel,
+            pk=self.kwargs["vessel_id"],
+        )
+
+        return VesselPosition.objects.filter(
+            vessel=vessel,
+        ).select_related("vessel")
+
+
 class MarineConditionListAPIView(generics.ListAPIView):
     """
     Retrieve all marine-condition records and records filtered by source
