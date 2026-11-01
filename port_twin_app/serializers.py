@@ -5,10 +5,16 @@ from rest_framework import serializers
 from port_twin_app.models import (
     Berth,
     MarineCondition,
+    MarinePrediction,
     Scenario,
     SimulationRun,
     Vessel,
     VesselPosition,
+)
+from port_twin_app.services.marine_ai.contracts import (
+    MarineForecastConfig,
+    MarineGrid,
+    MarinePredictionRequest,
 )
 
 SAFE_SIMULATION_ERROR_MESSAGE = (
@@ -22,10 +28,18 @@ def safe_simulation_error_message(simulation_run):
     return ""
 
 
-class VesselSerializer(serializers.ModelSerializer):
+class VesselCreateRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vessel
-        fields = "__all__"
+        fields = [  # noqa: RUF012
+            "name",
+            "imo_number",
+            "mmsi",
+            "vessel_type",
+            "length_overall",
+            "width",
+            "draft",
+        ]
 
     def validate_imo_number(self, value):
         if not value:
@@ -49,6 +63,36 @@ class VesselSerializer(serializers.ModelSerializer):
             )
 
         return normalized_value
+
+
+class VesselResponseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vessel
+        fields = [  # noqa: RUF012
+            "id",
+            "name",
+            "imo_number",
+            "mmsi",
+            "vessel_type",
+            "length_overall",
+            "width",
+            "draft",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class VesselPositionQuerySerializer(serializers.Serializer):
+    vessel = serializers.UUIDField(required=False)
+
+
+class VesselListQuerySerializer(serializers.Serializer):
+    page = serializers.IntegerField(
+        required=False,
+        min_value=1,
+        default=1,
+    )
 
 
 class BerthSerializer(serializers.ModelSerializer):
@@ -303,14 +347,6 @@ class OperationsOverviewSerializer(serializers.Serializer):
         allow_null=True,
     )
     data_status = OperationsDataStatusSerializer()
-
-
-from port_twin_app.models import MarinePrediction
-from port_twin_app.services.marine_ai.contracts import (
-    MarineForecastConfig,
-    MarineGrid,
-    MarinePredictionRequest,
-)
 
 
 class MarineGridInputSerializer(serializers.Serializer):
