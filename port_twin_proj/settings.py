@@ -148,12 +148,12 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "ENUM_NAME_OVERRIDES": {
-        "VesselTypeEnum": "port_twin_app.models.Vessel.VesselType.choices",
-        "BerthOperationalStatusEnum": "port_twin_app.models.Berth.OperationalStatus.choices",
-        "MarineConditionDataSourceEnum": "port_twin_app.models.MarineCondition.DataSource.choices",
-        "ScenarioStatusEnum": "port_twin_app.models.Scenario.Status.choices",
-        "SimulationRunStatusEnum": "port_twin_app.models.SimulationRun.Status.choices",
-        "MarinePredictionStatusEnum": "port_twin_app.models.MarinePrediction.Status.choices",
+        "VesselTypeEnum": "port_twin_app.schema_enums.VESSEL_TYPE_CHOICES",
+        "BerthOperationalStatusEnum": "port_twin_app.schema_enums.BERTH_STATUS_CHOICES",
+        "MarineConditionDataSourceEnum": "port_twin_app.schema_enums.MARINE_CONDITION_SOURCE_CHOICES",
+        "ScenarioStatusEnum": "port_twin_app.schema_enums.SCENARIO_STATUS_CHOICES",
+        "SimulationRunStatusEnum": "port_twin_app.schema_enums.SIMULATION_RUN_STATUS_CHOICES",
+        "MarinePredictionStatusEnum": "port_twin_app.schema_enums.MARINE_PREDICTION_STATUS_CHOICES",
     },
 }
 
