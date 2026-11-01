@@ -51,6 +51,90 @@ class VesselAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        
+    def test_register_vessel(self):
+        payload = {
+            "name": "New Container Vessel",
+            "imo_number": "IMO 7654321",
+            "mmsi": "987654321",
+            "vessel_type": Vessel.VesselType.CONTAINER,
+            "length_overall": "250.00",
+            "width": "32.00",
+            "draft": "12.00",
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:vessel-list"),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], payload["name"])
+        self.assertEqual(response.data["imo_number"], "IMO 7654321")
+        self.assertEqual(response.data["mmsi"], payload["mmsi"])
+        self.assertTrue(
+            Vessel.objects.filter(name="New Container Vessel").exists()
+        )
+
+
+    def test_register_vessel_normalizes_imo_number(self):
+        payload = {
+            "name": "IMO Normalization Test",
+            "imo_number": "7654322",
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:vessel-list"),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["imo_number"], "IMO 7654322")
+
+
+    def test_register_vessel_rejects_duplicate_imo(self):
+        payload = {
+            "name": "Duplicate IMO Vessel",
+            "imo_number": "1234567",
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:vessel-list"),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("imo_number", response.data)
+
+
+    def test_register_vessel_rejects_duplicate_mmsi(self):
+        payload = {
+            "name": "Duplicate MMSI Vessel",
+            "mmsi": "123456789",
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:vessel-list"),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("mmsi", response.data)
+
+
+    def test_register_vessel_requires_name(self):
+        response = self.client.post(
+            reverse("port_twin_app:vessel-list"),
+            {"imo_number": "7654323"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data)
 
 
 class BerthAPITests(APITestCase):
