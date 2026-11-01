@@ -181,6 +181,13 @@ class MarineConditionSerializer(serializers.ModelSerializer):
         return obj.location.y
 
 
+class MarineConditionQuerySerializer(serializers.Serializer):
+    source = serializers.ChoiceField(
+        choices=MarineCondition.DataSource.choices,
+        required=False,
+    )
+
+
 class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Scenario
