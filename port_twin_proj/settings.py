@@ -123,8 +123,6 @@ else:
     }
 
 
-
-
 # Rest Framework Configs
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
@@ -149,6 +147,14 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "VesselTypeEnum": "port_twin_app.models.Vessel.VesselType.choices",
+        "BerthOperationalStatusEnum": "port_twin_app.models.Berth.OperationalStatus.choices",
+        "MarineConditionDataSourceEnum": "port_twin_app.models.MarineCondition.DataSource.choices",
+        "ScenarioStatusEnum": "port_twin_app.models.Scenario.Status.choices",
+        "SimulationRunStatusEnum": "port_twin_app.models.SimulationRun.Status.choices",
+        "MarinePredictionStatusEnum": "port_twin_app.models.MarinePrediction.Status.choices",
+    },
 }
 
 TEMPLATES = [
@@ -207,9 +213,7 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATIC_SOURCE_DIR = BASE_DIR / "static"
-STATICFILES_DIRS = (
-    [STATIC_SOURCE_DIR] if STATIC_SOURCE_DIR.is_dir() else []
-)
+STATICFILES_DIRS = [STATIC_SOURCE_DIR] if STATIC_SOURCE_DIR.is_dir() else []
 
 STORAGES = {
     "default": {
@@ -247,10 +251,14 @@ MARINE_AI_CHECKPOINT = config(
     ),
 )
 
-MARINE_AI_BACKEND = config(
-    "MARINE_AI_BACKEND",
-    default="local",
-).strip().lower()
+MARINE_AI_BACKEND = (
+    config(
+        "MARINE_AI_BACKEND",
+        default="local",
+    )
+    .strip()
+    .lower()
+)
 MARINE_AI_MODELARTS_ENDPOINT = config(
     "MARINE_AI_MODELARTS_ENDPOINT",
     default="",
