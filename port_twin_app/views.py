@@ -22,6 +22,7 @@ from port_twin_app.models import (
     VesselPosition,
 )
 from port_twin_app.serializers import (
+    APIErrorResponseSerializer,
     BerthSerializer,
     DataStatusSerializer,
     MarineConditionSerializer,
@@ -372,7 +373,7 @@ class SimulationComparisonView(APIView):
         parameters=[SimulationComparisonQuerySerializer],
         responses={
             200: SimulationComparisonResponseSerializer,
-            400: SimulationErrorResponseSerializer,
+            400: APIErrorResponseSerializer,
         },
     )
     def get(self, request):
