@@ -28,7 +28,8 @@ from port_twin_app.serializers import (
     MarinePredictionRequestSerializer,
     MarinePredictionSerializer,
     OperationsOverviewSerializer,
-    ScenarioSerializer,
+    ScenarioCreateUpdateRequestSerializer,
+    ScenarioResponseSerializer,
     ScenarioSimulationResponseSerializer,
     SimulationComparisonQuerySerializer,
     SimulationComparisonResponseSerializer,
@@ -182,22 +183,85 @@ class MarineConditionListAPIView(generics.ListAPIView):
         return queryset
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses=ScenarioResponseSerializer(many=True),
+    ),
+    post=extend_schema(
+        request=ScenarioCreateUpdateRequestSerializer,
+        responses={201: ScenarioResponseSerializer},
+    ),
+)
 class ScenarioListCreateAPIView(generics.ListCreateAPIView):
     """
     List saved scenarios or create a new scenario.
     """
 
     queryset = Scenario.objects.all()
-    serializer_class = ScenarioSerializer
+    serializer_class = ScenarioResponseSerializer
+
+    def create(self, request, *args, **kwargs):
+        request_serializer = ScenarioCreateUpdateRequestSerializer(
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
+        request_serializer.is_valid(raise_exception=True)
+        scenario = request_serializer.save()
+
+        response_serializer = ScenarioResponseSerializer(
+            scenario,
+            context=self.get_serializer_context(),
+        )
+
+        headers = self.get_success_headers(response_serializer.data)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses=ScenarioResponseSerializer,
+    ),
+    put=extend_schema(
+        request=ScenarioCreateUpdateRequestSerializer,
+        responses={200: ScenarioResponseSerializer},
+    ),
+    patch=extend_schema(
+        request=ScenarioCreateUpdateRequestSerializer,
+        responses={200: ScenarioResponseSerializer},
+    ),
+)
 class ScenarioDetailAPIView(generics.RetrieveUpdateAPIView):
     """
     Retrieve or update a scenario identified by its UUID.
     """
 
     queryset = Scenario.objects.all()
-    serializer_class = ScenarioSerializer
+    serializer_class = ScenarioResponseSerializer
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+
+        request_serializer = ScenarioCreateUpdateRequestSerializer(
+            instance,
+            data=request.data,
+            partial=partial,
+            context=self.get_serializer_context(),
+        )
+        request_serializer.is_valid(raise_exception=True)
+        scenario = request_serializer.save()
+
+        response_serializer = ScenarioResponseSerializer(
+            scenario,
+            context=self.get_serializer_context(),
+        )
+
+        return Response(response_serializer.data)
 
 
 class ScenarioSimulationView(GenericAPIView):
