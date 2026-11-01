@@ -36,14 +36,19 @@ class VesselSerializer(serializers.ModelSerializer):
         if value.startswith("IMO"):
             value = value[3:].strip()
 
-        digits = value
-
-        if not re.fullmatch(r"\d{7,8}", digits):
+        if not re.fullmatch(r"\d{7,8}", value):
             raise serializers.ValidationError(
                 "Enter a valid IMO number, e.g. 'IMO 1234567'."
             )
 
-        return f"IMO {digits}"
+        normalized_value = f"IMO {value}"
+
+        if Vessel.objects.filter(imo_number=normalized_value).exists():
+            raise serializers.ValidationError(
+                "A vessel with this IMO number already exists."
+            )
+
+        return normalized_value
 
 
 class BerthSerializer(serializers.ModelSerializer):

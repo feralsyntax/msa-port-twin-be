@@ -48,9 +48,9 @@ from port_twin_app.services.simulation_execution import execute_simulation_run
 logger = logging.getLogger(__name__)
 
 
-class VesselListAPIView(generics.ListAPIView):
+class VesselListAPIView(generics.ListCreateAPIView):
     """
-    Get a list of all vessels
+    Get a list of all vessels or register a new vessel
     """
 
     queryset = Vessel.objects.all()
