@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
@@ -36,8 +36,10 @@ from port_twin_app.serializers import (
     SimulationErrorResponseSerializer,
     SimulationHistoryItemSerializer,
     SimulationSummarySerializer,
+    VesselCreateRequestSerializer,
+    VesselListQuerySerializer,
     VesselPositionSerializer,
-    VesselSerializer,
+    VesselResponseSerializer,
     safe_simulation_error_message,
 )
 from port_twin_app.services.marine_ai.django_service import (
@@ -48,22 +50,64 @@ from port_twin_app.services.simulation_execution import execute_simulation_run
 logger = logging.getLogger(__name__)
 
 
+@extend_schema_view(
+    get=extend_schema(
+        parameters=[VesselListQuerySerializer],
+        responses=VesselResponseSerializer(many=True),
+        operation_id="vessels_list",
+        description="Retrieve a paginated list of registered vessels.",
+    ),
+    post=extend_schema(
+        request=VesselCreateRequestSerializer,
+        responses={201: VesselResponseSerializer},
+        operation_id="vessels_create",
+        description="Register a new vessel.",
+    ),
+)
 class VesselListAPIView(generics.ListCreateAPIView):
     """
     Get a list of all vessels or register a new vessel
     """
 
     queryset = Vessel.objects.all()
-    serializer_class = VesselSerializer
+    serializer_class = VesselResponseSerializer
+
+    def create(self, request, *args, **kwargs):
+        request_serializer = VesselCreateRequestSerializer(
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
+        request_serializer.is_valid(raise_exception=True)
+        vessel = request_serializer.save()
+
+        response_serializer = VesselResponseSerializer(
+            vessel,
+            context=self.get_serializer_context(),
+        )
+
+        headers = self.get_success_headers(response_serializer.data)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        responses=VesselResponseSerializer,
+        operation_id="vessels_retrieve",
+        description="Retrieve details of a registered vessel.",
+    )
+)
 class VesselDetailAPIView(generics.RetrieveAPIView):
     """
     Retrieve details of a single vessel identified by its UUID
     """
 
     queryset = Vessel.objects.all()
-    serializer_class = VesselSerializer
+    serializer_class = VesselResponseSerializer
 
 
 class BerthListAPIView(generics.ListAPIView):
