@@ -1,0 +1,220 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import numpy as np
+import xarray as xr
+from django.test import SimpleTestCase
+
+from port_twin_app.services.marine_data.sources.bathymetry import (
+    BathymetryRequest,
+)
+from port_twin_app.services.marine_data.sources.gebco import (
+    GEBCOBathymetrySource,
+)
+
+
+class GEBCOBathymetrySourceTests(SimpleTestCase):
+    def setUp(self):
+        self.temp_directory = TemporaryDirectory()
+        self.addCleanup(self.temp_directory.cleanup)
+
+        self.file_path = Path(self.temp_directory.name) / "gebco_test.nc"
+
+        longitude = np.array([39.0, 39.5, 40.0, 40.5, 41.0])
+        latitude = np.array([-5.0, -4.5, -4.0, -3.5, -3.0])
+
+        elevation = np.array(
+            [
+                [-100, -110, -120, -130, -140],
+                [-90, -100, -110, -120, -130],
+                [-80, -90, -100, -110, -120],
+                [-70, -80, -90, -100, -110],
+                [-60, -70, -80, -90, -100],
+            ],
+            dtype=float,
+        )
+
+        dataset = xr.Dataset(
+            data_vars={
+                "elevation": (
+                    ("lat", "lon"),
+                    elevation,
+                    {"units": "m"},
+                )
+            },
+            coords={
+                "lon": longitude,
+                "lat": latitude,
+            },
+            attrs={
+                "title": "Synthetic GEBCO test dataset",
+                "vertical_datum": "Mean Sea Level",
+                "source": "GEBCO_2026",
+            },
+        )
+
+        dataset.to_netcdf(self.file_path, engine="scipy")
+
+    def make_request(self, **overrides):
+        parameters = {
+            "west": 39.5,
+            "south": -4.5,
+            "east": 40.5,
+            "north": -3.5,
+        }
+        parameters.update(overrides)
+
+        return BathymetryRequest(**parameters)
+
+    def make_source(self, file_path=None):
+        return GEBCOBathymetrySource(
+            file_path=file_path or self.file_path,
+            dataset_version="GEBCO_2026",
+        )
+
+    def test_fetch_returns_requested_geographical_subset(self):
+        result = self.make_source().fetch(self.make_request())
+
+        self.assertEqual(
+            result.sizes["longitude"],
+            3,
+        )
+        self.assertEqual(
+            result.sizes["latitude"],
+            3,
+        )
+
+        np.testing.assert_array_equal(
+            result.longitude.values,
+            [39.5, 40.0, 40.5],
+        )
+
+        np.testing.assert_array_equal(
+            result.latitude.values,
+            [-4.5, -4.0, -3.5],
+        )
+
+    def test_fetch_normalizes_variable_and_coordinate_names(self):
+        result = self.make_source().fetch(self.make_request())
+
+        self.assertIn("elevation_m", result.data_vars)
+        self.assertIn("longitude", result.coords)
+        self.assertIn("latitude", result.coords)
+
+    def test_fetch_preserves_elevation_values_and_sign(self):
+        result = self.make_source().fetch(self.make_request())
+
+        self.assertTrue(np.all(result["elevation_m"].values < 0))
+
+        self.assertEqual(
+            result["elevation_m"].attrs["units"],
+            "m",
+        )
+
+    def test_fetch_preserves_source_metadata(self):
+        result = self.make_source().fetch(self.make_request())
+
+        self.assertEqual(result.attrs["provider"], "GEBCO")
+        self.assertEqual(result.attrs["source_dataset_id"], "GEBCO")
+        self.assertEqual(
+            result.attrs["source_dataset_version"],
+            "GEBCO_2026",
+        )
+        self.assertEqual(
+            result.attrs["vertical_reference"],
+            "Mean Sea Level",
+        )
+        self.assertEqual(
+            result.attrs["source"],
+            "GEBCO_2026",
+        )
+
+    def test_fetch_rejects_missing_file(self):
+        source = self.make_source(Path(self.temp_directory.name) / "missing.nc")
+
+        with self.assertRaises(FileNotFoundError):
+            source.fetch(self.make_request())
+
+    def test_fetch_rejects_region_outside_source_grid(self):
+        request = self.make_request(west=38.0)
+
+        with self.assertRaises(ValueError):
+            self.make_source().fetch(request)
+
+    def test_fetch_rejects_region_with_insufficient_coordinates(self):
+        request = self.make_request(
+            west=39.5,
+            east=39.6,
+            south=-4.5,
+            north=-3.5,
+        )
+
+        with self.assertRaises(ValueError):
+            self.make_source().fetch(request)
+
+    def test_fetch_rejects_dataset_without_elevation_variable(self):
+        invalid_path = Path(self.temp_directory.name) / "invalid.nc"
+
+        invalid_dataset = xr.Dataset(
+            data_vars={
+                "temperature": (
+                    ("lat", "lon"),
+                    np.ones((5, 5)),
+                )
+            },
+            coords={
+                "lon": np.linspace(39.0, 41.0, 5),
+                "lat": np.linspace(-5.0, -3.0, 5),
+            },
+        )
+
+        invalid_dataset.to_netcdf(invalid_path, engine="scipy")
+
+        with self.assertRaises(ValueError):
+            self.make_source(invalid_path).fetch(self.make_request())
+
+    def test_fetch_rejects_dataset_without_valid_elevations(self):
+        invalid_path = Path(self.temp_directory.name) / "empty.nc"
+
+        invalid_dataset = xr.Dataset(
+            data_vars={
+                "elevation": (
+                    ("lat", "lon"),
+                    np.full((5, 5), np.nan),
+                )
+            },
+            coords={
+                "lon": np.linspace(39.0, 41.0, 5),
+                "lat": np.linspace(-5.0, -3.0, 5),
+            },
+        )
+
+        invalid_dataset.to_netcdf(invalid_path, engine="scipy")
+
+        with self.assertRaises(ValueError):
+            self.make_source(invalid_path).fetch(self.make_request())
+
+    def test_fetch_supports_alternative_coordinate_names(self):
+        alternative_path = Path(self.temp_directory.name) / "alternative.nc"
+
+        dataset = xr.Dataset(
+            data_vars={
+                "elev": (
+                    ("latitude", "longitude"),
+                    np.full((5, 5), -100.0),
+                    {"units": "m"},
+                )
+            },
+            coords={
+                "longitude": np.linspace(39.0, 41.0, 5),
+                "latitude": np.linspace(-5.0, -3.0, 5),
+            },
+        )
+
+        dataset.to_netcdf(alternative_path, engine="scipy")
+
+        result = self.make_source(alternative_path).fetch(self.make_request())
+
+        self.assertIn("elevation_m", result.data_vars)
+        self.assertIn("longitude", result.coords)
+        self.assertIn("latitude", result.coords)
