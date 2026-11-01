@@ -271,7 +271,14 @@ class ScenarioSimulationView(GenericAPIView):
 
     serializer_class = ScenarioSimulationResponseSerializer
     throttle_scope = "simulation"
-
+    
+    @extend_schema(
+        request=None,
+        responses={
+            201: ScenarioSimulationResponseSerializer,
+            400: SimulationErrorResponseSerializer,
+        },
+    )
     def post(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
 
