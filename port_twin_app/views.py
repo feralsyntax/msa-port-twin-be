@@ -639,6 +639,7 @@ class MarinePredictionCreateAPIView(APIView):
         request=MarinePredictionRequestSerializer,
         responses={
             201: MarinePredictionSerializer,
+            503: APIErrorResponseSerializer,
         },
     )
     def post(self, request):
