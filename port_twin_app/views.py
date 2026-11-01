@@ -40,6 +40,7 @@ from port_twin_app.serializers import (
     SimulationSummarySerializer,
     VesselCreateRequestSerializer,
     VesselListQuerySerializer,
+    VesselPositionQuerySerializer,
     VesselPositionSerializer,
     VesselResponseSerializer,
     safe_simulation_error_message,
@@ -137,10 +138,20 @@ class VesselPositionListAPIView(generics.ListAPIView):
 
     serializer_class = VesselPositionSerializer
 
-    def get_queryset(self):
-        queryset = VesselPosition.objects.select_related("vessel")
+    @extend_schema(
+        parameters=[VesselPositionQuerySerializer],
+    )
+    def get(self, request, *args, **kwargs):
+        return super().get(request, *args, **kwargs)
 
-        vessel_id = self.request.query_params.get("vessel")
+    def get_queryset(self):
+        query_serializer = VesselPositionQuerySerializer(
+            data=self.request.query_params,
+        )
+        query_serializer.is_valid(raise_exception=True)
+
+        queryset = VesselPosition.objects.select_related("vessel")
+        vessel_id = query_serializer.validated_data.get("vessel")
 
         if vessel_id:
             queryset = queryset.filter(vessel_id=vessel_id)
@@ -272,7 +283,7 @@ class ScenarioSimulationView(GenericAPIView):
 
     serializer_class = ScenarioSimulationResponseSerializer
     throttle_scope = "simulation"
-    
+
     @extend_schema(
         request=None,
         responses={
