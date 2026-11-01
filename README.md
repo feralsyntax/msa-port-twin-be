@@ -12,6 +12,15 @@ Install requirements
     pip install -r requirements.txt
     ```
 
+# Frontend Integration
+
+The frontend can download this project's API schema from this repository.
+- Run the following command from the frontend
+    ```
+    wget -O docs/api/schema.yml https://raw.githubusercontent.com/feralsyntax/msa-port-twin-be/main/docs/api/schema.yml
+    ```
+- Replace `docs/api/` with your prefered output location.
+
 # Demonstration Data
 
 MSA Port Twin provides synthetic demonstration data for local development and application demonstrations.
