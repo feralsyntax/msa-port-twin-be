@@ -28,6 +28,10 @@ def safe_simulation_error_message(simulation_run):
     return ""
 
 
+class APIErrorResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
 class VesselCreateRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vessel
