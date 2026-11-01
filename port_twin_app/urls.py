@@ -23,6 +23,11 @@ urlpatterns = [
         name="vessel-position-list",
     ),
     path(
+        "vessels/<uuid:vessel_id>/positions/",
+        views.VesselPositionHistoryAPIView.as_view(),
+        name="vessel-position-history",
+    ),
+    path(
         "marine-conditions/",
         views.MarineConditionListAPIView.as_view(),
         name="marine-condition-list",
