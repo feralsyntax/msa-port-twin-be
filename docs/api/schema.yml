@@ -1,0 +1,1633 @@
+openapi: 3.0.3
+info:
+  title: MSA Port Twin API
+  version: 1.0.0
+  description: API for port operations, vessel queueing, marine conditions, and AI-powered
+    simulations.
+paths:
+  /api/v1/berths/:
+    get:
+      operationId: berths_list
+      description: Get a list of all berths
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - berths
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBerthList'
+          description: ''
+  /api/v1/berths/{id}/:
+    get:
+      operationId: berths_retrieve
+      description: Retrieve details of a single berth identified by its UUID
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - berths
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Berth'
+          description: ''
+  /api/v1/data-status/:
+    get:
+      operationId: data_status_retrieve
+      description: Returns marine data provenance, ingestion timestamps, vessel position
+        freshness, and marine AI configuration status.
+      tags:
+      - data-status
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataStatus'
+          description: ''
+  /api/v1/marine-conditions/:
+    get:
+      operationId: marine_conditions_list
+      description: Retrieve all marine-condition records and records filtered by source
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - marine-conditions
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMarineConditionList'
+          description: ''
+  /api/v1/marine-predictions/:
+    get:
+      operationId: marine_predictions_list
+      description: List stored marine forecasts.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - marine-predictions
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMarinePredictionList'
+          description: ''
+  /api/v1/marine-predictions/{id}/:
+    get:
+      operationId: marine_predictions_retrieve
+      description: Retrieve a previously stored marine forecast.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - marine-predictions
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarinePrediction'
+          description: ''
+  /api/v1/marine-predictions/create/:
+    post:
+      operationId: marine_predictions_create_create
+      description: Generate and store a new forecast.
+      tags:
+      - marine-predictions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarinePredictionRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MarinePredictionRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MarinePredictionRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarinePrediction'
+          description: ''
+  /api/v1/overview/:
+    get:
+      operationId: overview_retrieve
+      description: Return a consolidated overview of port operations.
+      tags:
+      - overview
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationsOverview'
+          description: ''
+  /api/v1/scenarios/:
+    get:
+      operationId: scenarios_list
+      description: List saved scenarios or create a new scenario.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - scenarios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedScenarioList'
+          description: ''
+    post:
+      operationId: scenarios_create
+      description: List saved scenarios or create a new scenario.
+      tags:
+      - scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Scenario'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Scenario'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Scenario'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+          description: ''
+  /api/v1/scenarios/{id}/:
+    get:
+      operationId: scenarios_retrieve
+      description: Retrieve or update a scenario identified by its UUID.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - scenarios
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+          description: ''
+    put:
+      operationId: scenarios_update
+      description: Retrieve or update a scenario identified by its UUID.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Scenario'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Scenario'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Scenario'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+          description: ''
+    patch:
+      operationId: scenarios_partial_update
+      description: Retrieve or update a scenario identified by its UUID.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedScenario'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedScenario'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedScenario'
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scenario'
+          description: ''
+  /api/v1/scenarios/{id}/simulations/:
+    post:
+      operationId: scenarios_simulations_create
+      description: Execute a simulation for a saved scenario.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - scenarios
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScenarioSimulationResponse'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ScenarioSimulationResponse'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ScenarioSimulationResponse'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScenarioSimulationResponse'
+          description: ''
+  /api/v1/simulations/:
+    get:
+      operationId: simulations_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - simulations
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSimulationHistoryItemList'
+          description: ''
+  /api/v1/simulations/{id}/:
+    get:
+      operationId: simulations_retrieve
+      description: Retrieve a simulation run and its persisted results.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - simulations
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationDetailResponse'
+          description: ''
+  /api/v1/simulations/compare/:
+    get:
+      operationId: simulations_compare_retrieve
+      parameters:
+      - in: query
+        name: run_a
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: query
+        name: run_b
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - simulations
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationComparisonResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SimulationErrorResponse'
+          description: ''
+  /api/v1/vessel-positions/:
+    get:
+      operationId: vessel_positions_list
+      description: Retrieve either all vessel positions or the position of one vessel
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - vessel-positions
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVesselPositionList'
+          description: ''
+  /api/v1/vessels/:
+    get:
+      operationId: vessels_list
+      description: Get a list of all vessels or register a new vessel
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - vessels
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVesselList'
+          description: ''
+    post:
+      operationId: vessels_create
+      description: Get a list of all vessels or register a new vessel
+      tags:
+      - vessels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vessel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Vessel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Vessel'
+        required: true
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vessel'
+          description: ''
+  /api/v1/vessels/{id}/:
+    get:
+      operationId: vessels_retrieve
+      description: Retrieve details of a single vessel identified by its UUID
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - vessels
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vessel'
+          description: ''
+  /api/v1/vessels/{vessel_id}/positions/:
+    get:
+      operationId: vessels_positions_list
+      description: Retrieve the position history of a specific vessel.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - in: path
+        name: vessel_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - vessels
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVesselPositionList'
+          description: ''
+components:
+  schemas:
+    AIModelStatus:
+      type: object
+      properties:
+        backend:
+          type: string
+        configured:
+          type: boolean
+        readiness:
+          type: string
+        configured_model_version:
+          type: string
+        latest_prediction_status:
+          type: string
+          nullable: true
+        latest_prediction_model_version:
+          type: string
+          nullable: true
+        latest_prediction_contract_version:
+          type: string
+          nullable: true
+        latest_prediction_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - backend
+      - configured
+      - configured_model_version
+      - latest_prediction_at
+      - latest_prediction_contract_version
+      - latest_prediction_model_version
+      - latest_prediction_status
+      - readiness
+    Berth:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          readOnly: true
+        max_vessel_length:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Maximum vessel length in metres.
+        max_vessel_draft:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Maximum permitted vessel draft in metres.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/BerthStatusEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - latitude
+      - longitude
+      - max_vessel_draft
+      - max_vessel_length
+      - name
+      - status
+      - updated_at
+    BerthStatusEnum:
+      enum:
+      - active
+      - inactive
+      - maintenance
+      type: string
+      description: |-
+        * `active` - Active
+        * `inactive` - Inactive
+        * `maintenance` - Under Maintenance
+    DataSourceCount:
+      type: object
+      properties:
+        source:
+          type: string
+        count:
+          type: integer
+      required:
+      - count
+      - source
+    DataStatus:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        marine_conditions:
+          $ref: '#/components/schemas/MarineDataProvenance'
+        vessel_positions:
+          $ref: '#/components/schemas/VesselPositionDataStatus'
+        ai:
+          $ref: '#/components/schemas/AIModelStatus'
+      required:
+      - ai
+      - generated_at
+      - marine_conditions
+      - vessel_positions
+    MarineCondition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        longitude:
+          type: number
+          format: double
+          readOnly: true
+        latitude:
+          type: number
+          format: double
+          readOnly: true
+        recorded_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Time the conditions apply to or were observed.
+        water_level:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,3})?$
+          readOnly: true
+          nullable: true
+          description: Water level relative to a documented reference datum, in metres.
+        current_speed:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,3})?$
+          readOnly: true
+          nullable: true
+          description: Current speed in metres per second.
+        current_direction:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Current direction in degrees.
+        wind_speed:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Wind speed in metres per second.
+        source:
+          allOf:
+          - $ref: '#/components/schemas/SourceEnum'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - current_direction
+      - current_speed
+      - id
+      - latitude
+      - longitude
+      - recorded_at
+      - source
+      - water_level
+      - wind_speed
+    MarineDataProvenance:
+      type: object
+      properties:
+        total_records:
+          type: integer
+        source_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DataSourceCount'
+        latest_recorded_at:
+          type: string
+          format: date-time
+          nullable: true
+        latest_ingested_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - latest_ingested_at
+      - latest_recorded_at
+      - source_counts
+      - total_records
+    MarineForecastInput:
+      type: object
+      properties:
+        start_time:
+          type: string
+          format: date-time
+        steps:
+          type: integer
+          minimum: 1
+        step_seconds:
+          type: integer
+          minimum: 1
+      required:
+      - start_time
+      - step_seconds
+      - steps
+    MarineGridInput:
+      type: object
+      properties:
+        west:
+          type: number
+          format: double
+        south:
+          type: number
+          format: double
+        east:
+          type: number
+          format: double
+        north:
+          type: number
+          format: double
+        nx:
+          type: integer
+          minimum: 2
+        ny:
+          type: integer
+          minimum: 2
+        crs:
+          type: string
+          default: EPSG:4326
+      required:
+      - east
+      - north
+      - nx
+      - ny
+      - south
+      - west
+    MarinePrediction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        grid:
+          readOnly: true
+          description: Geographic bounds, resolution, and CRS.
+        forecast:
+          readOnly: true
+          description: Forecast start time, steps, and time interval.
+        input_data:
+          readOnly: true
+          description: Inputs used to generate the prediction.
+        result_data:
+          readOnly: true
+          nullable: true
+          description: Predicted water levels and current components.
+        model_version:
+          type: string
+          readOnly: true
+        contract_version:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/MarinePredictionStatusEnum'
+          readOnly: true
+        error_message:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - contract_version
+      - created_at
+      - error_message
+      - forecast
+      - grid
+      - id
+      - input_data
+      - model_version
+      - result_data
+      - status
+    MarinePredictionRequest:
+      type: object
+      properties:
+        grid:
+          $ref: '#/components/schemas/MarineGridInput'
+        forecast:
+          $ref: '#/components/schemas/MarineForecastInput'
+        bathymetry_m: {}
+        initial_water_level_m: {}
+        wind_u_ms: {}
+        wind_v_ms: {}
+        boundary_conditions: {}
+      required:
+      - bathymetry_m
+      - boundary_conditions
+      - forecast
+      - grid
+      - initial_water_level_m
+      - wind_u_ms
+      - wind_v_ms
+    MarinePredictionStatusEnum:
+      enum:
+      - completed
+      - failed
+      type: string
+      description: |-
+        * `completed` - Completed
+        * `failed` - Failed
+    OperationsBerthOverview:
+      type: object
+      properties:
+        total:
+          type: integer
+        active:
+          type: integer
+        inactive:
+          type: integer
+        maintenance:
+          type: integer
+      required:
+      - active
+      - inactive
+      - maintenance
+      - total
+    OperationsDataStatus:
+      type: object
+      properties:
+        marine_condition_sources:
+          type: array
+          items:
+            type: string
+        latest_marine_condition_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - latest_marine_condition_at
+      - marine_condition_sources
+    OperationsMetrics:
+      type: object
+      properties:
+        vessels_waiting:
+          type: integer
+        vessels_in_service:
+          type: integer
+        vessels_served:
+          type: integer
+        average_waiting_hours:
+          type: number
+          format: double
+        berth_utilization_percent:
+          type: number
+          format: double
+      required:
+      - average_waiting_hours
+      - berth_utilization_percent
+      - vessels_in_service
+      - vessels_served
+      - vessels_waiting
+    OperationsOverview:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        total_vessels:
+          type: integer
+        berths:
+          $ref: '#/components/schemas/OperationsBerthOverview'
+        operations:
+          allOf:
+          - $ref: '#/components/schemas/OperationsMetrics'
+          nullable: true
+        latest_simulation_id:
+          type: string
+          format: uuid
+          nullable: true
+        latest_simulation_completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        data_status:
+          $ref: '#/components/schemas/OperationsDataStatus'
+      required:
+      - berths
+      - data_status
+      - generated_at
+      - latest_simulation_completed_at
+      - latest_simulation_id
+      - operations
+      - total_vessels
+    PaginatedBerthList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Berth'
+    PaginatedMarineConditionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarineCondition'
+    PaginatedMarinePredictionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarinePrediction'
+    PaginatedScenarioList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scenario'
+    PaginatedSimulationHistoryItemList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SimulationHistoryItem'
+    PaginatedVesselList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vessel'
+    PaginatedVesselPositionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselPosition'
+    PatchedScenario:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        parameters:
+          description: Configuration values used by the simulation.
+        status:
+          $ref: '#/components/schemas/ScenarioStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    Scenario:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        parameters:
+          description: Configuration values used by the simulation.
+        status:
+          $ref: '#/components/schemas/ScenarioStatusEnum'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - updated_at
+    ScenarioSimulationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scenario_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          allOf:
+          - $ref: '#/components/schemas/SimulationSummary'
+          nullable: true
+      required:
+      - completed_at
+      - id
+      - scenario_id
+      - started_at
+      - status
+      - summary
+    ScenarioStatusEnum:
+      enum:
+      - draft
+      - ready
+      type: string
+      description: |-
+        * `draft` - Draft
+        * `ready` - Ready
+    SimulationComparisonResponse:
+      type: object
+      properties:
+        run_a:
+          $ref: '#/components/schemas/SimulationComparisonRun'
+        run_b:
+          $ref: '#/components/schemas/SimulationComparisonRun'
+        differences:
+          $ref: '#/components/schemas/SimulationSummary'
+      required:
+      - differences
+      - run_a
+      - run_b
+    SimulationComparisonRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scenario_name:
+          type: string
+        summary:
+          $ref: '#/components/schemas/SimulationSummary'
+      required:
+      - id
+      - scenario_name
+      - summary
+    SimulationDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scenario_id:
+          type: string
+          format: uuid
+        scenario_name:
+          type: string
+        status:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        summary:
+          allOf:
+          - $ref: '#/components/schemas/SimulationSummary'
+          nullable: true
+        vessel_results:
+          allOf:
+          - $ref: '#/components/schemas/VesselResults'
+          nullable: true
+      required:
+      - completed_at
+      - created_at
+      - error_message
+      - id
+      - scenario_id
+      - scenario_name
+      - started_at
+      - status
+      - summary
+      - vessel_results
+    SimulationErrorResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        scenario_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        error:
+          type: string
+      required:
+      - error
+      - id
+      - scenario_id
+      - status
+    SimulationHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        scenario_id:
+          type: string
+          format: uuid
+          readOnly: true
+        scenario_name:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/SimulationHistoryItemStatusEnum'
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        error_message:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        summary:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          readOnly: true
+      required:
+      - created_at
+      - error_message
+      - id
+      - scenario_id
+      - scenario_name
+      - summary
+    SimulationHistoryItemStatusEnum:
+      enum:
+      - pending
+      - running
+      - completed
+      - failed
+      type: string
+      description: |-
+        * `pending` - Pending
+        * `running` - Running
+        * `completed` - Completed
+        * `failed` - Failed
+    SimulationSummary:
+      type: object
+      properties:
+        total_arrivals:
+          type: integer
+        vessels_served:
+          type: integer
+        vessels_waiting:
+          type: integer
+        vessels_in_service:
+          type: integer
+        average_waiting_hours:
+          type: number
+          format: double
+        average_turnaround_hours:
+          type: number
+          format: double
+        berth_utilization_percent:
+          type: number
+          format: double
+      required:
+      - average_turnaround_hours
+      - average_waiting_hours
+      - berth_utilization_percent
+      - total_arrivals
+      - vessels_in_service
+      - vessels_served
+      - vessels_waiting
+    SourceEnum:
+      enum:
+      - observed
+      - ai_prediction
+      - external
+      - demo
+      type: string
+      description: |-
+        * `observed` - Observed
+        * `ai_prediction` - AI Prediction
+        * `external` - External Data Source
+        * `demo` - Demonstration Data
+    Vessel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 255
+        imo_number:
+          type: string
+          nullable: true
+          maxLength: 12
+        mmsi:
+          type: string
+          nullable: true
+          maxLength: 9
+        vessel_type:
+          $ref: '#/components/schemas/VesselTypeEnum'
+        length_overall:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Vessel length in metres.
+        width:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Vessel width in metres.
+        draft:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+          description: Vessel draft in metres.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - name
+      - updated_at
+    VesselPosition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        vessel:
+          type: string
+          format: uuid
+          readOnly: true
+        longitude:
+          type: number
+          format: double
+          readOnly: true
+        latitude:
+          type: number
+          format: double
+          readOnly: true
+        speed_over_ground:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,4}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Vessel speed in knots.
+        course_over_ground:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,3}(?:\.\d{0,2})?$
+          readOnly: true
+          nullable: true
+          description: Vessel course in degrees.
+        recorded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - course_over_ground
+      - created_at
+      - id
+      - latitude
+      - longitude
+      - recorded_at
+      - speed_over_ground
+      - vessel
+    VesselPositionDataStatus:
+      type: object
+      properties:
+        total_records:
+          type: integer
+        latest_recorded_at:
+          type: string
+          format: date-time
+          nullable: true
+        latest_ingested_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - latest_ingested_at
+      - latest_recorded_at
+      - total_records
+    VesselResults:
+      type: object
+      properties:
+        vessels:
+          type: array
+          items:
+            $ref: '#/components/schemas/VesselSimulationResult'
+      required:
+      - vessels
+    VesselSimulationResult:
+      type: object
+      properties:
+        vessel_id:
+          type: string
+        arrival_hour:
+          type: number
+          format: double
+        berth_id:
+          type: string
+          nullable: true
+        service_start_hour:
+          type: number
+          format: double
+          nullable: true
+        departure_hour:
+          type: number
+          format: double
+          nullable: true
+        waiting_hours:
+          type: number
+          format: double
+          nullable: true
+        status:
+          type: string
+        reason:
+          type: string
+          nullable: true
+      required:
+      - arrival_hour
+      - berth_id
+      - departure_hour
+      - service_start_hour
+      - status
+      - vessel_id
+      - waiting_hours
+    VesselTypeEnum:
+      enum:
+      - container
+      - tanker
+      - bulk_carrier
+      - general_cargo
+      - passenger
+      - other
+      - unknown
+      type: string
+      description: |-
+        * `container` - Container Ship
+        * `tanker` - Tanker
+        * `bulk_carrier` - Bulk Carrier
+        * `general_cargo` - General Cargo
+        * `passenger` - Passenger
+        * `other` - Other
+        * `unknown` - Unknown
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
