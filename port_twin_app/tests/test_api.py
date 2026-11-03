@@ -151,11 +151,21 @@ class BerthAPITests(APITestCase):
         response = self.client.get(reverse("port_twin_app:berth-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
         self.assertEqual(response.data["count"], 1)
+        self.assertIsNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
         berth_data = response.data["results"][0]
+
+        self.assertEqual(berth_data["id"], str(self.berth.pk))
+        self.assertEqual(berth_data["name"], self.berth.name)
         self.assertAlmostEqual(berth_data["longitude"], 39.65)
         self.assertAlmostEqual(berth_data["latitude"], -4.05)
+        self.assertEqual(berth_data["max_vessel_length"], "300.00")
+        self.assertEqual(berth_data["max_vessel_draft"], "14.00")
+        self.assertEqual(berth_data["status"], Berth.OperationalStatus.ACTIVE)
+
 
     def test_retrieve_berth(self):
         response = self.client.get(
@@ -166,7 +176,16 @@ class BerthAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["name"], self.berth.name)
+
+        berth_data = response.data
+
+        self.assertEqual(berth_data["id"], str(self.berth.pk))
+        self.assertEqual(berth_data["name"], self.berth.name)
+        self.assertAlmostEqual(berth_data["longitude"], 39.65)
+        self.assertAlmostEqual(berth_data["latitude"], -4.05)
+        self.assertEqual(berth_data["max_vessel_length"], "300.00")
+        self.assertEqual(berth_data["max_vessel_draft"], "14.00")
+        self.assertEqual(berth_data["status"], Berth.OperationalStatus.ACTIVE)
 
 
 class VesselPositionAPITests(APITestCase):
