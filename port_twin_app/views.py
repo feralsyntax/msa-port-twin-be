@@ -2,6 +2,7 @@ import logging
 from pathlib import Path
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -49,7 +50,7 @@ from port_twin_app.serializers import (
 from port_twin_app.services.marine_ai.django_service import (
     get_configured_marine_inference_service,
 )
-from port_twin_app.services.simulation_execution import execute_simulation_run
+from port_twin_app.tasks import execute_simulation_task
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +290,7 @@ class ScenarioDetailAPIView(generics.RetrieveUpdateAPIView):
 
 class ScenarioSimulationView(GenericAPIView):
     """
-    Execute a simulation for a saved scenario.
+    Queue a simulation for a saved scenario.
     """
 
     serializer_class = ScenarioSimulationResponseSerializer
@@ -298,52 +299,42 @@ class ScenarioSimulationView(GenericAPIView):
     @extend_schema(
         request=None,
         responses={
-            201: ScenarioSimulationResponseSerializer,
-            400: SimulationErrorResponseSerializer,
+            202: ScenarioSimulationResponseSerializer,
+            404: APIErrorResponseSerializer,
+            503: SimulationErrorResponseSerializer,
         },
     )
     def post(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
 
-        simulation_run = SimulationRun.objects.create(
-            scenario=scenario,
-        )
+        with transaction.atomic():
+            simulation_run = SimulationRun.objects.create(
+                scenario=scenario,
+            )
+
+            transaction.on_commit(
+                lambda: execute_simulation_task.delay(str(simulation_run.pk))
+            )
 
         try:
-            execute_simulation_run(simulation_run)
-
-        except ValueError:
-            simulation_run.refresh_from_db()
-
             return Response(
                 {
                     "id": str(simulation_run.id),
                     "scenario_id": str(scenario.id),
                     "status": simulation_run.status,
-                    "error": "Invalid simulation configuration",
+                    "started_at": simulation_run.started_at,
+                    "completed_at": simulation_run.completed_at,
+                    "summary": None,
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_202_ACCEPTED,
             )
 
-        simulation_run.refresh_from_db()
-
-        summary = (
-            simulation_run.results.filter(result_type="summary")
-            .values_list("data", flat=True)
-            .first()
-        )
-
-        return Response(
-            {
-                "id": str(simulation_run.id),
-                "scenario_id": str(scenario.id),
-                "status": simulation_run.status,
-                "started_at": simulation_run.started_at,
-                "completed_at": simulation_run.completed_at,
-                "summary": summary,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        except Exception:
+            logger.exception(
+                "Unexpected error while preparing simulation response: run_id=%s",
+                simulation_run.pk,
+            )
+            raise
 
 
 class SimulationDetailView(APIView):
