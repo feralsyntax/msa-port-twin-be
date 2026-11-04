@@ -1,17 +1,14 @@
 """
 Input and output contracts for marine AI predictions.
 
-Versioned input and output contracts for marine AI predictions.
-
 Conventions:
 - Geographic bounds use EPSG:4326 (longitude, latitude).
 - Spatial arrays use [y, x].
-- Time-varying arrays use [time, y, x].
+- Prediction arrays use [time, y, x].
 - Bathymetry is positive-downward water depth in metres.
 - Water level is relative to a documented vertical datum.
 - u is eastward velocity; v is northward velocity.
-- Wind components use eastward/northward directions in m/s.
-- Boundary values are supplied at each forecast step.
+- Forecasts contain six hourly outputs covering six hours.
 
 This module defines the data exchanged between Django and the marine
 prediction model. It does not execute inference or depend on a trained model.
@@ -23,10 +20,10 @@ from datetime import datetime
 from numbers import Real
 from typing import Literal
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "2.0"
 
-BOUNDARY_EDGES = frozenset({"west", "east", "south", "north"})
-BOUNDARY_VARIABLES = frozenset({"water_level_m", "normal_velocity_ms"})
+FORECAST_STEPS = 6
+FORECAST_STEP_SECONDS = 3600
 
 
 def validate_finite_numbers(value, name):
@@ -110,8 +107,10 @@ class MarineGrid:
 
         for name in ("nx", "ny"):
             value = getattr(self, name)
+
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError(f"{name} must be an integer.")  # noqa: TRY004
+
             if value < 2:
                 raise ValueError(f"{name} must be at least 2.")
 
@@ -121,11 +120,11 @@ class MarineGrid:
 
 @dataclass(frozen=True)
 class MarineForecastConfig:
-    """Forecast start time and temporal resolution."""
+    """Fixed six-hour forecast with hourly output intervals."""
 
     start_time: str
-    steps: int
-    step_seconds: int
+    steps: int = FORECAST_STEPS
+    step_seconds: int = FORECAST_STEP_SECONDS
 
     def __post_init__(self):
         if not isinstance(self.start_time, str):
@@ -146,11 +145,16 @@ class MarineForecastConfig:
         if start.tzinfo is None or start.utcoffset() is None:
             raise ValueError("start_time must include a timezone.")
 
-        if self.steps < 1:
-            raise ValueError("steps must be at least 1.")
+        if self.steps != FORECAST_STEPS:
+            raise ValueError(
+                f"steps must be exactly {FORECAST_STEPS} for the MVP forecast."
+            )
 
-        if self.step_seconds < 1:
-            raise ValueError("step_seconds must be positive.")
+        if self.step_seconds != FORECAST_STEP_SECONDS:
+            raise ValueError(
+                "step_seconds must be exactly "
+                f"{FORECAST_STEP_SECONDS} for hourly forecast outputs."
+            )
 
 
 @dataclass(frozen=True)
@@ -158,21 +162,22 @@ class MarinePredictionRequest:
     """
     Model inputs.
 
-    Grid fields: [y, x].
-    Wind fields: [time, y, x].
+    All spatial fields use [y, x]:
 
-    boundary_conditions maps an edge to exactly one variable:
-    water_level_m or normal_velocity_ms. Its values are lists
-    containing one finite value per forecast step.
+    - bathymetry_m
+    - initial_water_level_m
+    - initial_current_u_ms
+    - initial_current_v_ms
+
+    Longitude and latitude channels are derived from the MarineGrid.
     """
 
     grid: MarineGrid
     forecast: MarineForecastConfig
     bathymetry_m: list[list[float]]
     initial_water_level_m: list[list[float]]
-    wind_u_ms: list[list[list[float]]]
-    wind_v_ms: list[list[list[float]]]
-    boundary_conditions: dict[str, dict[str, list[float]]]
+    initial_current_u_ms: list[list[float]]
+    initial_current_v_ms: list[list[float]]
 
     def __post_init__(self):
         if not isinstance(self.grid, MarineGrid):
@@ -182,40 +187,27 @@ class MarinePredictionRequest:
             raise ValueError("forecast must be a MarineForecastConfig.")  # noqa: TRY004
 
         ny, nx = self.grid.ny, self.grid.nx
-        steps = self.forecast.steps
 
-        validate_rectangular_field(self.bathymetry_m, [ny, nx], "bathymetry_m")
+        validate_rectangular_field(
+            self.bathymetry_m,
+            [ny, nx],
+            "bathymetry_m",
+        )
         validate_rectangular_field(
             self.initial_water_level_m,
             [ny, nx],
             "initial_water_level_m",
         )
-        validate_rectangular_field(self.wind_u_ms, [steps, ny, nx], "wind_u_ms")
-        validate_rectangular_field(self.wind_v_ms, [steps, ny, nx], "wind_v_ms")
-
-        if not isinstance(self.boundary_conditions, dict):
-            raise ValueError("boundary_conditions must be an object.")  # noqa: TRY004
-
-        if not self.boundary_conditions:
-            raise ValueError("At least one boundary condition must be supplied.")
-
-        unknown_edges = set(self.boundary_conditions) - BOUNDARY_EDGES
-        if unknown_edges:
-            raise ValueError(f"Unsupported boundary edges: {sorted(unknown_edges)}.")
-
-        for edge, condition in self.boundary_conditions.items():
-            if not isinstance(condition, dict):
-                raise ValueError(f"{edge} boundary condition must be an object.")  # noqa: TRY004
-
-            if len(condition) != 1:
-                raise ValueError(f"{edge} must define exactly one boundary variable.")
-
-            variable, values = next(iter(condition.items()))
-
-            if variable not in BOUNDARY_VARIABLES:
-                raise ValueError(f"Unsupported boundary variable: {variable}.")
-
-            validate_rectangular_field(values, [steps], f"{edge}.{variable}")
+        validate_rectangular_field(
+            self.initial_current_u_ms,
+            [ny, nx],
+            "initial_current_u_ms",
+        )
+        validate_rectangular_field(
+            self.initial_current_v_ms,
+            [ny, nx],
+            "initial_current_v_ms",
+        )
 
 
 @dataclass(frozen=True)
@@ -258,7 +250,7 @@ class MarinePredictionResult:
             raise ValueError("request must be a MarinePredictionRequest.")  # noqa: TRY004
 
         expected = (
-            request.forecast.steps,
+            FORECAST_STEPS,
             request.grid.ny,
             request.grid.nx,
         )
@@ -269,6 +261,7 @@ class MarinePredictionResult:
             ("current_v_ms", self.current_v_ms),
         ):
             actual = self._shape(field, name)
+
             if actual != expected:
                 raise ValueError(f"{name} has shape {actual}; expected {expected}.")
 
@@ -288,4 +281,5 @@ class MarinePredictionResult:
         nx = len(field[0][0])
 
         validate_rectangular_field(field, [steps, ny, nx], name)
+
         return steps, ny, nx

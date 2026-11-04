@@ -33,7 +33,7 @@ from port_twin_app.services.marine_ai.model import (
 def make_sample(sample_id, start_time, offset=0.0):
     """Create a synthetic marine sample for evaluation tests."""
 
-    steps, ny, nx = 2, 8, 8
+    steps, ny, nx = 6, 8, 8
 
     request = MarinePredictionRequest(
         grid=MarineGrid(
@@ -51,24 +51,24 @@ def make_sample(sample_id, start_time, offset=0.0):
         ),
         bathymetry_m=[[20.0 for _ in range(nx)] for _ in range(ny)],
         initial_water_level_m=[[0.5 + offset for _ in range(nx)] for _ in range(ny)],
-        wind_u_ms=[[[2.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
-        wind_v_ms=[[[1.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
-        boundary_conditions={
-            "west": {"water_level_m": [0.1] * steps},
-        },
+        initial_current_u_ms=[[0.2 for _ in range(nx)] for _ in range(ny)],
+        initial_current_v_ms=[[0.3 for _ in range(nx)] for _ in range(ny)],
     )
 
     target = MarinePredictionResult(
         water_level_m=[
-            [[0.1 + offset for _ in range(nx)] for _ in range(ny)] for _ in range(steps)
+            [[0.1 + offset + step * 0.01 for _ in range(nx)] for _ in range(ny)]
+            for step in range(steps)
         ],
         current_u_ms=[
-            [[0.2 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)
+            [[0.2 + step * 0.01 for _ in range(nx)] for _ in range(ny)]
+            for step in range(steps)
         ],
         current_v_ms=[
-            [[0.3 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)
+            [[0.3 + step * 0.01 for _ in range(nx)] for _ in range(ny)]
+            for step in range(steps)
         ],
-        model_version="synthetic-test-target-v1",
+        model_version="synthetic-test-target-v2",
     )
 
     return MarineDatasetSample(

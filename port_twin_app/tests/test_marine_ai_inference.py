@@ -24,7 +24,7 @@ from port_twin_app.services.marine_ai.model import (
 def make_request():
     """Create a small synthetic marine prediction request."""
 
-    steps, ny, nx = 2, 8, 8
+    ny, nx = 8, 8
 
     return MarinePredictionRequest(
         grid=MarineGrid(
@@ -37,16 +37,13 @@ def make_request():
         ),
         forecast=MarineForecastConfig(
             start_time="2026-01-01T00:00:00+00:00",
-            steps=steps,
+            steps=6,
             step_seconds=3600,
         ),
         bathymetry_m=[[20.0 for _ in range(nx)] for _ in range(ny)],
         initial_water_level_m=[[0.5 for _ in range(nx)] for _ in range(ny)],
-        wind_u_ms=[[[2.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
-        wind_v_ms=[[[1.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
-        boundary_conditions={
-            "west": {"water_level_m": [0.1] * steps},
-        },
+        initial_current_u_ms=[[2.0 for _ in range(nx)] for _ in range(ny)],
+        initial_current_v_ms=[[1.0 for _ in range(nx)] for _ in range(ny)],
     )
 
 
@@ -79,7 +76,6 @@ class MarineInferenceServiceTests(SimpleTestCase):
         self.addCleanup(self.temp_directory.cleanup)
 
         self.checkpoint_path = create_test_checkpoint(self.temp_directory.name)
-
         self.request = make_request()
 
     def _save_checkpoint_with_statistics(self):
@@ -114,9 +110,9 @@ class MarineInferenceServiceTests(SimpleTestCase):
 
         self.assertEqual(result.status, "success")
         self.assertEqual(result.model_version, MODEL_VERSION)
-        self.assertEqual(len(result.water_level_m), 2)
-        self.assertEqual(len(result.current_u_ms), 2)
-        self.assertEqual(len(result.current_v_ms), 2)
+        self.assertEqual(len(result.water_level_m), 6)
+        self.assertEqual(len(result.current_u_ms), 6)
+        self.assertEqual(len(result.current_v_ms), 6)
 
         for field in (
             result.water_level_m,

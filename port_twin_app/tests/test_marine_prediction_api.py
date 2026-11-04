@@ -38,9 +38,8 @@ def make_api_payload():
         },
         "bathymetry_m": request.bathymetry_m,
         "initial_water_level_m": request.initial_water_level_m,
-        "wind_u_ms": request.wind_u_ms,
-        "wind_v_ms": request.wind_v_ms,
-        "boundary_conditions": request.boundary_conditions,
+        "initial_current_u_ms": request.initial_current_u_ms,
+        "initial_current_v_ms": request.initial_current_v_ms,
     }
 
 

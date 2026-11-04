@@ -7,6 +7,7 @@ import torch
 from django.test import SimpleTestCase
 
 from port_twin_app.services.marine_ai.contracts import (
+    FORECAST_STEPS,
     MarineForecastConfig,
     MarineGrid,
     MarinePredictionRequest,
@@ -25,7 +26,7 @@ from port_twin_app.services.marine_ai.model import (
 )
 
 
-def make_request(steps=3, ny=8, nx=10):
+def make_request(ny=8, nx=10):
     """Build a small request suitable for fast model tests."""
 
     return MarinePredictionRequest(
@@ -39,17 +40,11 @@ def make_request(steps=3, ny=8, nx=10):
         ),
         forecast=MarineForecastConfig(
             start_time="2026-01-01T00:00:00+00:00",
-            steps=steps,
-            step_seconds=3600,
         ),
         bathymetry_m=[[20.0 for _ in range(nx)] for _ in range(ny)],
         initial_water_level_m=[[0.5 for _ in range(nx)] for _ in range(ny)],
-        wind_u_ms=[[[2.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
-        wind_v_ms=[[[1.0 for _ in range(nx)] for _ in range(ny)] for _ in range(steps)],
-        boundary_conditions={
-            "west": {"water_level_m": [0.1] * steps},
-            "north": {"normal_velocity_ms": [0.2] * steps},
-        },
+        initial_current_u_ms=[[2.0 for _ in range(nx)] for _ in range(ny)],
+        initial_current_v_ms=[[1.0 for _ in range(nx)] for _ in range(ny)],
     )
 
 
@@ -70,9 +65,28 @@ class MarineFNOModelTests(SimpleTestCase):
 
         self.assertEqual(
             tuple(inputs.shape),
-            (1, 3, INPUT_CHANNELS, 8, 10),
+            (1, INPUT_CHANNELS, 8, 10),
         )
         self.assertTrue(torch.isfinite(inputs).all())
+
+    def test_request_to_tensor_encodes_spatial_fields(self):
+        inputs = request_to_tensor(self.request)
+
+        self.assertTrue(torch.all(inputs[0, 0] == 20.0))
+        self.assertTrue(torch.all(inputs[0, 1] == 0.5))
+        self.assertTrue(torch.all(inputs[0, 2] == 2.0))
+        self.assertTrue(torch.all(inputs[0, 3] == 1.0))
+
+    def test_request_to_tensor_encodes_normalized_coordinates(self):
+        inputs = request_to_tensor(self.request)
+
+        longitude = inputs[0, 4]
+        latitude = inputs[0, 5]
+
+        self.assertAlmostEqual(longitude[0, 0].item(), 39.5 / 180.0, places=5)
+        self.assertAlmostEqual(longitude[0, -1].item(), 39.8 / 180.0, places=5)
+        self.assertAlmostEqual(latitude[0, 0].item(), -4.2 / 90.0, places=5)
+        self.assertAlmostEqual(latitude[-1, 0].item(), -3.9 / 90.0, places=5)
 
     def test_request_to_tensor_rejects_invalid_grid_shape(self):
         request = make_request()
@@ -87,127 +101,34 @@ class MarineFNOModelTests(SimpleTestCase):
         with self.assertRaisesRegex(ValueError, "bathymetry_m contains non-finite"):
             request_to_tensor(self.request)
 
-    def test_request_to_tensor_rejects_invalid_wind_shape(self):
+    def test_request_to_tensor_rejects_invalid_current_u_shape(self):
         request = make_request()
-        object.__setattr__(request, "wind_u_ms", [])
+        object.__setattr__(request, "initial_current_u_ms", [])
 
-        with self.assertRaisesRegex(ValueError, "wind_u_ms must have shape"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "initial_current_u_ms must have shape",
+        ):
             request_to_tensor(request)
 
-    def test_request_to_tensor_rejects_non_finite_wind_values(self):
-        self.request.wind_v_ms[0][0][0] = float("inf")
+    def test_request_to_tensor_rejects_invalid_current_v_shape(self):
+        request = make_request()
+        object.__setattr__(request, "initial_current_v_ms", [])
 
-        with self.assertRaisesRegex(ValueError, "wind_v_ms contains non-finite"):
+        with self.assertRaisesRegex(
+            ValueError,
+            "initial_current_v_ms must have shape",
+        ):
+            request_to_tensor(request)
+
+    def test_request_to_tensor_rejects_non_finite_current_values(self):
+        self.request.initial_current_v_ms[0][0] = float("inf")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "initial_current_v_ms contains non-finite",
+        ):
             request_to_tensor(self.request)
-
-    def test_request_to_tensor_rejects_boundary_series_with_wrong_length(self):
-        request = make_request()
-        object.__setattr__(
-            request,
-            "boundary_conditions",
-            {"west": {"water_level_m": [0.1]}},
-        )
-
-        with self.assertRaisesRegex(ValueError, "sequence of length 3"):
-            request_to_tensor(request)
-
-    def test_request_to_tensor_rejects_non_numeric_boundary_values(self):
-        request = make_request()
-        object.__setattr__(
-            request,
-            "boundary_conditions",
-            {"west": {"water_level_m": [0.1, "invalid", 0.3]}},
-        )
-
-        with self.assertRaisesRegex(ValueError, "must contain numeric values"):
-            request_to_tensor(request)
-
-    def test_request_to_tensor_rejects_non_finite_boundary_values(self):
-        request = make_request()
-        object.__setattr__(
-            request,
-            "boundary_conditions",
-            {"west": {"water_level_m": [0.1, float("inf"), 0.3]}},
-        )
-
-        with self.assertRaisesRegex(ValueError, "contains non-finite values"):
-            request_to_tensor(request)
-
-    def test_request_to_tensor_rejects_invalid_wind_v_shape(self):
-        request = make_request()
-        object.__setattr__(request, "wind_v_ms", [])
-
-        with self.assertRaisesRegex(ValueError, "wind_v_ms must have shape"):
-            request_to_tensor(request)
-
-    def test_request_to_tensor_rejects_non_finite_wind_u_values(self):
-        request = make_request()
-        object.__setattr__(
-            request,
-            "wind_u_ms",
-            [[[float("nan") for _ in range(10)] for _ in range(8)] for _ in range(3)],
-        )
-
-        with self.assertRaisesRegex(ValueError, "wind_u_ms contains non-finite"):
-            request_to_tensor(request)
-
-    def test_boundary_conditions_are_encoded_in_expected_channels(self):
-        inputs = request_to_tensor(self.request)
-
-        # Channel 7: west water-level boundary.
-        self.assertTrue(
-            torch.allclose(
-                inputs[0, :, 7, :, 0],
-                torch.full((3, 8), 0.1),
-            )
-        )
-
-        # Channel 14: north normal-velocity boundary.
-        self.assertTrue(
-            torch.allclose(
-                inputs[0, :, 14, -1, :],
-                torch.full((3, 10), 0.2),
-            )
-        )
-
-        # Boundary values should not fill unrelated interior locations.
-        self.assertTrue(torch.all(inputs[0, :, 7, :, 1:] == 0))
-        self.assertTrue(torch.all(inputs[0, :, 14, :-1, :] == 0))
-
-    def test_request_to_tensor_accepts_scalar_boundary_value(self):
-        request = make_request()
-        object.__setattr__(
-            request,
-            "boundary_conditions",
-            {"west": {"water_level_m": 0.1}},
-        )
-
-        inputs = request_to_tensor(request)
-
-        self.assertEqual(
-            tuple(inputs.shape),
-            (1, 3, INPUT_CHANNELS, 8, 10),
-        )
-        self.assertTrue(torch.isfinite(inputs).all())
-
-    def test_request_to_tensor_encodes_east_and_south_boundaries(self):
-        request = make_request()
-        object.__setattr__(
-            request,
-            "boundary_conditions",
-            {
-                "east": {"water_level_m": [0.2] * 3},
-                "south": {"normal_velocity_ms": [0.3] * 3},
-            },
-        )
-
-        inputs = request_to_tensor(request)
-
-        # The returned tensor is [batch, time, channel, y, x].
-        # Verify the encoded values occur somewhere in the tensor without
-        # assuming unverified channel indices or boundary orientation.
-        self.assertTrue(torch.any(torch.isclose(inputs, torch.tensor(0.2))))
-        self.assertTrue(torch.any(torch.isclose(inputs, torch.tensor(0.3))))
 
     def test_forward_returns_expected_shape(self):
         inputs = request_to_tensor(self.request)
@@ -215,7 +136,7 @@ class MarineFNOModelTests(SimpleTestCase):
 
         self.assertEqual(
             tuple(outputs.shape),
-            (1, 3, 3, 8, 10),
+            (1, FORECAST_STEPS, 3, 8, 10),
         )
         self.assertTrue(torch.isfinite(outputs).all())
 
@@ -244,9 +165,9 @@ class MarineFNOModelTests(SimpleTestCase):
         result.validate_against(self.request)
 
         self.assertEqual(result.model_version, MODEL_VERSION)
-        self.assertEqual(len(result.water_level_m), 3)
-        self.assertEqual(len(result.current_u_ms), 3)
-        self.assertEqual(len(result.current_v_ms), 3)
+        self.assertEqual(len(result.water_level_m), FORECAST_STEPS)
+        self.assertEqual(len(result.current_u_ms), FORECAST_STEPS)
+        self.assertEqual(len(result.current_v_ms), FORECAST_STEPS)
         self.assertEqual(len(result.water_level_m[0]), 8)
         self.assertEqual(len(result.water_level_m[0][0]), 10)
 
@@ -302,6 +223,10 @@ class MarineFNOModelTests(SimpleTestCase):
             self.assertEqual(checkpoint["epoch"], 3)
             self.assertEqual(checkpoint["model_version"], MODEL_VERSION)
             self.assertEqual(checkpoint["architecture"]["width"], 4)
+            self.assertEqual(
+                checkpoint["architecture"]["forecast_steps"],
+                FORECAST_STEPS,
+            )
 
             original_output = self.model(request_to_tensor(self.request))
             restored_output = restored_model(request_to_tensor(self.request))
@@ -347,12 +272,12 @@ class MarineFNOModelTests(SimpleTestCase):
 
     def test_forward_rejects_invalid_input_dimensions(self):
         with self.assertRaisesRegex(ValueError, "Inputs must have shape"):
-            self.model(torch.zeros(1, 3, 8, 10))
+            self.model(torch.zeros(1, 3, 8, 10, 12))
 
     def test_forward_rejects_invalid_channel_count(self):
-        inputs = torch.zeros(1, 3, INPUT_CHANNELS - 1, 8, 10)
+        inputs = torch.zeros(1, INPUT_CHANNELS - 1, 8, 10)
 
-        with self.assertRaisesRegex(ValueError, "Expected 15 input channels"):
+        with self.assertRaisesRegex(ValueError, "Expected 6 input channels"):
             self.model(inputs)
 
     def test_load_checkpoint_rejects_incompatible_contract(self):
@@ -369,6 +294,20 @@ class MarineFNOModelTests(SimpleTestCase):
             torch.save({"contract_version": CONTRACT_VERSION}, checkpoint_path)
 
             with self.assertRaisesRegex(ValueError, "architecture metadata"):
+                load_checkpoint(checkpoint_path)
+
+    def test_load_checkpoint_rejects_incompatible_forecast_horizon(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "invalid.pt"
+            torch.save(
+                {
+                    "contract_version": CONTRACT_VERSION,
+                    "architecture": {"forecast_steps": 3},
+                },
+                checkpoint_path,
+            )
+
+            with self.assertRaisesRegex(ValueError, "forecast horizon"):
                 load_checkpoint(checkpoint_path)
 
     def test_spectral_conv_rejects_zero_modes(self):
