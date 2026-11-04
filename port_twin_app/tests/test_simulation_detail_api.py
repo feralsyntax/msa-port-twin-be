@@ -82,6 +82,13 @@ class SimulationDetailAPITests(TestCase):
             response.data["vessel_results"]["vessels"][0]["reason"],
             "No compatible berth was available.",
         )
+        self.assertEqual(
+            response.data["queue_timeline"],
+            [
+                {"hour": 0.0, "vessels_waiting": 0},
+                {"hour": 24.0, "vessels_waiting": 0},
+            ],
+        )
 
     def test_nonexistent_simulation_returns_404(self):
         response = self.client.get(f"/api/v1/simulations/{uuid.uuid4()}/")
