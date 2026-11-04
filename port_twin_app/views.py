@@ -409,6 +409,9 @@ class SimulationDetailView(APIView):
 
     serializer_class = SimulationDetailResponseSerializer
 
+    @extend_schema(
+        responses={200: SimulationDetailResponseSerializer},
+    )
     def get(self, request, pk):
         simulation_run = get_object_or_404(
             SimulationRun.objects.select_related("scenario"),
