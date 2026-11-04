@@ -1,3 +1,4 @@
+import math
 import re
 
 from rest_framework import serializers
@@ -205,6 +206,46 @@ class MarineConditionQuerySerializer(serializers.Serializer):
     source = serializers.ChoiceField(
         choices=MarineCondition.DataSource.choices,
         required=False,
+    )
+
+
+class PositiveFiniteFloatField(serializers.FloatField):
+    def to_internal_value(self, data):
+        if isinstance(data, bool):
+            raise serializers.ValidationError("A numeric value is required.")
+
+        value = super().to_internal_value(data)
+
+        if not math.isfinite(value) or value <= 0:
+            raise serializers.ValidationError(
+                "Ensure this value is finite and greater than zero."
+            )
+
+        return value
+
+
+class NonNegativeIntegerField(serializers.IntegerField):
+    def to_internal_value(self, data):
+        if isinstance(data, bool):
+            raise serializers.ValidationError("A whole number is required.")
+
+        return super().to_internal_value(data)
+
+class ScenarioParametersSerializer(serializers.Serializer):
+    simulation_hours = PositiveFiniteFloatField()
+
+    expected_vessel_arrivals = NonNegativeIntegerField(
+        min_value=0,
+    )
+
+    arrival_interval_hours = PositiveFiniteFloatField()
+
+    average_service_time_hours = PositiveFiniteFloatField()
+
+    available_berths = NonNegativeIntegerField(
+        min_value=0,
+        required=False,
+        default=2,
     )
 
 
