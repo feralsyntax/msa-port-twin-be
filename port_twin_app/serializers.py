@@ -248,6 +248,25 @@ class ScenarioParametersSerializer(serializers.Serializer):
         required=False,
         default=2,
     )
+    
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            required_fields = {
+                "simulation_hours",
+                "expected_vessel_arrivals",
+                "arrival_interval_hours",
+                "average_service_time_hours",
+            }
+
+            missing_fields = required_fields - data.keys()
+
+            if missing_fields:
+                raise serializers.ValidationError({
+                    field: ["This field is required."]
+                    for field in sorted(missing_fields)
+                })
+
+        return super().to_internal_value(data)
 
 
 class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
