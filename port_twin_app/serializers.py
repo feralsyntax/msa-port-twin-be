@@ -231,6 +231,7 @@ class NonNegativeIntegerField(serializers.IntegerField):
 
         return super().to_internal_value(data)
 
+
 class ScenarioParametersSerializer(serializers.Serializer):
     simulation_hours = PositiveFiniteFloatField()
 
@@ -250,6 +251,8 @@ class ScenarioParametersSerializer(serializers.Serializer):
 
 
 class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
+    parameters = ScenarioParametersSerializer()
+
     class Meta:
         model = Scenario
         fields = [  # noqa: RUF012
@@ -258,12 +261,6 @@ class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
             "parameters",
             "status",
         ]
-
-    def validate_parameters(self, value):
-        if not isinstance(value, dict):
-            raise serializers.ValidationError("Parameters must be a JSON object.")
-
-        return value
 
 
 class ScenarioResponseSerializer(serializers.ModelSerializer):
