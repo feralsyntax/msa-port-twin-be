@@ -9,7 +9,13 @@ class ScenarioAPITests(APITestCase):
         self.scenario = Scenario.objects.create(
             name="Standard Port Operations",
             description="Normal operating conditions.",
-            parameters={"expected_arrivals": 5},
+            parameters={
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "available_berths": 2,
+            },
             status=Scenario.Status.DRAFT,
         )
 
@@ -27,7 +33,13 @@ class ScenarioAPITests(APITestCase):
         payload = {
             "name": "High Traffic",
             "description": "Increased vessel arrivals.",
-            "parameters": {"expected_arrivals": 10},
+            "parameters": {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 10,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "available_berths": 2,
+            },
             "status": "ready",
         }
 
