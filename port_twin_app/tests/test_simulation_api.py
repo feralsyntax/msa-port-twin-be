@@ -100,3 +100,4 @@ class SimulationAPITests(TestCase):
         self.assertEqual(detail_response.data["status"], "pending")
         self.assertIsNone(detail_response.data["summary"])
         self.assertIsNone(detail_response.data["vessel_results"])
+        self.assertIsNone(detail_response.data["queue_timeline"])
