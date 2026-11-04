@@ -232,6 +232,35 @@ class BerthAPITests(APITestCase):
         self.assertFalse(response.data["is_occupied"])
         self.assertIsNone(response.data["assigned_vessel"])
 
+    def test_list_berths_includes_occupancy_information(self):
+        response = self.client.get(reverse("port_twin_app:berth-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        berth_data = response.data["results"][0]
+
+        self.assertTrue(berth_data["is_occupied"])
+        self.assertEqual(
+            berth_data["assigned_vessel"]["id"],
+            str(self.vessel.id),
+        )
+
+    def test_inactive_berth_can_still_be_occupied(self):
+        self.berth.status = Berth.OperationalStatus.INACTIVE
+        self.berth.save()
+
+        response = self.client.get(
+            reverse(
+                "port_twin_app:berth-detail",
+                kwargs={"pk": self.berth.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Berth.OperationalStatus.INACTIVE)
+        self.assertTrue(response.data["is_occupied"])
+        self.assertIsNotNone(response.data["assigned_vessel"])
+
 
 class VesselPositionAPITests(APITestCase):
     def setUp(self):
