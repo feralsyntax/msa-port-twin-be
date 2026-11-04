@@ -21,6 +21,13 @@ class Vessel(models.Model):
     id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, unique=True, editable=False
     )
+    berth = models.ForeignKey(
+        "Berth",
+        on_delete=models.SET_NULL,
+        related_name="assigned_vessels",
+        null=True,
+        blank=True,
+    )
     name = models.CharField(max_length=255)
     # International Maritime Organization number
     imo_number = models.CharField(max_length=12, unique=True, blank=True, null=True)
