@@ -2,7 +2,6 @@ import logging
 from pathlib import Path
 
 from django.conf import settings
-from django.db import transaction
 from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -300,41 +299,55 @@ class ScenarioSimulationView(GenericAPIView):
         request=None,
         responses={
             202: ScenarioSimulationResponseSerializer,
-            404: APIErrorResponseSerializer,
             503: SimulationErrorResponseSerializer,
         },
     )
     def post(self, request, pk):
         scenario = get_object_or_404(Scenario, pk=pk)
 
-        with transaction.atomic():
-            simulation_run = SimulationRun.objects.create(
-                scenario=scenario,
-            )
-
-            transaction.on_commit(
-                lambda: execute_simulation_task.delay(str(simulation_run.pk))
-            )
+        simulation_run = SimulationRun.objects.create(
+            scenario=scenario,
+        )
 
         try:
+            execute_simulation_task.delay(str(simulation_run.pk))
+        except Exception as exc:
+            logger.error(
+                "Failed to queue simulation: run_id=%s exception_type=%s",
+                simulation_run.pk,
+                type(exc).__name__,
+            )
+
+            simulation_run.status = SimulationRun.Status.FAILED
+            simulation_run.completed_at = timezone.now()
+            simulation_run.error_message = (
+                "Simulation could not be queued. Please try again."
+            )
+            simulation_run.save(
+                update_fields=["status", "completed_at", "error_message"]
+            )
+
             return Response(
                 {
                     "id": str(simulation_run.id),
                     "scenario_id": str(scenario.id),
                     "status": simulation_run.status,
-                    "started_at": simulation_run.started_at,
-                    "completed_at": simulation_run.completed_at,
-                    "summary": None,
+                    "error": "Simulation could not be queued. Please try again.",
                 },
-                status=status.HTTP_202_ACCEPTED,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        except Exception:
-            logger.exception(
-                "Unexpected error while preparing simulation response: run_id=%s",
-                simulation_run.pk,
-            )
-            raise
+        return Response(
+            {
+                "id": str(simulation_run.id),
+                "scenario_id": str(scenario.id),
+                "status": simulation_run.status,
+                "started_at": simulation_run.started_at,
+                "completed_at": simulation_run.completed_at,
+                "summary": None,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class SimulationDetailView(APIView):
