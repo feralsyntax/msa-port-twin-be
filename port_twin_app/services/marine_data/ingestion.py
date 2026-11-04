@@ -140,6 +140,7 @@ def ingest_bathymetry_data(
             start_time=None,
             end_time=None,
             file_path=raw_dataset.attrs["source_file_path"],
+            tid_file_path=raw_dataset.attrs.get("tid_source_file_path"),
             license_name=license_name,
         )
 
