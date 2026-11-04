@@ -1252,7 +1252,7 @@ components:
         description:
           type: string
         parameters:
-          description: Configuration values used by the simulation.
+          $ref: '#/components/schemas/ScenarioParameters'
         status:
           $ref: '#/components/schemas/ScenarioStatusEnum'
     ScenarioCreateUpdateRequest:
@@ -1264,11 +1264,39 @@ components:
         description:
           type: string
         parameters:
-          description: Configuration values used by the simulation.
+          $ref: '#/components/schemas/ScenarioParameters'
         status:
           $ref: '#/components/schemas/ScenarioStatusEnum'
       required:
       - name
+      - parameters
+    ScenarioParameters:
+      type: object
+      properties:
+        simulation_hours:
+          type: number
+          format: double
+          minimum: 0
+        expected_vessel_arrivals:
+          type: integer
+          minimum: 0
+        arrival_interval_hours:
+          type: number
+          format: double
+          minimum: 0
+        average_service_time_hours:
+          type: number
+          format: double
+          minimum: 0
+        available_berths:
+          type: integer
+          minimum: 0
+          default: 2
+      required:
+      - arrival_interval_hours
+      - average_service_time_hours
+      - expected_vessel_arrivals
+      - simulation_hours
     ScenarioResponse:
       type: object
       properties:
