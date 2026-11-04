@@ -251,6 +251,17 @@ class ScenarioParametersSerializer(serializers.Serializer):
     
     def to_internal_value(self, data):
         if isinstance(data, dict):
+            allowed_fields = set(self.fields)
+            supplied_fields = set(data.keys())
+
+            unknown_fields = supplied_fields - allowed_fields
+
+            if unknown_fields:
+                raise serializers.ValidationError({
+                    field: ["Unknown parameter."]
+                    for field in sorted(unknown_fields)
+                })
+
             required_fields = {
                 "simulation_hours",
                 "expected_vessel_arrivals",
@@ -258,7 +269,7 @@ class ScenarioParametersSerializer(serializers.Serializer):
                 "average_service_time_hours",
             }
 
-            missing_fields = required_fields - data.keys()
+            missing_fields = required_fields - supplied_fields
 
             if missing_fields:
                 raise serializers.ValidationError({
