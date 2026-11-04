@@ -69,6 +69,7 @@ class SimulationAPITests(TestCase):
             response.data["error"],
             "Simulation could not be queued. Please try again.",
         )
+        self.assertNotIn("Redis unavailable", str(response.data))
 
         simulation_run = SimulationRun.objects.get(scenario=self.scenario)
         self.assertEqual(simulation_run.status, SimulationRun.Status.FAILED)
