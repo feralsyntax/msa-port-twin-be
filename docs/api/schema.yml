@@ -358,7 +358,7 @@ paths:
   /api/v1/scenarios/{id}/simulations/:
     post:
       operationId: scenarios_simulations_create
-      description: Execute a simulation for a saved scenario.
+      description: Queue a simulation for a saved scenario.
       parameters:
       - in: path
         name: id
@@ -373,13 +373,19 @@ paths:
       - basicAuth: []
       - {}
       responses:
-        '201':
+        '202':
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScenarioSimulationResponse'
           description: ''
-        '400':
+        '404':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
+          description: ''
+        '503':
           content:
             application/json:
               schema:
