@@ -7,15 +7,14 @@ from torch import nn
 
 from .contracts import (
     CONTRACT_VERSION,
+    FORECAST_STEPS,
     MarinePredictionRequest,
     MarinePredictionResult,
 )
 
-MODEL_VERSION = "fno-0.1.0"
+MODEL_VERSION = "fno-0.2.0"
 
-BASE_INPUT_CHANNELS = 7
-BOUNDARY_INPUT_CHANNELS = 8
-INPUT_CHANNELS = BASE_INPUT_CHANNELS + BOUNDARY_INPUT_CHANNELS
+INPUT_CHANNELS = 6
 OUTPUT_CHANNELS = 3
 
 TARGET_STATISTICS_SHAPE = (1, 1, OUTPUT_CHANNELS, 1, 1)
@@ -71,7 +70,6 @@ class SpectralConv2d(nn.Module):
         weights: torch.Tensor,
     ) -> torch.Tensor:
         """Multiply Fourier coefficients by learned channel weights."""
-
         return torch.einsum("bixy,ioxy->boxy", inputs, weights)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
@@ -146,12 +144,7 @@ class FNOBlock(nn.Module):
 
 
 class MarineFNO(nn.Module):
-    """Spatial FNO applied independently to each forecast time step.
-
-    The same spatial model weights are shared across forecast steps.
-    The model is not autoregressive and does not explicitly evolve its
-    predictions from one forecast step to the next.
-    """
+    """Spatial FNO that predicts the complete fixed forecast horizon."""
 
     def __init__(
         self,
@@ -175,6 +168,7 @@ class MarineFNO(nn.Module):
         self.modes_x = modes_x
         self.modes_y = modes_y
         self.layers = layers
+        self.forecast_steps = FORECAST_STEPS
 
         self.input_projection = nn.Conv2d(
             INPUT_CHANNELS,
@@ -191,33 +185,25 @@ class MarineFNO(nn.Module):
             nn.GELU(),
             nn.Conv2d(
                 width * 2,
-                OUTPUT_CHANNELS,
+                FORECAST_STEPS * OUTPUT_CHANNELS,
                 kernel_size=1,
             ),
         )
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        """Return predictions shaped [batch, steps, 3, ny, nx]."""
+        """Return predictions shaped [batch, 6, 3, ny, nx]."""
 
-        if inputs.ndim != 5:
-            raise ValueError("Inputs must have shape [batch, steps, channels, ny, nx].")
+        if inputs.ndim != 4:
+            raise ValueError("Inputs must have shape [batch, channels, ny, nx].")
 
-        batch_size, steps, channels, ny, nx = inputs.shape
+        batch_size, channels, ny, nx = inputs.shape
 
         if channels != INPUT_CHANNELS:
             raise ValueError(
                 f"Expected {INPUT_CHANNELS} input channels, received {channels}."
             )
 
-        # Treat each time step as a spatial sample. Model weights are shared.
-        spatial_inputs = inputs.reshape(
-            batch_size * steps,
-            channels,
-            ny,
-            nx,
-        )
-
-        features = self.input_projection(spatial_inputs)
+        features = self.input_projection(inputs)
 
         for block in self.blocks:
             features = block(features)
@@ -226,72 +212,28 @@ class MarineFNO(nn.Module):
 
         return outputs.reshape(
             batch_size,
-            steps,
+            FORECAST_STEPS,
             OUTPUT_CHANNELS,
             ny,
             nx,
         )
 
 
-def _boundary_series(
-    value,
-    steps: int,
-    boundary_name: str,
-    field_name: str,
-) -> list[float]:
-    """Convert a boundary value or time series into a forecast-length list."""
-
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        values = [float(value)] * steps
-    elif isinstance(value, (list, tuple)) and len(value) == steps:
-        values = list(value)
-    else:
-        raise ValueError(
-            f"Boundary {boundary_name!r} field {field_name!r} "
-            f"must be a number or a sequence of length {steps}."
-        )
-
-    result = []
-
-    for item in values:
-        if isinstance(item, bool) or not isinstance(item, (int, float)):
-            raise ValueError(  # noqa: TRY004
-                f"Boundary {boundary_name!r} field {field_name!r} "
-                "must contain numeric values."
-            )
-
-        result.append(float(item))
-
-    return result
-
-
 def request_to_tensor(
     request: MarinePredictionRequest,
     device: str = "cpu",
 ) -> torch.Tensor:
-    """Encode a marine request as [1, steps, 15, ny, nx].
+    """Encode a request as [1, 6, ny, nx].
 
-    Base channels:
+    Input channels:
         0: bathymetry, positive downward in metres
         1: initial water level in metres
-        2: eastward wind component in m/s
-        3: northward wind component in m/s
-        4: normalized east-west coordinate
-        5: normalized north-south coordinate
-        6: normalized forecast time
-
-    Boundary channels, in order:
-        7: west water level
-        8: west normal velocity
-        9: east water level
-        10: east normal velocity
-        11: south water level
-        12: south normal velocity
-        13: north water level
-        14: north normal velocity
+        2: initial eastward current velocity in m/s
+        3: initial northward current velocity in m/s
+        4: normalized longitude
+        5: normalized latitude
     """
 
-    steps = request.forecast.steps
     nx = request.grid.nx
     ny = request.grid.ny
 
@@ -322,137 +264,51 @@ def request_to_tensor(
         "initial_water_level_m",
     )
 
-    wind_u = torch.as_tensor(
-        request.wind_u_ms,
-        dtype=torch.float32,
-        device=device,
+    initial_current_u = grid_tensor(
+        request.initial_current_u_ms,
+        "initial_current_u_ms",
     )
 
-    wind_v = torch.as_tensor(
-        request.wind_v_ms,
-        dtype=torch.float32,
-        device=device,
+    initial_current_v = grid_tensor(
+        request.initial_current_v_ms,
+        "initial_current_v_ms",
     )
 
-    expected_wind_shape = (steps, ny, nx)
-
-    if tuple(wind_u.shape) != expected_wind_shape:
-        raise ValueError(f"wind_u_ms must have shape {expected_wind_shape}.")
-
-    if tuple(wind_v.shape) != expected_wind_shape:
-        raise ValueError(f"wind_v_ms must have shape {expected_wind_shape}.")
-
-    if not torch.isfinite(wind_u).all():
-        raise ValueError("wind_u_ms contains non-finite values.")
-
-    if not torch.isfinite(wind_v).all():
-        raise ValueError("wind_v_ms contains non-finite values.")
-
-    # Coordinate channels use a stable normalized grid representation.
-    x_coordinates = (
+    # Normalize geographic coordinates to approximately [-1, 1].
+    longitude = (
         torch.linspace(
-            -1.0,
-            1.0,
+            request.grid.west / 180.0,
+            request.grid.east / 180.0,
             nx,
-            device=device,
-        )
-        .view(1, 1, nx)
-        .expand(steps, ny, nx)
-    )
-
-    y_coordinates = (
-        torch.linspace(
-            -1.0,
-            1.0,
-            ny,
-            device=device,
-        )
-        .view(1, ny, 1)
-        .expand(steps, ny, nx)
-    )
-
-    time_coordinates = (
-        torch.linspace(
-            0.0,
-            1.0,
-            steps,
-            device=device,
-        )
-        .view(steps, 1, 1)
-        .expand(steps, ny, nx)
-    )
-
-    base_channels = torch.stack(
-        [
-            bathymetry.unsqueeze(0).expand(steps, ny, nx),
-            initial_water_level.unsqueeze(0).expand(steps, ny, nx),
-            wind_u,
-            wind_v,
-            x_coordinates,
-            y_coordinates,
-            time_coordinates,
-        ],
-        dim=1,
-    )
-
-    boundary_channels = torch.zeros(
-        steps,
-        BOUNDARY_INPUT_CHANNELS,
-        ny,
-        nx,
-        dtype=torch.float32,
-        device=device,
-    )
-
-    boundary_conditions = request.boundary_conditions
-
-    boundary_definitions = (
-        ("west", "water_level_m", 0, "left"),
-        ("west", "normal_velocity_ms", 1, "left"),
-        ("east", "water_level_m", 2, "right"),
-        ("east", "normal_velocity_ms", 3, "right"),
-        ("south", "water_level_m", 4, "bottom"),
-        ("south", "normal_velocity_ms", 5, "bottom"),
-        ("north", "water_level_m", 6, "top"),
-        ("north", "normal_velocity_ms", 7, "top"),
-    )
-
-    for side, field_name, channel_index, edge in boundary_definitions:
-        side_conditions = boundary_conditions.get(side, {})
-
-        if field_name not in side_conditions:
-            continue
-
-        values = _boundary_series(
-            side_conditions[field_name],
-            steps,
-            side,
-            field_name,
-        )
-
-        values_tensor = torch.tensor(
-            values,
             dtype=torch.float32,
             device=device,
-        ).view(steps, 1)
+        )
+        .view(1, nx)
+        .expand(ny, nx)
+    )
 
-        if not torch.isfinite(values_tensor).all():
-            raise ValueError(
-                f"Boundary {side!r} field {field_name!r} contains non-finite values."
-            )
+    latitude = (
+        torch.linspace(
+            request.grid.south / 90.0,
+            request.grid.north / 90.0,
+            ny,
+            dtype=torch.float32,
+            device=device,
+        )
+        .view(ny, 1)
+        .expand(ny, nx)
+    )
 
-        if edge == "left":
-            boundary_channels[:, channel_index, :, 0] = values_tensor
-        elif edge == "right":
-            boundary_channels[:, channel_index, :, -1] = values_tensor
-        elif edge == "bottom":
-            boundary_channels[:, channel_index, 0, :] = values_tensor
-        elif edge == "top":
-            boundary_channels[:, channel_index, -1, :] = values_tensor
-
-    inputs = torch.cat(
-        [base_channels, boundary_channels],
-        dim=1,
+    inputs = torch.stack(
+        [
+            bathymetry,
+            initial_water_level,
+            initial_current_u,
+            initial_current_v,
+            longitude,
+            latitude,
+        ],
+        dim=0,
     )
 
     if not torch.isfinite(inputs).all():
@@ -502,14 +358,7 @@ def predict(
     target_mean: torch.Tensor | None = None,
     target_std: torch.Tensor | None = None,
 ) -> MarinePredictionResult:
-    """Run inference and optionally reverse target normalization.
-
-    If target_mean and target_std are supplied, model outputs are converted
-    back to physical units using predictions * target_std + target_mean.
-
-    The three output channels are water level, eastward current, and
-    northward current, respectively.
-    """
+    """Run inference and optionally reverse target normalization."""
 
     if (target_mean is None) != (target_std is None):
         raise ValueError(
@@ -542,7 +391,7 @@ def predict(
             "Predictions contain non-finite values after inverse normalization."
         )
 
-    # [1, steps, 3, ny, nx] -> three [steps, ny, nx] lists.
+    # [1, 6, 3, ny, nx] -> three [6, ny, nx] lists.
     output_values = outputs[0].cpu()
 
     result = MarinePredictionResult(
@@ -573,6 +422,7 @@ def save_checkpoint(
             "modes_x": model.modes_x,
             "modes_y": model.modes_y,
             "layers": model.layers,
+            "forecast_steps": model.forecast_steps,
         },
         "model_state_dict": model.state_dict(),
     }
@@ -609,7 +459,12 @@ def load_checkpoint(
     architecture = checkpoint.get("architecture")
 
     if not isinstance(architecture, dict):
-        raise ValueError("Checkpoint is missing model architecture metadata.")  # noqa: TRY004
+        raise ValueError("Checkpoint is missing model architecture metadata.")
+
+    if architecture.get("forecast_steps") != FORECAST_STEPS:
+        raise ValueError(
+            "Checkpoint forecast horizon does not match the current model."
+        )
 
     model = MarineFNO(
         width=architecture["width"],
@@ -630,12 +485,7 @@ def predict_from_checkpoint(
     checkpoint_path: str | Path,
     device: str = "cpu",
 ) -> MarinePredictionResult:
-    """Load a trained checkpoint and predict in physical units.
-
-    New training checkpoints contain target normalization statistics.
-    Older checkpoints without these statistics remain usable, but their
-    outputs are returned without inverse normalization.
-    """
+    """Load a trained checkpoint and predict in physical units."""
 
     model, checkpoint = load_checkpoint(
         checkpoint_path,
