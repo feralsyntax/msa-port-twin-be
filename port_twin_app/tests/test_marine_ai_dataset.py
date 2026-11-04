@@ -29,8 +29,8 @@ class MarineDatasetSampleTests(SimpleTestCase):
             ),
             forecast=MarineForecastConfig(
                 start_time=start_time,
-                steps=2,
-                step_seconds=900,
+                steps=6,
+                step_seconds=3600,
             ),
             bathymetry_m=[
                 [10.0, 11.0],
@@ -40,33 +40,39 @@ class MarineDatasetSampleTests(SimpleTestCase):
                 [1.0, 1.1],
                 [1.2, 1.3],
             ],
-            wind_u_ms=[
-                [[2.0, 2.1], [2.2, 2.3]],
-                [[2.4, 2.5], [2.6, 2.7]],
+            initial_current_u_ms=[
+                [0.1, 0.2],
+                [0.3, 0.4],
             ],
-            wind_v_ms=[
-                [[1.0, 1.1], [1.2, 1.3]],
-                [[1.4, 1.5], [1.6, 1.7]],
+            initial_current_v_ms=[
+                [0.2, 0.3],
+                [0.4, 0.5],
             ],
-            boundary_conditions={
-                "west": {"water_level_m": [1.0, 1.1]},
-            },
         )
 
         target = MarinePredictionResult(
             water_level_m=[
-                [[1.0, 1.1], [1.2, 1.3]],
-                [[1.4, 1.5], [1.6, 1.7]],
+                [
+                    [1.0 + step * 0.1, 1.1 + step * 0.1],
+                    [1.2 + step * 0.1, 1.3 + step * 0.1],
+                ]
+                for step in range(6)
             ],
             current_u_ms=[
-                [[0.1, 0.2], [0.3, 0.4]],
-                [[0.5, 0.6], [0.7, 0.8]],
+                [
+                    [0.1 + step * 0.01, 0.2 + step * 0.01],
+                    [0.3 + step * 0.01, 0.4 + step * 0.01],
+                ]
+                for step in range(6)
             ],
             current_v_ms=[
-                [[0.2, 0.3], [0.4, 0.5]],
-                [[0.6, 0.7], [0.8, 0.9]],
+                [
+                    [0.2 + step * 0.01, 0.3 + step * 0.01],
+                    [0.4 + step * 0.01, 0.5 + step * 0.01],
+                ]
+                for step in range(6)
             ],
-            model_version="test-model-0.1",
+            model_version="test-model-0.2",
         )
 
         return MarineDatasetSample(
@@ -89,7 +95,7 @@ class MarineDatasetSampleTests(SimpleTestCase):
 
         self.assertEqual(
             sample.forecast_end - sample.forecast_start,
-            timedelta(minutes=30),
+            timedelta(hours=6),
         )
 
     def test_empty_sample_id_is_rejected(self):
@@ -129,7 +135,7 @@ class MarineDatasetSampleTests(SimpleTestCase):
             water_level_m=[[[1.0, 1.1], [1.2, 1.3]]],
             current_u_ms=[[[0.1, 0.2], [0.3, 0.4]]],
             current_v_ms=[[[0.2, 0.3], [0.4, 0.5]]],
-            model_version="test-model-0.1",
+            model_version="test-model-0.2",
         )
 
         with self.assertRaises(ValueError):
@@ -144,7 +150,7 @@ class MarineDatasetSampleTests(SimpleTestCase):
 
 
 class MarineDatasetSplitTests(MarineDatasetSampleTests):
-    def make_samples(self, count=10, interval_minutes=60):
+    def make_samples(self, count=10, interval_minutes=360):
         start = self.make_sample().forecast_start
 
         return [
@@ -197,7 +203,7 @@ class MarineDatasetSplitTests(MarineDatasetSampleTests):
 
     def test_overlapping_forecast_windows_are_purged_at_boundaries(self):
         result = split_dataset(
-            self.make_samples(interval_minutes=15),
+            self.make_samples(count=40, interval_minutes=180),
             train_ratio=0.6,
             validation_ratio=0.2,
         )
