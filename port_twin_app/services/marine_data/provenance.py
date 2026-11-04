@@ -25,6 +25,7 @@ class MarineDataProvenance:
 
     retrieved_at: datetime
     file_path: str
+    tid_file_path: str | None = None
     file_format: str = "netcdf"
     license_name: str = "Copernicus Marine data license"
 
@@ -45,6 +46,7 @@ class MarineDataProvenance:
         end_time: datetime | None,
         file_path: str,
         license_name: str,
+        tid_file_path: str | None = None,
     ) -> "MarineDataProvenance":
         """Create provenance metadata with the current retrieval time."""
 
@@ -62,6 +64,7 @@ class MarineDataProvenance:
             end_time=end_time,
             retrieved_at=datetime.now(UTC),
             file_path=file_path,
+            tid_file_path=tid_file_path,
             license_name=license_name,
         )
 
