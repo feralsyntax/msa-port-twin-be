@@ -351,6 +351,57 @@ class ScenarioSimulationView(GenericAPIView):
         )
 
 
+def build_queue_timeline(vessel_results, simulation_hours):
+    """Build queue-length observations from persisted vessel outcomes."""
+
+    events = [(0.0, 0)]
+
+    for vessel in vessel_results.get("vessels", []):
+        if vessel["status"] == "incompatible_berth":
+            continue
+
+        arrival_hour = vessel["arrival_hour"]
+        service_start_hour = vessel["service_start_hour"]
+
+        if service_start_hour is None:
+            continue
+
+        if arrival_hour >= simulation_hours:
+            continue
+
+        if service_start_hour > arrival_hour:
+            events.append((arrival_hour, 1))
+            events.append((min(service_start_hour, simulation_hours), -1))
+
+    events.sort(key=lambda event: (event[0], event[1]))
+
+    timeline = []
+    queue_length = 0
+
+    for hour, change in events:
+        queue_length += change
+
+        if timeline and timeline[-1]["hour"] == hour:
+            timeline[-1]["vessels_waiting"] = queue_length
+        else:
+            timeline.append(
+                {
+                    "hour": hour,
+                    "vessels_waiting": queue_length,
+                }
+            )
+
+    if not timeline or timeline[-1]["hour"] < simulation_hours:
+        timeline.append(
+            {
+                "hour": simulation_hours,
+                "vessels_waiting": queue_length,
+            }
+        )
+
+    return timeline
+
+
 class SimulationDetailView(APIView):
     """
     Retrieve a simulation run and its persisted results.
@@ -380,6 +431,14 @@ class SimulationDetailView(APIView):
                 "created_at": simulation_run.created_at,
                 "summary": results.get("summary"),
                 "vessel_results": results.get("vessel_results"),
+                "queue_timeline": (
+                    build_queue_timeline(
+                        results["vessel_results"],
+                        simulation_run.scenario.parameters["simulation_hours"],
+                    )
+                    if results.get("vessel_results") is not None
+                    else None
+                ),
             },
             status=status.HTTP_200_OK,
         )
