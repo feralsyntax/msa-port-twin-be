@@ -560,3 +560,24 @@ class ScenarioAPITests(APITestCase):
             self.scenario.parameters,
             self.valid_parameters,
         )
+    
+    def test_create_scenario_rejects_unknown_parameters(self):
+        parameters = {
+            **self.valid_parameters,
+            "simulation_hour": 48,
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:scenario-list-create"),
+            {
+                "name": "Invalid Parameter Scenario",
+                "parameters": parameters,
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertIn("parameters", response.data)
