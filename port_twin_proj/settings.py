@@ -31,6 +31,19 @@ CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
 
 REDIS_URL = config("REDIS_URL", default="")
 
+# Celery configuration
+CELERY_BROKER_URL = config(
+    "CELERY_BROKER_URL",
+    default=REDIS_URL or "redis://127.0.0.1:6379/1",
+)
+
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "Africa/Nairobi"
+CELERY_ENABLE_UTC = True
+CELERY_TASK_IGNORE_RESULT = True
+
 # Database Configurations
 
 DATABASES = {
