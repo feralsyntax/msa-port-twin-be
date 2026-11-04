@@ -644,6 +644,34 @@ components:
           type: string
       required:
       - detail
+    AssignedVessel:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        imo_number:
+          type: string
+          readOnly: true
+          nullable: true
+        mmsi:
+          type: string
+          readOnly: true
+          nullable: true
+        vessel_type:
+          allOf:
+          - $ref: '#/components/schemas/VesselTypeEnum'
+          readOnly: true
+      required:
+      - id
+      - imo_number
+      - mmsi
+      - name
+      - vessel_type
     Berth:
       type: object
       properties:
@@ -682,6 +710,14 @@ components:
           allOf:
           - $ref: '#/components/schemas/BerthOperationalStatusEnum'
           readOnly: true
+        is_occupied:
+          type: boolean
+          readOnly: true
+        assigned_vessel:
+          allOf:
+          - $ref: '#/components/schemas/AssignedVessel'
+          readOnly: true
+          nullable: true
         created_at:
           type: string
           format: date-time
@@ -691,8 +727,10 @@ components:
           format: date-time
           readOnly: true
       required:
+      - assigned_vessel
       - created_at
       - id
+      - is_occupied
       - latitude
       - longitude
       - max_vessel_draft
