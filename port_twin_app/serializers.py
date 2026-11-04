@@ -99,6 +99,19 @@ class VesselListQuerySerializer(serializers.Serializer):
     )
 
 
+class AssignedVesselSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vessel
+        fields = [  # noqa: RUF012
+            "id",
+            "name",
+            "imo_number",
+            "mmsi",
+            "vessel_type",
+        ]
+        read_only_fields = fields
+
+
 class BerthSerializer(serializers.ModelSerializer):
     longitude = serializers.SerializerMethodField()
     latitude = serializers.SerializerMethodField()
