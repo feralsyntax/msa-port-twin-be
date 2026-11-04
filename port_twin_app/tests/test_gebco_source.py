@@ -19,6 +19,7 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
         self.addCleanup(self.temp_directory.cleanup)
 
         self.file_path = Path(self.temp_directory.name) / "gebco_test.nc"
+        self.tid_file_path = Path(self.temp_directory.name) / "gebco_tid_test.nc"
 
         longitude = np.array([39.0, 39.5, 40.0, 40.5, 41.0])
         latitude = np.array([-5.0, -4.5, -4.0, -3.5, -3.0])
@@ -55,6 +56,42 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
 
         dataset.to_netcdf(self.file_path, engine="scipy")
 
+        tid = np.array(
+            [
+                [0, 10, 10, 40, 40],
+                [0, 10, 11, 40, 40],
+                [0, 14, 16, 40, 44],
+                [0, 14, 16, 40, 44],
+                [0, 10, 10, 40, 44],
+            ],
+            dtype=np.int8,
+        )
+
+        tid_dataset = xr.Dataset(
+            data_vars={
+                "tid": (
+                    ("lat", "lon"),
+                    tid,
+                    {
+                        "flag_values": np.array(
+                            [0, 10, 11, 14, 16, 40, 44],
+                            dtype=np.int8,
+                        ),
+                        "flag_meanings": (
+                            "Land Singlebeam Multibeam Lidar Optical "
+                            "predicted_altimetry contour_charts"
+                        ),
+                    },
+                )
+            },
+            coords={
+                "lon": longitude,
+                "lat": latitude,
+            },
+        )
+
+        tid_dataset.to_netcdf(self.tid_file_path, engine="scipy")
+
     def make_request(self, **overrides):
         parameters = {
             "west": 39.5,
@@ -66,23 +103,18 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
 
         return BathymetryRequest(**parameters)
 
-    def make_source(self, file_path=None):
+    def make_source(self, file_path=None, tid_file_path=None):
         return GEBCOBathymetrySource(
             file_path=file_path or self.file_path,
             dataset_version="GEBCO_2026",
+            tid_file_path=tid_file_path,
         )
 
     def test_fetch_returns_requested_geographical_subset(self):
         result = self.make_source().fetch(self.make_request())
 
-        self.assertEqual(
-            result.sizes["longitude"],
-            3,
-        )
-        self.assertEqual(
-            result.sizes["latitude"],
-            3,
-        )
+        self.assertEqual(result.sizes["longitude"], 3)
+        self.assertEqual(result.sizes["latitude"], 3)
 
         np.testing.assert_array_equal(
             result.longitude.values,
