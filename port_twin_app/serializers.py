@@ -489,8 +489,6 @@ class MarineGridInputSerializer(serializers.Serializer):
 
 class MarineForecastInputSerializer(serializers.Serializer):
     start_time = serializers.DateTimeField()
-    steps = serializers.IntegerField(min_value=1)
-    step_seconds = serializers.IntegerField(min_value=1)
 
 
 class MarinePredictionRequestSerializer(serializers.Serializer):
@@ -498,9 +496,8 @@ class MarinePredictionRequestSerializer(serializers.Serializer):
     forecast = MarineForecastInputSerializer()
     bathymetry_m = serializers.JSONField()
     initial_water_level_m = serializers.JSONField()
-    wind_u_ms = serializers.JSONField()
-    wind_v_ms = serializers.JSONField()
-    boundary_conditions = serializers.JSONField()
+    initial_current_u_ms = serializers.JSONField()
+    initial_current_v_ms = serializers.JSONField()
 
     def validate(self, attrs):
         try:
@@ -508,8 +505,6 @@ class MarinePredictionRequestSerializer(serializers.Serializer):
 
             forecast = MarineForecastConfig(
                 start_time=attrs["forecast"]["start_time"].isoformat(),
-                steps=attrs["forecast"]["steps"],
-                step_seconds=attrs["forecast"]["step_seconds"],
             )
 
             prediction_request = MarinePredictionRequest(
@@ -517,9 +512,8 @@ class MarinePredictionRequestSerializer(serializers.Serializer):
                 forecast=forecast,
                 bathymetry_m=attrs["bathymetry_m"],
                 initial_water_level_m=attrs["initial_water_level_m"],
-                wind_u_ms=attrs["wind_u_ms"],
-                wind_v_ms=attrs["wind_v_ms"],
-                boundary_conditions=attrs["boundary_conditions"],
+                initial_current_u_ms=attrs["initial_current_u_ms"],
+                initial_current_v_ms=attrs["initial_current_v_ms"],
             )
         except (TypeError, ValueError) as exc:
             raise serializers.ValidationError(str(exc)) from exc
