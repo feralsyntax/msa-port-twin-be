@@ -134,17 +134,23 @@ class StubMarineDataSource(MarineDataSource):
 
 
 class StubBathymetryDataSource:
-    def __init__(self, file_path="gebco.nc"):
+    def __init__(self, file_path="gebco.nc", tid_file_path=None):
         self.file_path = str(file_path)
+        self.tid_file_path = str(tid_file_path) if tid_file_path else None
 
     def fetch(self, request):
         dataset = create_test_gebco_dataset()
+
         dataset.attrs.update(
             {
                 "source_version": "GEBCO_2026",
                 "source_file_path": self.file_path,
             }
         )
+
+        if self.tid_file_path:
+            dataset.attrs["tid_source_file_path"] = self.tid_file_path
+
         return dataset
 
 
