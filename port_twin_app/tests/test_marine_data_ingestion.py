@@ -32,6 +32,9 @@ from port_twin_app.services.marine_data.validation import (
     validate_bathymetry_dataset,
     validate_marine_dataset,
 )
+from port_twin_app.services.marine_data.sources.bathymetry import (
+    BathymetryRequest,
+)
 
 
 def create_test_dataset():
@@ -466,6 +469,38 @@ class MarineDataIngestionTests(SimpleTestCase):
                 metadata["dataset_version"],
                 "202311",
             )
+    
+    def test_bathymetry_ingestion_records_tid_file_path(self):
+        source_file = Path(self.temp_dir.name) / "gebco.nc"
+        tid_file = Path(self.temp_dir.name) / "gebco_tid.nc"
+
+        request = BathymetryRequest(
+            west=39.5,
+            south=-4.3,
+            east=40.0,
+            north=-3.7,
+        )
+
+        result = ingest_bathymetry_data(
+            StubBathymetryDataSource(
+                file_path=source_file,
+                tid_file_path=tid_file,
+            ),
+            request,
+            license_name="Test license",
+        )
+
+        self.assertEqual(
+            result.provenance.tid_file_path,
+            str(tid_file),
+        )
+
+        metadata = json.loads(
+            Path(result.provenance_file_path).read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(metadata["file_path"], str(source_file))
+        self.assertEqual(metadata["tid_file_path"], str(tid_file))
 
 
 class CopernicusMarineSourceTests(SimpleTestCase):
