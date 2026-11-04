@@ -46,9 +46,10 @@ class GEBCOBathymetrySource(BathymetryDataSource):
             )
 
             dataset = dataset.sortby("longitude").sortby("latitude")
-            
-            self._source_longitude = dataset.longitude.values.copy()
-            self._source_latitude = dataset.latitude.values.copy()
+
+            # Keep the full source grid for TID alignment validation.
+            source_longitude = dataset.longitude.values.copy()
+            source_latitude = dataset.latitude.values.copy()
 
             longitude = dataset.longitude.values
             latitude = dataset.latitude.values
@@ -111,6 +112,8 @@ class GEBCOBathymetrySource(BathymetryDataSource):
         if self.tid_file_path:
             tid_dataset = self._fetch_tid(
                 request=request,
+                source_longitude=source_longitude,
+                source_latitude=source_latitude,
                 expected_longitude=dataset.longitude.values,
                 expected_latitude=dataset.latitude.values,
             )
@@ -124,6 +127,8 @@ class GEBCOBathymetrySource(BathymetryDataSource):
     def _fetch_tid(
         self,
         request: BathymetryRequest,
+        source_longitude: np.ndarray,
+        source_latitude: np.ndarray,
         expected_longitude: np.ndarray,
         expected_latitude: np.ndarray,
     ) -> xr.Dataset:
@@ -144,12 +149,12 @@ class GEBCOBathymetrySource(BathymetryDataSource):
 
             dataset = dataset.sortby("longitude").sortby("latitude")
 
-            if not np.array_equal(dataset.longitude.values, self._source_longitude):
+            if not np.array_equal(dataset.longitude.values, source_longitude):
                 raise ValueError(
                     "GEBCO TID longitude coordinates do not match bathymetry."
                 )
 
-            if not np.array_equal(dataset.latitude.values, self._source_latitude):
+            if not np.array_equal(dataset.latitude.values, source_latitude):
                 raise ValueError(
                     "GEBCO TID latitude coordinates do not match bathymetry."
                 )
