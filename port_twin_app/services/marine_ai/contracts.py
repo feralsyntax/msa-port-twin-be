@@ -29,7 +29,7 @@ FORECAST_STEP_SECONDS = 3600
 def validate_finite_numbers(value, name):
     """Reject booleans, non-numeric values, NaN, and infinity."""
     if isinstance(value, bool):
-        raise ValueError(f"{name} must contain numbers, not booleans.")
+        raise ValueError(f"{name} must contain numbers, not booleans.")  # noqa: TRY004
 
     if isinstance(value, Real):
         if not math.isfinite(value):
@@ -47,7 +47,7 @@ def validate_finite_numbers(value, name):
 def validate_rectangular_field(field, dimensions, name):
     """Validate a nested-list tensor against an expected shape."""
     if not isinstance(field, list):
-        raise ValueError(f"{name} must be a list.")
+        raise ValueError(f"{name} must be a list.")  # noqa: TRY004
 
     if not dimensions:
         raise ValueError("At least one dimension is required.")
@@ -82,7 +82,7 @@ class MarineGrid:
             value = getattr(self, name)
 
             if isinstance(value, bool) or not isinstance(value, Real):
-                raise ValueError(f"{name} must be numeric.")
+                raise ValueError(f"{name} must be numeric.")  # noqa: TRY004
 
             if not math.isfinite(value):
                 raise ValueError(f"{name} must be finite.")
@@ -109,7 +109,7 @@ class MarineGrid:
             value = getattr(self, name)
 
             if isinstance(value, bool) or not isinstance(value, int):
-                raise ValueError(f"{name} must be an integer.")
+                raise ValueError(f"{name} must be an integer.")  # noqa: TRY004
 
             if value < 2:
                 raise ValueError(f"{name} must be at least 2.")
@@ -128,17 +128,17 @@ class MarineForecastConfig:
 
     def __post_init__(self):
         if not isinstance(self.start_time, str):
-            raise ValueError("start_time must be a string.")
+            raise ValueError("start_time must be a string.")  # noqa: TRY004
 
         for name, value in (
             ("steps", self.steps),
             ("step_seconds", self.step_seconds),
         ):
             if isinstance(value, bool) or not isinstance(value, int):
-                raise ValueError(f"{name} must be an integer.")
+                raise ValueError(f"{name} must be an integer.")  # noqa: TRY004
 
         try:
-            start = datetime.fromisoformat(self.start_time.replace("Z", "+00:00"))
+            start = datetime.fromisoformat(self.start_time.replace("Z", "+00:00"))  # noqa: FURB162
         except ValueError as exc:
             raise ValueError("start_time must be an ISO 8601 timestamp.") from exc
 
@@ -181,10 +181,10 @@ class MarinePredictionRequest:
 
     def __post_init__(self):
         if not isinstance(self.grid, MarineGrid):
-            raise ValueError("grid must be a MarineGrid.")
+            raise ValueError("grid must be a MarineGrid.")  # noqa: TRY004
 
         if not isinstance(self.forecast, MarineForecastConfig):
-            raise ValueError("forecast must be a MarineForecastConfig.")
+            raise ValueError("forecast must be a MarineForecastConfig.")  # noqa: TRY004
 
         ny, nx = self.grid.ny, self.grid.nx
 
