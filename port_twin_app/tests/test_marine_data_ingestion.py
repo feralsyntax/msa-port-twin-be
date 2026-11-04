@@ -32,9 +32,6 @@ from port_twin_app.services.marine_data.validation import (
     validate_bathymetry_dataset,
     validate_marine_dataset,
 )
-from port_twin_app.services.marine_data.sources.bathymetry import (
-    BathymetryRequest,
-)
 
 
 def create_test_dataset():
@@ -469,7 +466,7 @@ class MarineDataIngestionTests(SimpleTestCase):
                 metadata["dataset_version"],
                 "202311",
             )
-    
+
     def test_bathymetry_ingestion_records_tid_file_path(self):
         source_file = Path(self.temp_dir.name) / "gebco.nc"
         tid_file = Path(self.temp_dir.name) / "gebco_tid.nc"
