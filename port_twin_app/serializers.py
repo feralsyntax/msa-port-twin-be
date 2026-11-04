@@ -99,9 +99,24 @@ class VesselListQuerySerializer(serializers.Serializer):
     )
 
 
+class AssignedVesselSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Vessel
+        fields = [  # noqa: RUF012
+            "id",
+            "name",
+            "imo_number",
+            "mmsi",
+            "vessel_type",
+        ]
+        read_only_fields = fields
+
+
 class BerthSerializer(serializers.ModelSerializer):
     longitude = serializers.SerializerMethodField()
     latitude = serializers.SerializerMethodField()
+    is_occupied = serializers.SerializerMethodField()
+    assigned_vessel = AssignedVesselSerializer(read_only=True, allow_null=True)
 
     class Meta:
         model = Berth
@@ -113,6 +128,8 @@ class BerthSerializer(serializers.ModelSerializer):
             "max_vessel_length",
             "max_vessel_draft",
             "status",
+            "is_occupied",
+            "assigned_vessel",
             "created_at",
             "updated_at",
         ]
@@ -127,6 +144,9 @@ class BerthSerializer(serializers.ModelSerializer):
         if obj.location is None:
             return None
         return obj.location.y
+
+    def get_is_occupied(self, obj) -> bool:
+        return hasattr(obj, "assigned_vessel")
 
 
 class VesselPositionSerializer(serializers.ModelSerializer):

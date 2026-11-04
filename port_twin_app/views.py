@@ -119,7 +119,7 @@ class BerthListAPIView(generics.ListAPIView):
     Get a list of all berths
     """
 
-    queryset = Berth.objects.all()
+    queryset = Berth.objects.select_related("assigned_vessel")
     serializer_class = BerthSerializer
 
 
@@ -128,7 +128,7 @@ class BerthDetailAPIView(generics.RetrieveAPIView):
     Retrieve details of a single berth identified by its UUID
     """
 
-    queryset = Berth.objects.all()
+    queryset = Berth.objects.select_related("assigned_vessel")
     serializer_class = BerthSerializer
 
 

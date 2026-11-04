@@ -1,4 +1,3 @@
-
 from datetime import timedelta
 
 from django.contrib.gis.geos import Point
@@ -51,7 +50,7 @@ class VesselAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        
+
     def test_register_vessel(self):
         payload = {
             "name": "New Container Vessel",
@@ -73,10 +72,7 @@ class VesselAPITests(APITestCase):
         self.assertEqual(response.data["name"], payload["name"])
         self.assertEqual(response.data["imo_number"], "IMO 7654321")
         self.assertEqual(response.data["mmsi"], payload["mmsi"])
-        self.assertTrue(
-            Vessel.objects.filter(name="New Container Vessel").exists()
-        )
-
+        self.assertTrue(Vessel.objects.filter(name="New Container Vessel").exists())
 
     def test_register_vessel_normalizes_imo_number(self):
         payload = {
@@ -93,7 +89,6 @@ class VesselAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["imo_number"], "IMO 7654322")
 
-
     def test_register_vessel_rejects_duplicate_imo(self):
         payload = {
             "name": "Duplicate IMO Vessel",
@@ -109,7 +104,6 @@ class VesselAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("imo_number", response.data)
 
-
     def test_register_vessel_rejects_duplicate_mmsi(self):
         payload = {
             "name": "Duplicate MMSI Vessel",
@@ -124,7 +118,6 @@ class VesselAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("mmsi", response.data)
-
 
     def test_register_vessel_requires_name(self):
         response = self.client.post(
@@ -147,6 +140,14 @@ class BerthAPITests(APITestCase):
             status=Berth.OperationalStatus.ACTIVE,
         )
 
+        self.vessel = Vessel.objects.create(
+            name="MV Test Vessel",
+            imo_number="1234567",
+            mmsi="123456789",
+            vessel_type=Vessel.VesselType.CONTAINER,
+            berth=self.berth,
+        )
+
     def test_list_berths_serializes_coordinates(self):
         response = self.client.get(reverse("port_twin_app:berth-list"))
 
@@ -165,7 +166,6 @@ class BerthAPITests(APITestCase):
         self.assertEqual(berth_data["max_vessel_length"], "300.00")
         self.assertEqual(berth_data["max_vessel_draft"], "14.00")
         self.assertEqual(berth_data["status"], Berth.OperationalStatus.ACTIVE)
-
 
     def test_retrieve_berth(self):
         response = self.client.get(
@@ -186,6 +186,80 @@ class BerthAPITests(APITestCase):
         self.assertEqual(berth_data["max_vessel_length"], "300.00")
         self.assertEqual(berth_data["max_vessel_draft"], "14.00")
         self.assertEqual(berth_data["status"], Berth.OperationalStatus.ACTIVE)
+
+    def test_occupied_berth_returns_assigned_vessel(self):
+        response = self.client.get(
+            reverse(
+                "port_twin_app:berth-detail",
+                kwargs={"pk": self.berth.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["is_occupied"])
+        self.assertEqual(
+            response.data["assigned_vessel"]["id"],
+            str(self.vessel.id),
+        )
+        self.assertEqual(
+            response.data["assigned_vessel"]["name"],
+            self.vessel.name,
+        )
+        self.assertEqual(
+            response.data["assigned_vessel"]["imo_number"],
+            self.vessel.imo_number,
+        )
+        self.assertEqual(
+            response.data["assigned_vessel"]["mmsi"],
+            self.vessel.mmsi,
+        )
+        self.assertEqual(
+            response.data["assigned_vessel"]["vessel_type"],
+            self.vessel.vessel_type,
+        )
+
+    def test_unoccupied_berth_returns_null_assigned_vessel(self):
+        self.vessel.delete()
+
+        response = self.client.get(
+            reverse(
+                "port_twin_app:berth-detail",
+                kwargs={"pk": self.berth.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data["is_occupied"])
+        self.assertIsNone(response.data["assigned_vessel"])
+
+    def test_list_berths_includes_occupancy_information(self):
+        response = self.client.get(reverse("port_twin_app:berth-list"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        berth_data = response.data["results"][0]
+
+        self.assertTrue(berth_data["is_occupied"])
+        self.assertEqual(
+            berth_data["assigned_vessel"]["id"],
+            str(self.vessel.id),
+        )
+
+    def test_inactive_berth_can_still_be_occupied(self):
+        self.berth.status = Berth.OperationalStatus.INACTIVE
+        self.berth.save()
+
+        response = self.client.get(
+            reverse(
+                "port_twin_app:berth-detail",
+                kwargs={"pk": self.berth.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], Berth.OperationalStatus.INACTIVE)
+        self.assertTrue(response.data["is_occupied"])
+        self.assertIsNotNone(response.data["assigned_vessel"])
 
 
 class VesselPositionAPITests(APITestCase):
@@ -216,9 +290,7 @@ class VesselPositionAPITests(APITestCase):
         )
 
     def test_position_list_serializes_coordinates(self):
-        response = self.client.get(
-            reverse("port_twin_app:vessel-position-list")
-        )
+        response = self.client.get(reverse("port_twin_app:vessel-position-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
@@ -243,7 +315,7 @@ class VesselPositionAPITests(APITestCase):
             str(response.data["results"][0]["vessel"]),
             str(self.vessel.pk),
         )
-    
+
     def test_retrieve_vessel_position_history(self):
         response = self.client.get(
             reverse(
@@ -268,7 +340,6 @@ class VesselPositionAPITests(APITestCase):
             135,
         )
 
-
     def test_retrieve_vessel_position_history_empty(self):
         vessel_without_positions = Vessel.objects.create(
             name="Vessel Without Positions",
@@ -285,7 +356,6 @@ class VesselPositionAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 0)
         self.assertEqual(response.data["results"], [])
-
 
     def test_retrieve_vessel_position_history_vessel_not_found(self):
         response = self.client.get(
@@ -319,9 +389,7 @@ class MarineConditionAPITests(APITestCase):
         )
 
     def test_list_conditions_serializes_coordinates(self):
-        response = self.client.get(
-            reverse("port_twin_app:marine-condition-list")
-        )
+        response = self.client.get(reverse("port_twin_app:marine-condition-list"))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["count"], 2)
