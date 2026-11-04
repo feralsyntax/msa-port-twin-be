@@ -1261,6 +1261,17 @@ components:
           $ref: '#/components/schemas/ScenarioParameters'
         status:
           $ref: '#/components/schemas/ScenarioStatusEnum'
+    QueueTimelinePoint:
+      type: object
+      properties:
+        hour:
+          type: number
+          format: double
+        vessels_waiting:
+          type: integer
+      required:
+      - hour
+      - vessels_waiting
     ScenarioCreateUpdateRequest:
       type: object
       properties:
@@ -1438,11 +1449,17 @@ components:
           allOf:
           - $ref: '#/components/schemas/VesselResults'
           nullable: true
+        queue_timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueTimelinePoint'
+          nullable: true
       required:
       - completed_at
       - created_at
       - error_message
       - id
+      - queue_timeline
       - scenario_id
       - scenario_name
       - started_at
