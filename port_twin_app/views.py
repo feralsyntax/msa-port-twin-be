@@ -49,7 +49,7 @@ from port_twin_app.serializers import (
 from port_twin_app.services.marine_ai.django_service import (
     get_configured_marine_inference_service,
 )
-from port_twin_app.services.simulation_execution import execute_simulation_run
+from port_twin_app.tasks import execute_simulation_task
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ class ScenarioDetailAPIView(generics.RetrieveUpdateAPIView):
 
 class ScenarioSimulationView(GenericAPIView):
     """
-    Execute a simulation for a saved scenario.
+    Queue a simulation for a saved scenario.
     """
 
     serializer_class = ScenarioSimulationResponseSerializer
@@ -298,8 +298,9 @@ class ScenarioSimulationView(GenericAPIView):
     @extend_schema(
         request=None,
         responses={
-            201: ScenarioSimulationResponseSerializer,
-            400: SimulationErrorResponseSerializer,
+            202: ScenarioSimulationResponseSerializer,
+            404: APIErrorResponseSerializer,
+            503: SimulationErrorResponseSerializer,
         },
     )
     def post(self, request, pk):
@@ -310,28 +311,32 @@ class ScenarioSimulationView(GenericAPIView):
         )
 
         try:
-            execute_simulation_run(simulation_run)
+            execute_simulation_task.delay(str(simulation_run.pk))
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Failed to queue simulation: run_id=%s exception_type=%s",
+                simulation_run.pk,
+                type(exc).__name__,
+            )
 
-        except ValueError:
-            simulation_run.refresh_from_db()
+            simulation_run.status = SimulationRun.Status.FAILED
+            simulation_run.completed_at = timezone.now()
+            simulation_run.error_message = (
+                "Simulation could not be queued. Please try again."
+            )
+            simulation_run.save(
+                update_fields=["status", "completed_at", "error_message"]
+            )
 
             return Response(
                 {
                     "id": str(simulation_run.id),
                     "scenario_id": str(scenario.id),
                     "status": simulation_run.status,
-                    "error": "Invalid simulation configuration",
+                    "error": "Simulation could not be queued. Please try again.",
                 },
-                status=status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-
-        simulation_run.refresh_from_db()
-
-        summary = (
-            simulation_run.results.filter(result_type="summary")
-            .values_list("data", flat=True)
-            .first()
-        )
 
         return Response(
             {
@@ -340,9 +345,9 @@ class ScenarioSimulationView(GenericAPIView):
                 "status": simulation_run.status,
                 "started_at": simulation_run.started_at,
                 "completed_at": simulation_run.completed_at,
-                "summary": summary,
+                "summary": None,
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_202_ACCEPTED,
         )
 
 
