@@ -350,6 +350,11 @@ class ScenarioSimulationResponseSerializer(serializers.Serializer):
     summary = SimulationSummarySerializer(allow_null=True)
 
 
+class QueueTimelinePointSerializer(serializers.Serializer):
+    hour = serializers.FloatField()
+    vessels_waiting = serializers.IntegerField()
+
+
 class SimulationDetailResponseSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     scenario_id = serializers.UUIDField()
