@@ -535,3 +535,28 @@ class ScenarioAPITests(APITestCase):
                     response.status_code,
                     status.HTTP_400_BAD_REQUEST,
                 )
+
+    def test_partial_update_rejects_incomplete_parameters(self):
+        response = self.client.patch(
+            reverse(
+                "port_twin_app:scenario-detail",
+                kwargs={"pk": self.scenario.pk},
+            ),
+            {
+                "parameters": {
+                    "simulation_hours": 48,
+                }
+            },
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        self.scenario.refresh_from_db()
+        self.assertEqual(
+            self.scenario.parameters,
+            self.valid_parameters,
+        )
