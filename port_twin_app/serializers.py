@@ -350,6 +350,11 @@ class ScenarioSimulationResponseSerializer(serializers.Serializer):
     summary = SimulationSummarySerializer(allow_null=True)
 
 
+class QueueTimelinePointSerializer(serializers.Serializer):
+    hour = serializers.FloatField()
+    vessels_waiting = serializers.IntegerField()
+
+
 class SimulationDetailResponseSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     scenario_id = serializers.UUIDField()
@@ -361,6 +366,10 @@ class SimulationDetailResponseSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
     summary = SimulationSummarySerializer(allow_null=True)
     vessel_results = VesselResultsSerializer(allow_null=True)
+    queue_timeline = QueueTimelinePointSerializer(
+        many=True,
+        allow_null=True,
+    )
 
 
 class SimulationErrorResponseSerializer(serializers.Serializer):
