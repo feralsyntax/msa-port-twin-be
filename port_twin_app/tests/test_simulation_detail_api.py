@@ -12,7 +12,7 @@ class SimulationDetailAPITests(TestCase):
         cls.scenario = Scenario.objects.create(
             name="Detail API Test Scenario",
             description="Scenario used to test simulation retrieval.",
-            parameters={},
+            parameters={"simulation_hours": 24},
             status="ready",
         )
 
