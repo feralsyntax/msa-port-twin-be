@@ -9,6 +9,7 @@ from rest_framework.test import APITestCase
 from port_twin_app.models import (
     Berth,
     MarineCondition,
+    Scenario,
     Vessel,
     VesselPosition,
 )
@@ -414,3 +415,123 @@ class MarineConditionAPITests(APITestCase):
             response.data["results"][0]["source"],
             MarineCondition.DataSource.DEMO,
         )
+
+
+class ScenarioAPITests(APITestCase):
+    def setUp(self):
+        self.valid_parameters = {
+            "simulation_hours": 24,
+            "expected_vessel_arrivals": 5,
+            "arrival_interval_hours": 2,
+            "average_service_time_hours": 8,
+            "available_berths": 2,
+        }
+
+        self.scenario = Scenario.objects.create(
+            name="Test Scenario",
+            description="Scenario for API testing",
+            parameters=self.valid_parameters,
+            status=Scenario.Status.DRAFT,
+        )
+
+    def test_list_scenarios(self):
+        response = self.client.get(reverse("port_twin_app:scenario-list-create"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"][0]["name"], self.scenario.name)
+
+    def test_retrieve_scenario(self):
+        response = self.client.get(
+            reverse(
+                "port_twin_app:scenario-detail",
+                kwargs={"pk": self.scenario.pk},
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["id"], str(self.scenario.pk))
+        self.assertEqual(response.data["parameters"], self.valid_parameters)
+
+    def test_create_scenario(self):
+        payload = {
+            "name": "New Scenario",
+            "description": "New simulation configuration",
+            "parameters": self.valid_parameters,
+            "status": Scenario.Status.READY,
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:scenario-list-create"),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], payload["name"])
+        self.assertEqual(response.data["parameters"], self.valid_parameters)
+        self.assertTrue(Scenario.objects.filter(name="New Scenario").exists())
+
+    def test_create_scenario_applies_default_available_berths(self):
+        payload = {
+            "name": "Default Berths Scenario",
+            "parameters": {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+            },
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:scenario-list-create"),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["parameters"]["available_berths"], 2)
+
+    def test_update_scenario(self):
+        response = self.client.patch(
+            reverse(
+                "port_twin_app:scenario-detail",
+                kwargs={"pk": self.scenario.pk},
+            ),
+            {"name": "Updated Scenario"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.name, "Updated Scenario")
+
+    def test_create_scenario_rejects_invalid_parameters(self):
+        invalid_parameters = [
+            {"simulation_hours": 0},
+            {"expected_vessel_arrivals": -1},
+            {"arrival_interval_hours": 0},
+            {"average_service_time_hours": -1},
+            {"available_berths": -1},
+        ]
+
+        for invalid_field in invalid_parameters:
+            with self.subTest(invalid_field=invalid_field):
+                parameters = {
+                    **self.valid_parameters,
+                    **invalid_field,
+                }
+
+                response = self.client.post(
+                    reverse("port_twin_app:scenario-list-create"),
+                    {
+                        "name": "Invalid Scenario",
+                        "parameters": parameters,
+                    },
+                    format="json",
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_400_BAD_REQUEST,
+                )
