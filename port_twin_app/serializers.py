@@ -366,6 +366,10 @@ class SimulationDetailResponseSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
     summary = SimulationSummarySerializer(allow_null=True)
     vessel_results = VesselResultsSerializer(allow_null=True)
+    queue_timeline = QueueTimelinePointSerializer(
+        many=True,
+        allow_null=True,
+    )
 
 
 class SimulationErrorResponseSerializer(serializers.Serializer):
