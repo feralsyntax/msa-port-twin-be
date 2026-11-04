@@ -311,7 +311,7 @@ class ScenarioSimulationView(GenericAPIView):
 
         try:
             execute_simulation_task.delay(str(simulation_run.pk))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Failed to queue simulation: run_id=%s exception_type=%s",
                 simulation_run.pk,
