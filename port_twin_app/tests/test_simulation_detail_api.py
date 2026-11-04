@@ -94,3 +94,53 @@ class SimulationDetailAPITests(TestCase):
         response = self.client.get(f"/api/v1/simulations/{uuid.uuid4()}/")
 
         self.assertEqual(response.status_code, 404)
+        
+    def test_queue_timeline_tracks_overlapping_waiting_periods(self):
+        vessel_result = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="vessel_results",
+        )
+
+        vessel_result.data = {
+            "vessels": [
+                {
+                    "vessel_id": "vessel-1",
+                    "arrival_hour": 0.0,
+                    "service_start_hour": 4.0,
+                    "status": "completed",
+                },
+                {
+                    "vessel_id": "vessel-2",
+                    "arrival_hour": 2.0,
+                    "service_start_hour": 6.0,
+                    "status": "completed",
+                },
+                {
+                    "vessel_id": "vessel-3",
+                    "arrival_hour": 4.0,
+                    "service_start_hour": 4.0,
+                    "status": "completed",
+                },
+                {
+                    "vessel_id": "vessel-4",
+                    "arrival_hour": 3.0,
+                    "service_start_hour": None,
+                    "status": "incompatible_berth",
+                },
+            ]
+        }
+        vessel_result.save(update_fields=["data"])
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["queue_timeline"],
+            [
+                {"hour": 0.0, "vessels_waiting": 1},
+                {"hour": 2.0, "vessels_waiting": 2},
+                {"hour": 4.0, "vessels_waiting": 1},
+                {"hour": 6.0, "vessels_waiting": 0},
+                {"hour": 24.0, "vessels_waiting": 0},
+            ],
+        )
