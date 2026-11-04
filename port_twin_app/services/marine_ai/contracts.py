@@ -247,7 +247,7 @@ class MarinePredictionResult:
     def validate_against(self, request: MarinePredictionRequest):
         """Ensure every output matches the original request dimensions."""
         if not isinstance(request, MarinePredictionRequest):
-            raise ValueError("request must be a MarinePredictionRequest.")
+            raise ValueError("request must be a MarinePredictionRequest.")  # noqa: TRY004
 
         expected = (
             FORECAST_STEPS,
