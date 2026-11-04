@@ -210,6 +210,10 @@ class MarineConditionQuerySerializer(serializers.Serializer):
 
 
 class PositiveFiniteFloatField(serializers.FloatField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("min_value", 0)
+        super().__init__(**kwargs)
+
     def to_internal_value(self, data):
         if isinstance(data, bool):
             raise serializers.ValidationError("A numeric value is required.")
@@ -248,7 +252,7 @@ class ScenarioParametersSerializer(serializers.Serializer):
         required=False,
         default=2,
     )
-    
+
     def to_internal_value(self, data):
         if isinstance(data, dict):
             allowed_fields = set(self.fields)
@@ -257,10 +261,9 @@ class ScenarioParametersSerializer(serializers.Serializer):
             unknown_fields = supplied_fields - allowed_fields
 
             if unknown_fields:
-                raise serializers.ValidationError({
-                    field: ["Unknown parameter."]
-                    for field in sorted(unknown_fields)
-                })
+                raise serializers.ValidationError(
+                    {field: ["Unknown parameter."] for field in sorted(unknown_fields)}
+                )
 
             required_fields = {
                 "simulation_hours",
@@ -272,10 +275,12 @@ class ScenarioParametersSerializer(serializers.Serializer):
             missing_fields = required_fields - supplied_fields
 
             if missing_fields:
-                raise serializers.ValidationError({
-                    field: ["This field is required."]
-                    for field in sorted(missing_fields)
-                })
+                raise serializers.ValidationError(
+                    {
+                        field: ["This field is required."]
+                        for field in sorted(missing_fields)
+                    }
+                )
 
         return super().to_internal_value(data)
 
