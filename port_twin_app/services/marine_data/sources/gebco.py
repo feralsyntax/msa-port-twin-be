@@ -46,6 +46,9 @@ class GEBCOBathymetrySource(BathymetryDataSource):
             )
 
             dataset = dataset.sortby("longitude").sortby("latitude")
+            
+            self._source_longitude = dataset.longitude.values.copy()
+            self._source_latitude = dataset.latitude.values.copy()
 
             longitude = dataset.longitude.values
             latitude = dataset.latitude.values
