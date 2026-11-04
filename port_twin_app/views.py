@@ -299,6 +299,7 @@ class ScenarioSimulationView(GenericAPIView):
         request=None,
         responses={
             202: ScenarioSimulationResponseSerializer,
+            404: APIErrorResponseSerializer,
             503: SimulationErrorResponseSerializer,
         },
     )
