@@ -83,3 +83,20 @@ class SimulationAPITests(TestCase):
         )
 
         mock_delay.assert_called_once()
+        
+    
+    @patch("port_twin_app.views.execute_simulation_task.delay")
+    def test_simulation_detail_returns_pending_run(self, mock_delay):
+        response = self.client.post(self.url)
+
+        simulation_id = response.data["id"]
+
+        detail_response = self.client.get(
+            f"/api/v1/simulations/{simulation_id}/"
+        )
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.data["id"], simulation_id)
+        self.assertEqual(detail_response.data["status"], "pending")
+        self.assertIsNone(detail_response.data["summary"])
+        self.assertIsNone(detail_response.data["vessel_results"])
