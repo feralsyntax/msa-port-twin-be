@@ -459,7 +459,7 @@ def load_checkpoint(
     architecture = checkpoint.get("architecture")
 
     if not isinstance(architecture, dict):
-        raise ValueError("Checkpoint is missing model architecture metadata.")
+        raise ValueError("Checkpoint is missing model architecture metadata.")  # noqa: TRY004
 
     if architecture.get("forecast_steps") != FORECAST_STEPS:
         raise ValueError(
