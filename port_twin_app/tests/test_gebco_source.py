@@ -250,3 +250,112 @@ class GEBCOBathymetrySourceTests(SimpleTestCase):
         self.assertIn("elevation_m", result.data_vars)
         self.assertIn("longitude", result.coords)
         self.assertIn("latitude", result.coords)
+
+    def test_fetch_includes_tid_when_tid_file_is_configured(self):
+        result = self.make_source(tid_file_path=self.tid_file_path).fetch(
+            self.make_request()
+        )
+
+        self.assertIn("tid", result.data_vars)
+        self.assertEqual(result["tid"].shape, result["elevation_m"].shape)
+
+        np.testing.assert_array_equal(
+            result["tid"].values,
+            [
+                [10, 11, 40],
+                [14, 16, 40],
+                [14, 16, 40],
+            ],
+        )
+
+    def test_fetch_preserves_tid_classification_metadata(self):
+        result = self.make_source(tid_file_path=self.tid_file_path).fetch(
+            self.make_request()
+        )
+
+        self.assertEqual(
+            result["tid"].attrs["flag_meanings"],
+            (
+                "Land Singlebeam Multibeam Lidar Optical "
+                "predicted_altimetry contour_charts"
+            ),
+        )
+
+        np.testing.assert_array_equal(
+            result["tid"].attrs["flag_values"],
+            [0, 10, 11, 14, 16, 40, 44],
+        )
+
+    def test_fetch_preserves_tid_as_integer_values(self):
+        result = self.make_source(tid_file_path=self.tid_file_path).fetch(
+            self.make_request()
+        )
+
+        self.assertTrue(np.issubdtype(result["tid"].dtype, np.integer))
+
+    def test_fetch_records_tid_source_file_path(self):
+        result = self.make_source(tid_file_path=self.tid_file_path).fetch(
+            self.make_request()
+        )
+
+        self.assertEqual(
+            result.attrs["tid_source_file_path"],
+            str(self.tid_file_path),
+        )
+
+    def test_fetch_rejects_missing_tid_file(self):
+        missing_tid_path = Path(self.temp_directory.name) / "missing_tid.nc"
+
+        source = self.make_source(tid_file_path=missing_tid_path)
+
+        with self.assertRaises(FileNotFoundError):
+            source.fetch(self.make_request())
+
+    def test_fetch_rejects_tid_grid_with_mismatched_coordinates(self):
+        mismatched_tid_path = Path(self.temp_directory.name) / "mismatched_tid.nc"
+
+        dataset = xr.Dataset(
+            data_vars={
+                "tid": (
+                    ("lat", "lon"),
+                    np.ones((5, 5), dtype=np.int8),
+                )
+            },
+            coords={
+                "lon": np.array([39.0, 39.5, 40.0, 40.5, 41.1]),
+                "lat": np.array([-5.0, -4.5, -4.0, -3.5, -3.0]),
+            },
+        )
+
+        dataset.to_netcdf(mismatched_tid_path, engine="scipy")
+
+        source = self.make_source(tid_file_path=mismatched_tid_path)
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "longitude coordinates do not match",
+        ):
+            source.fetch(self.make_request())
+
+    def test_fetch_rejects_tid_dataset_without_tid_variable(self):
+        invalid_tid_path = Path(self.temp_directory.name) / "invalid_tid.nc"
+
+        dataset = xr.Dataset(
+            data_vars={
+                "classification": (
+                    ("lat", "lon"),
+                    np.ones((5, 5), dtype=np.int8),
+                )
+            },
+            coords={
+                "lon": np.linspace(39.0, 41.0, 5),
+                "lat": np.linspace(-5.0, -3.0, 5),
+            },
+        )
+
+        dataset.to_netcdf(invalid_tid_path, engine="scipy")
+
+        source = self.make_source(tid_file_path=invalid_tid_path)
+
+        with self.assertRaisesRegex(ValueError, "TID variable"):
+            source.fetch(self.make_request())
