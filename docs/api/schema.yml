@@ -19,8 +19,6 @@ paths:
       tags:
       - berths
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -43,8 +41,6 @@ paths:
       tags:
       - berths
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -61,8 +57,6 @@ paths:
       tags:
       - data-status
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -100,8 +94,6 @@ paths:
       tags:
       - marine-conditions
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -124,8 +116,6 @@ paths:
       tags:
       - marine-predictions
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -148,8 +138,6 @@ paths:
       tags:
       - marine-predictions
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -177,8 +165,6 @@ paths:
               $ref: '#/components/schemas/MarinePredictionRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '201':
@@ -186,6 +172,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MarinePrediction'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
         '503':
           content:
@@ -200,8 +192,6 @@ paths:
       tags:
       - overview
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -224,8 +214,6 @@ paths:
       tags:
       - scenarios
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -252,8 +240,6 @@ paths:
               $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '201':
@@ -261,6 +247,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScenarioResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
   /api/v1/scenarios/{id}/:
     get:
@@ -276,8 +268,6 @@ paths:
       tags:
       - scenarios
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -311,8 +301,6 @@ paths:
               $ref: '#/components/schemas/ScenarioCreateUpdateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -320,6 +308,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScenarioResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
     patch:
       operationId: scenarios_partial_update
@@ -345,8 +339,6 @@ paths:
             schema:
               $ref: '#/components/schemas/PatchedScenarioCreateUpdateRequest'
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -354,6 +346,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScenarioResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
   /api/v1/scenarios/{id}/simulations/:
     post:
@@ -369,8 +367,6 @@ paths:
       tags:
       - scenarios
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '202':
@@ -404,8 +400,6 @@ paths:
       tags:
       - simulations
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -428,8 +422,6 @@ paths:
       tags:
       - simulations
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -457,8 +449,6 @@ paths:
       tags:
       - simulations
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -492,8 +482,6 @@ paths:
       tags:
       - vessel-positions
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -516,8 +504,6 @@ paths:
       tags:
       - vessels
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -544,8 +530,6 @@ paths:
               $ref: '#/components/schemas/VesselCreateRequest'
         required: true
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '201':
@@ -553,6 +537,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VesselResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
   /api/v1/vessels/{id}/:
     get:
@@ -568,8 +558,6 @@ paths:
       tags:
       - vessels
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -598,8 +586,6 @@ paths:
       tags:
       - vessels
       security:
-      - cookieAuth: []
-      - basicAuth: []
       - {}
       responses:
         '200':
@@ -643,13 +629,25 @@ components:
       - latest_prediction_model_version
       - latest_prediction_status
       - readiness
+    APIErrorDetail:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details: {}
+      required:
+      - code
+      - details
+      - message
     APIErrorResponse:
       type: object
       properties:
-        detail:
-          type: string
+        error:
+          $ref: '#/components/schemas/APIErrorDetail'
       required:
-      - detail
+      - error
     AssignedVessel:
       type: object
       properties:
@@ -888,16 +886,8 @@ components:
         start_time:
           type: string
           format: date-time
-        steps:
-          type: integer
-          minimum: 1
-        step_seconds:
-          type: integer
-          minimum: 1
       required:
       - start_time
-      - step_seconds
-      - steps
     MarineGridInput:
       type: object
       properties:
@@ -986,17 +976,15 @@ components:
           $ref: '#/components/schemas/MarineForecastInput'
         bathymetry_m: {}
         initial_water_level_m: {}
-        wind_u_ms: {}
-        wind_v_ms: {}
-        boundary_conditions: {}
+        initial_current_u_ms: {}
+        initial_current_v_ms: {}
       required:
       - bathymetry_m
-      - boundary_conditions
       - forecast
       - grid
+      - initial_current_u_ms
+      - initial_current_v_ms
       - initial_water_level_m
-      - wind_u_ms
-      - wind_v_ms
     MarinePredictionStatusEnum:
       enum:
       - completed
@@ -1795,11 +1783,3 @@ components:
         * `passenger` - Passenger
         * `other` - Other
         * `unknown` - Unknown
-  securitySchemes:
-    basicAuth:
-      type: http
-      scheme: basic
-    cookieAuth:
-      type: apiKey
-      in: cookie
-      name: sessionid

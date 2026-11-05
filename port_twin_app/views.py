@@ -63,7 +63,10 @@ logger = logging.getLogger(__name__)
     ),
     post=extend_schema(
         request=VesselCreateRequestSerializer,
-        responses={201: VesselResponseSerializer},
+        responses={
+            201: VesselResponseSerializer,
+            400: APIErrorResponseSerializer,
+        },
         operation_id="vessels_create",
         description="Register a new vessel.",
     ),
@@ -212,7 +215,10 @@ class MarineConditionListAPIView(generics.ListAPIView):
     ),
     post=extend_schema(
         request=ScenarioCreateUpdateRequestSerializer,
-        responses={201: ScenarioResponseSerializer},
+        responses={
+            201: ScenarioResponseSerializer,
+            400: APIErrorResponseSerializer,
+        },
     ),
 )
 class ScenarioListCreateAPIView(generics.ListCreateAPIView):
@@ -251,11 +257,17 @@ class ScenarioListCreateAPIView(generics.ListCreateAPIView):
     ),
     put=extend_schema(
         request=ScenarioCreateUpdateRequestSerializer,
-        responses={200: ScenarioResponseSerializer},
+        responses={
+            200: ScenarioResponseSerializer,
+            400: APIErrorResponseSerializer,
+        },
     ),
     patch=extend_schema(
         request=ScenarioCreateUpdateRequestSerializer,
-        responses={200: ScenarioResponseSerializer},
+        responses={
+            200: ScenarioResponseSerializer,
+            400: APIErrorResponseSerializer,
+        },
     ),
 )
 class ScenarioDetailAPIView(generics.RetrieveUpdateAPIView):
@@ -728,6 +740,7 @@ class MarinePredictionCreateAPIView(APIView):
         request=MarinePredictionRequestSerializer,
         responses={
             201: MarinePredictionSerializer,
+            400: APIErrorResponseSerializer,
             503: APIErrorResponseSerializer,
         },
     )
