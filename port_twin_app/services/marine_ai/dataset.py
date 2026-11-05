@@ -1,3 +1,4 @@
+
 """Dataset sample definitions and chronological splitting for marine AI."""
 
 from dataclasses import dataclass
@@ -119,17 +120,17 @@ def split_dataset(
     validation_boundary = ordered[train_end].forecast_start
     test_boundary = ordered[validation_end].forecast_start
 
-    # Exclude earlier samples whose target periods cross split boundaries.
+    # Exclude earlier samples whose target periods reach or cross split boundaries.
     train = tuple(
         sample
         for sample in ordered[:train_end]
-        if sample.forecast_end <= validation_boundary
+        if sample.forecast_end < validation_boundary
     )
 
     validation = tuple(
         sample
         for sample in ordered[train_end:validation_end]
-        if sample.forecast_end <= test_boundary
+        if sample.forecast_end < test_boundary
     )
 
     test = tuple(ordered[validation_end:])
