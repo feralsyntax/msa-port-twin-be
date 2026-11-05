@@ -74,6 +74,7 @@ def create_bathymetry_dataset():
         attrs={
             "provider": "GEBCO",
             "source_dataset_id": "GEBCO",
+            "source_dataset_version": "GEBCO_2026",
             "source_version": "GEBCO_2026",
             "vertical_reference": "height_above_mean_sea_level",
             "vertical_crs": "EPSG:5831",
