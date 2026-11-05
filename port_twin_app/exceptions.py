@@ -16,6 +16,13 @@ def custom_exception_handler(exc, context):
 
     if response is not None:
         if isinstance(exc, serializers.ValidationError):
+            response.data = {
+                "error": {
+                    "code": "validation_error",
+                    "message": "The request contains invalid data.",
+                    "details": response.data,
+                }
+            }
             return response
 
         if isinstance(exc, APIException):
