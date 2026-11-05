@@ -173,6 +173,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarinePrediction'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
+          description: ''
         '503':
           content:
             application/json:
@@ -242,6 +248,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ScenarioResponse'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
+          description: ''
   /api/v1/scenarios/{id}/:
     get:
       operationId: scenarios_retrieve
@@ -297,6 +309,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/ScenarioResponse'
           description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
+          description: ''
     patch:
       operationId: scenarios_partial_update
       description: Retrieve or update a scenario identified by its UUID.
@@ -328,6 +346,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ScenarioResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
   /api/v1/scenarios/{id}/simulations/:
     post:
@@ -513,6 +537,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VesselResponse'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
   /api/v1/vessels/{id}/:
     get:
