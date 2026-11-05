@@ -288,3 +288,118 @@ class SimulationEngineTests(SimpleTestCase):
         self.assertEqual(second.waiting_hours, 7)
         self.assertEqual(output.summary.vessels_waiting, 1)
         self.assertEqual(output.summary.vessels_in_service, 0)
+
+    def test_supports_simultaneous_arrivals_in_input_order(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+            SimulationVessel("V3", 150, 8),
+        ]
+        berths = [
+            SimulationBerth("B1", 220, 12),
+            SimulationBerth("B2", 220, 12),
+        ]
+        config = SimulationConfig(
+            duration_hours=12,
+            expected_arrivals=3,
+            arrival_interval_hours=0,
+            service_time_hours=4,
+        )
+
+        output = run_simulation(vessels, berths, config)
+
+        first, second, third = output.vessel_results
+
+        self.assertEqual(
+            [result.arrival_hour for result in output.vessel_results],
+            [0, 0, 0],
+        )
+        self.assertEqual(first.berth_id, "B1")
+        self.assertEqual(second.berth_id, "B2")
+        self.assertEqual(third.berth_id, "B1")
+
+        self.assertEqual(first.waiting_hours, 0)
+        self.assertEqual(second.waiting_hours, 0)
+        self.assertEqual(third.waiting_hours, 4)
+
+        self.assertEqual(output.summary.total_arrivals, 3)
+        self.assertEqual(output.summary.vessels_served, 3)
+
+    def test_rejects_negative_arrival_interval(self):
+        config = SimulationConfig(24, 3, -1, 8)
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Arrival interval must be a finite number greater than or equal to zero.",
+        ):
+            run_simulation(self.vessels, self.berths, config)
+
+    def test_rejects_invalid_numeric_configuration(self):
+        invalid_configs = [
+            SimulationConfig(None, 3, 2, 8),
+            SimulationConfig(24, 3, None, 8),
+            SimulationConfig(24, 3, 2, None),
+        ]
+
+        for config in invalid_configs:
+            with self.subTest(config=config), self.assertRaises(ValueError):
+                run_simulation(self.vessels, self.berths, config)
+
+    def test_rejects_empty_vessel_identifiers(self):
+        vessels = [
+            SimulationVessel("", 200, 10),
+        ]
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Vessel identifiers must be non-empty strings.",
+        ):
+            run_simulation(
+                vessels,
+                self.berths,
+                SimulationConfig(24, 1, 2, 8),
+            )
+
+    def test_rejects_empty_berth_identifiers(self):
+        berths = [
+            SimulationBerth("", 220, 12),
+        ]
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Berth identifiers must be non-empty strings.",
+        ):
+            run_simulation(self.vessels, berths, self.config)
+
+    def test_excludes_arrivals_at_simulation_horizon(self):
+        config = SimulationConfig(
+            duration_hours=4,
+            expected_arrivals=3,
+            arrival_interval_hours=2,
+            service_time_hours=2,
+        )
+
+        output = run_simulation(self.vessels, self.berths, config)
+
+        self.assertEqual(output.summary.total_arrivals, 2)
+        self.assertEqual(
+            [result.arrival_hour for result in output.vessel_results],
+            [0, 2],
+        )
+
+    def test_handles_zero_expected_arrivals(self):
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=0,
+            arrival_interval_hours=2,
+            service_time_hours=8,
+        )
+
+        output = run_simulation([], self.berths, config)
+
+        self.assertEqual(output.vessel_results, ())
+        self.assertEqual(output.summary.total_arrivals, 0)
+        self.assertEqual(output.summary.vessels_served, 0)
+        self.assertEqual(output.summary.average_waiting_hours, 0)
+        self.assertEqual(output.summary.average_turnaround_hours, 0)
+        self.assertEqual(output.summary.berth_utilization_percent, 0)
