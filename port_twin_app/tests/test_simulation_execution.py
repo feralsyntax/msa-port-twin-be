@@ -109,7 +109,7 @@ class SimulationExecutionTests(TestCase):
                         "departure_hour": 8,
                         "waiting_hours": 0,
                         "status": "completed",
-                        "reason": "",
+                        "reason": None,
                     }
                 ]
             },
