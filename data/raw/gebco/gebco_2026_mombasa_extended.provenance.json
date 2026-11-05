@@ -1,0 +1,20 @@
+{
+  "provider": "GEBCO",
+  "dataset_id": "GEBCO",
+  "dataset_version": "GEBCO_2026",
+  "source_version": "The GEBCO_2026 Grid is the 2026 release of the  global bathymetric product published by the General Bathymetric Chart of the Oceans (GEBCO) and has been developed through the Nippon Foundation-GEBCO Seabed 2030 Project. This is a collaborative project between the Nippon Foundation of Japan and GEBCO. The Seabed 2030 Project aims to bring together all available bathymetric data to produce the definitive map of the world ocean floor and make it available to all.",
+  "variables": [
+    "elevation_m"
+  ],
+  "west": 40.16667175292969,
+  "south": -4.916664123535156,
+  "east": 40.91667175292969,
+  "north": -3.0833282470703125,
+  "start_time": null,
+  "end_time": null,
+  "retrieved_at": "2026-11-05T05:41:56.083376+00:00",
+  "file_path": "data/raw/gebco/gebco_2026_mombasa_extended.nc",
+  "tid_file_path": "data/raw/gebco/gebco_2026_mombasa_extended_tid.nc",
+  "file_format": "netcdf",
+  "license_name": "GEBCO public domain subject to its terms and disclaimer"
+}
