@@ -14,13 +14,21 @@ class CustomExceptionHandlerTests(SimpleTestCase):
         self.request = self.factory.get("/api/v1/test/")
         self.context = {"request": self.request}
 
-    def test_validation_errors_keep_existing_response_shape(self):
+    def test_validation_errors_use_standardized_error_envelope(self):
         exc = serializers.ValidationError({"name": ["This field is required."]})
 
         response = custom_exception_handler(exc, self.context)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("name", response.data)
+        self.assertEqual(
+            response.data["error"]["code"],
+            "validation_error",
+        )
+        self.assertEqual(
+            response.data["error"]["message"],
+            "The request contains invalid data.",
+        )
+        self.assertIn("name", response.data["error"]["details"])
 
     def test_api_exceptions_use_standardized_error_envelope(self):
         class ExampleAPIException(APIException):
