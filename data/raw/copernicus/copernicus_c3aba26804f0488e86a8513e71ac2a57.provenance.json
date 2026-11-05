@@ -1,0 +1,22 @@
+{
+  "provider": "Copernicus Marine",
+  "dataset_id": "cmems_mod_glo_phy_anfc_0.083deg_PT1H-m",
+  "dataset_version": "202406",
+  "source_version": "MOI GLO12",
+  "variables": [
+    "zos",
+    "uo",
+    "vo"
+  ],
+  "west": 39.0,
+  "south": -5.0,
+  "east": 41.0,
+  "north": -3.0,
+  "start_time": "2026-10-01T00:00:00+00:00",
+  "end_time": "2026-10-30T23:00:00+00:00",
+  "retrieved_at": "2026-11-04T15:53:10.086475+00:00",
+  "file_path": "data/raw/copernicus/copernicus_c3aba26804f0488e86a8513e71ac2a57.nc",
+  "tid_file_path": null,
+  "file_format": "netcdf",
+  "license_name": "Copernicus Marine Service Licence"
+}
