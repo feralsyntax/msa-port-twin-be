@@ -98,7 +98,8 @@ class MarineDatasetPreparationTests(SimpleTestCase):
         result = self.prepare()
 
         self.assertEqual(result.metadata["generated_samples"], 94)
-        self.assertEqual(result.split.total_samples, 94)
+        self.assertEqual(result.metadata["purged_samples"], 12)
+        self.assertEqual(result.split.total_samples, 82)
 
         sample = result.split.train[0]
 
@@ -245,6 +246,7 @@ class MarineDatasetPreparationTests(SimpleTestCase):
 
     def test_non_integer_tid_is_rejected(self):
         bathymetry = self.bathymetry.copy(deep=True)
+        bathymetry["tid"] = bathymetry["tid"].astype(float)
         bathymetry["tid"][0, 0] = 10.5
 
         with self.assertRaisesRegex(ValueError, "integer"):
