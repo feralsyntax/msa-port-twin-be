@@ -599,13 +599,25 @@ components:
       - latest_prediction_model_version
       - latest_prediction_status
       - readiness
+    APIErrorDetail:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details: {}
+      required:
+      - code
+      - details
+      - message
     APIErrorResponse:
       type: object
       properties:
-        detail:
-          type: string
+        error:
+          $ref: '#/components/schemas/APIErrorDetail'
       required:
-      - detail
+      - error
     AssignedVessel:
       type: object
       properties:
