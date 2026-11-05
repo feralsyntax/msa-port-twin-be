@@ -107,3 +107,93 @@ class ScenarioSimulationRunnerTests(TestCase):
         result = run_scenario_simulation(self.scenario)
 
         self.assertIs(result, expected_result)
+
+    def test_rejects_non_dictionary_scenario_parameters(self):
+        self.scenario.parameters = []
+        self.scenario.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Scenario parameters must be a dictionary.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    def test_rejects_missing_required_scenario_parameter(self):
+        del self.scenario.parameters["simulation_hours"]
+        self.scenario.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Missing required scenario parameter: simulation_hours.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    def test_rejects_invalid_expected_arrivals_type(self):
+        self.scenario.parameters["expected_vessel_arrivals"] = 1.5
+        self.scenario.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Expected arrivals must be a non-negative integer.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    def test_rejects_boolean_expected_arrivals(self):
+        self.scenario.parameters["expected_vessel_arrivals"] = True
+        self.scenario.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Expected arrivals must be a non-negative integer.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    def test_rejects_invalid_available_berths_type(self):
+        self.scenario.parameters["available_berths"] = 1.5
+        self.scenario.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Available berths must be a non-negative integer.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    def test_rejects_boolean_available_berths(self):
+        self.scenario.parameters["available_berths"] = True
+        self.scenario.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Available berths must be a non-negative integer.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    def test_rejects_vessel_profile_with_missing_dimensions(self):
+        self.vessel.length_overall = None
+        self.vessel.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Vessel profiles must have valid length and draft dimensions.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    def test_rejects_berth_with_missing_draft_capacity(self):
+        self.berth.max_vessel_draft = None
+        self.berth.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Active berths must have valid length and draft capacity limits.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    def test_allows_zero_available_berths(self, mock_run):
+        self.scenario.parameters["available_berths"] = 0
+        self.scenario.save()
+
+        run_scenario_simulation(self.scenario)
+
+        _, berths, _ = mock_run.call_args.args
+        self.assertEqual(berths, [])

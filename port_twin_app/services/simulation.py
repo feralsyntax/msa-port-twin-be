@@ -1,5 +1,7 @@
 import math
 from dataclasses import dataclass
+from decimal import Decimal
+from numbers import Real
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,23 @@ class SimulationOutput:
     summary: SimulationSummary
 
 
+def _is_finite_number(value: object) -> bool:
+    """Return whether a value is a finite real number, excluding booleans."""
+
+    return (
+        isinstance(value, (Real, Decimal))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def _validate_identifier(value: object, entity: str) -> None:
+    """Validate a vessel or berth identifier."""
+
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{entity} identifiers must be non-empty strings.")
+
+
 def run_simulation(
     vessels: list[SimulationVessel],
     berths: list[SimulationBerth],
@@ -73,15 +92,20 @@ def run_simulation(
     """Simulate vessel arrivals and allocation to compatible berths."""
 
     # Validate simulation configuration.
-    config_values = {
+    positive_config_values = {
         "Simulation duration": config.duration_hours,
-        "Arrival interval": config.arrival_interval_hours,
         "Service time": config.service_time_hours,
     }
 
-    for name, value in config_values.items():
-        if not math.isfinite(value) or value <= 0:
+    for name, value in positive_config_values.items():
+        if not _is_finite_number(value) or value <= 0:
             raise ValueError(f"{name} must be a finite number greater than zero.")
+
+    interval = config.arrival_interval_hours
+    if not _is_finite_number(interval) or interval < 0:
+        raise ValueError(
+            "Arrival interval must be a finite number greater than or equal to zero."
+        )
 
     if isinstance(config.expected_arrivals, bool) or not isinstance(
         config.expected_arrivals, int
@@ -99,13 +123,16 @@ def run_simulation(
     # Validate vessel dimensions and identifiers.
     vessel_ids = [vessel.vessel_id for vessel in vessels]
 
+    for vessel_id in vessel_ids:
+        _validate_identifier(vessel_id, "Vessel")
+
     if len(vessel_ids) != len(set(vessel_ids)):
         raise ValueError("Vessel identifiers must be unique.")
 
     for vessel in vessels:
         if (
-            not math.isfinite(vessel.length)
-            or not math.isfinite(vessel.draft)
+            not _is_finite_number(vessel.length)
+            or not _is_finite_number(vessel.draft)
             or vessel.length <= 0
             or vessel.draft <= 0
         ):
@@ -116,13 +143,16 @@ def run_simulation(
     # Validate berth capacity limits and identifiers.
     berth_ids = [berth.berth_id for berth in berths]
 
+    for berth_id in berth_ids:
+        _validate_identifier(berth_id, "Berth")
+
     if len(berth_ids) != len(set(berth_ids)):
         raise ValueError("Berth identifiers must be unique.")
 
     for berth in berths:
         if (
-            not math.isfinite(berth.max_vessel_length)
-            or not math.isfinite(berth.max_vessel_draft)
+            not _is_finite_number(berth.max_vessel_length)
+            or not _is_finite_number(berth.max_vessel_draft)
             or berth.max_vessel_length <= 0
             or berth.max_vessel_draft <= 0
         ):
@@ -164,12 +194,10 @@ def run_simulation(
                 reasons = []
 
                 length_fits_some_berth = any(
-                    vessel.length <= berth.max_vessel_length
-                    for berth in berths
+                    vessel.length <= berth.max_vessel_length for berth in berths
                 )
                 draft_fits_some_berth = any(
-                    vessel.draft <= berth.max_vessel_draft
-                    for berth in berths
+                    vessel.draft <= berth.max_vessel_draft for berth in berths
                 )
 
                 if not length_fits_some_berth:
