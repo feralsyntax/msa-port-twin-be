@@ -149,6 +149,10 @@ REST_FRAMEWORK = {
         "marine_prediction": "5/hour",
     },
     "EXCEPTION_HANDLER": "port_twin_app.exceptions.custom_exception_handler",
+    "DEFAULT_AUTHENTICATION_CLASSES": [],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.AllowAny",
+    ],
 }
 
 # drf-spectacular configs
