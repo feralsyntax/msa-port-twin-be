@@ -1,4 +1,5 @@
 import math
+from decimal import Decimal
 from numbers import Real
 
 from port_twin_app.models import Berth, Scenario, Vessel
@@ -21,7 +22,7 @@ def _is_valid_dimension(value):
     """Check that a database dimension is a finite positive number."""
 
     return (
-        isinstance(value, Real)
+        isinstance(value, (Real, Decimal))
         and not isinstance(value, bool)
         and math.isfinite(value)
         and value > 0
@@ -31,8 +32,11 @@ def _is_valid_dimension(value):
 def _validate_non_negative_integer(value, name):
     """Validate a non-negative integer configuration value."""
 
-    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-        raise ValueError(f"{name} must be a non-negative integer.")
+    if isinstance(value, int) and not isinstance(value, bool) and value < 0:
+        raise ValueError(f"{name} cannot be negative.")
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(f"{name} must be a non-negative integer.")  # noqa: TRY004
 
 
 def run_scenario_simulation(scenario: Scenario):

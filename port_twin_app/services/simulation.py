@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass
+from decimal import Decimal
 from numbers import Real
 
 
@@ -70,7 +71,9 @@ def _is_finite_number(value: object) -> bool:
     """Return whether a value is a finite real number, excluding booleans."""
 
     return (
-        isinstance(value, Real) and not isinstance(value, bool) and math.isfinite(value)
+        isinstance(value, (Real, Decimal))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
     )
 
 
