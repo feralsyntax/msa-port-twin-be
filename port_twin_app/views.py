@@ -740,6 +740,7 @@ class MarinePredictionCreateAPIView(APIView):
         request=MarinePredictionRequestSerializer,
         responses={
             201: MarinePredictionSerializer,
+            400: APIErrorResponseSerializer,
             503: APIErrorResponseSerializer,
         },
     )
