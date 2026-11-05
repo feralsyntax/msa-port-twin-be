@@ -41,7 +41,7 @@ def run_scenario_simulation(scenario: Scenario):
     parameters = scenario.parameters
 
     if not isinstance(parameters, dict):
-        raise ValueError("Scenario parameters must be a dictionary.")
+        raise ValueError("Scenario parameters must be a dictionary.")  # noqa: TRY004
 
     for parameter in REQUIRED_PARAMETERS:
         if parameter not in parameters:
