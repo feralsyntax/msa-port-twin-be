@@ -59,12 +59,22 @@ def _validate_coordinates(dataset, name):
             raise ValueError(f"{name} {coordinate} must be strictly increasing.")
 
 
-def _validate_regular_coordinates(dataset, name):
+def _validate_regular_coordinates(
+    dataset: xr.Dataset,
+    name: str,
+) -> None:
+    """Validate regular grid spacing within coordinate precision."""
+
     for coordinate in ("latitude", "longitude"):
-        values = np.asarray(dataset[coordinate].values, dtype=float)
+        values = dataset[coordinate].values.astype(float)
         intervals = np.diff(values)
 
-        if not np.allclose(intervals, intervals[0], rtol=1e-5, atol=1e-8):
+        if not np.allclose(
+            intervals,
+            intervals[0],
+            rtol=0,
+            atol=2e-5,
+        ):
             raise ValueError(
                 f"{name} {coordinate} coordinates must be regularly spaced."
             )
