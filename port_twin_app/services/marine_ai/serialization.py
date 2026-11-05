@@ -131,7 +131,7 @@ def save_prepared_dataset(
     }
 
     for name, array in arrays.items():
-        if name not in ("sample_ids", "start_times", "partitions"):
+        if name not in ("sample_ids", "start_times", "partitions"):  # noqa: SIM102
             if not np.isfinite(array).all():
                 raise ValueError(f"Cannot save non-finite values in {name}.")
 
