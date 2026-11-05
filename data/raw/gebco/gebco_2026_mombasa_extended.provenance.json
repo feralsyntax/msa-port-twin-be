@@ -12,7 +12,7 @@
   "north": -3.0833282470703125,
   "start_time": null,
   "end_time": null,
-  "retrieved_at": "2026-11-05T05:41:56.083376+00:00",
+  "retrieved_at": "2026-11-05T06:39:30.836421+00:00",
   "file_path": "data/raw/gebco/gebco_2026_mombasa_extended.nc",
   "tid_file_path": "data/raw/gebco/gebco_2026_mombasa_extended_tid.nc",
   "file_format": "netcdf",
