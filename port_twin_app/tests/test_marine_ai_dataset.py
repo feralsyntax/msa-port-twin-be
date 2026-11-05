@@ -212,10 +212,10 @@ class MarineDatasetSplitTests(MarineDatasetSampleTests):
         test_start = min(sample.forecast_start for sample in result.test)
 
         self.assertTrue(
-            all(sample.forecast_end <= validation_start for sample in result.train)
+            all(sample.forecast_end < validation_start for sample in result.train)
         )
         self.assertTrue(
-            all(sample.forecast_end <= test_start for sample in result.validation)
+            all(sample.forecast_end < test_start for sample in result.validation)
         )
 
     def test_duplicate_sample_ids_are_rejected(self):
