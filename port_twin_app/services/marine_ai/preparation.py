@@ -193,10 +193,10 @@ def prepare_marine_dataset(
     """Build six-hour supervised samples and split them chronologically."""
 
     if not isinstance(marine, xr.Dataset):
-        raise ValueError("marine must be an xarray Dataset.")
+        raise ValueError("marine must be an xarray Dataset.")  # noqa: TRY004
 
     if not isinstance(bathymetry, xr.Dataset):
-        raise ValueError("bathymetry must be an xarray Dataset.")
+        raise ValueError("bathymetry must be an xarray Dataset.")  # noqa: TRY004
 
     _require_variables(marine, MARINE_VARIABLES, "Marine dataset")
     _require_variables(
