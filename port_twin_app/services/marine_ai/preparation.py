@@ -289,8 +289,10 @@ def prepare_marine_dataset(
                 target=target,
                 source="Copernicus Marine + GEBCO",
                 source_version=(
-                    f"Copernicus:{marine.attrs.get('dataset_version', 'unspecified')};"
-                    f"GEBCO:{bathymetry.attrs.get('source_version', 'unspecified')}"
+                    f"Copernicus:{marine.attrs.get('source_dataset_version', 'unspecified')}"
+                    f" ({marine.attrs.get('source_version', 'unspecified')});"
+                    f"GEBCO:{bathymetry.attrs.get('source_dataset_version', 'unspecified')}"
+                    f" ({bathymetry.attrs.get('source_version', 'unspecified')})"
                 ),
                 license_name=(
                     "Copernicus Marine Service Licence; "
