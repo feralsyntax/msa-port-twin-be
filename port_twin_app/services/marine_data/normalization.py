@@ -40,8 +40,8 @@ def normalize_copernicus_dataset(dataset: xr.Dataset) -> xr.Dataset:
 
     normalized = dataset[["zos", "uo", "vo"]].copy()
 
-    # Remove the vertical dimension from near-surface current fields.
-    for variable in ("uo", "vo"):
+    # Remove the singleton vertical dimension from near-surface fields
+    for variable in ("zos", "uo", "vo"):
         if "depth" in normalized[variable].dims:
             if normalized.sizes["depth"] != 1:
                 raise ValueError(

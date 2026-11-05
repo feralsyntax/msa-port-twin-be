@@ -6,14 +6,15 @@
   "variables": [
     "elevation_m"
   ],
-  "west": 39.5,
-  "south": -4.3,
-  "east": 40.0,
-  "north": -3.7,
+  "west": 40.16667175292969,
+  "south": -4.916664123535156,
+  "east": 40.91667175292969,
+  "north": -3.0833282470703125,
   "start_time": null,
   "end_time": null,
-  "retrieved_at": "2026-10-31T16:56:20.206349+00:00",
-  "file_path": "data/raw/gebco/gebco_2026.nc",
+  "retrieved_at": "2026-11-05T06:39:30.836421+00:00",
+  "file_path": "data/raw/gebco/gebco_2026_mombasa_extended.nc",
+  "tid_file_path": "data/raw/gebco/gebco_2026_mombasa_extended_tid.nc",
   "file_format": "netcdf",
-  "license_name": "GEBCO Grid: Public domain"
+  "license_name": "GEBCO public domain subject to its terms and disclaimer"
 }

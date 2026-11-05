@@ -10,7 +10,7 @@ from .base import MarineDataRequest, MarineDataSource
 class CopernicusMarineSource(MarineDataSource):
     """Marine data provider backed by Copernicus Marine."""
 
-    DEFAULT_DATASET_ID = "cmems_mod_glo_phy_my_0.083deg_P1D-m"
+    DEFAULT_DATASET_ID = "cmems_mod_glo_phy_anfc_0.083deg_PT1H-m"
 
     def __init__(
         self,
