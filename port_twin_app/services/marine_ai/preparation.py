@@ -145,14 +145,19 @@ def _source_metadata(marine, bathymetry):
     bathymetry_attrs = bathymetry.attrs
 
     marine_version = str(
-        marine_attrs.get("dataset_version")
-        or marine_attrs.get("source_version")
+        marine_attrs.get("source_dataset_version")
+        or marine_attrs.get("dataset_version")
         or "unspecified"
     )
+    marine_source_version = str(marine_attrs.get("source_version") or "unspecified")
+
     bathymetry_version = str(
-        bathymetry_attrs.get("dataset_version")
-        or bathymetry_attrs.get("source_version")
+        bathymetry_attrs.get("source_dataset_version")
+        or bathymetry_attrs.get("dataset_version")
         or "unspecified"
+    )
+    bathymetry_source_version = str(
+        bathymetry_attrs.get("source_version") or "unspecified"
     )
 
     marine_vertical_reference = marine_attrs.get("vertical_reference")
@@ -160,14 +165,17 @@ def _source_metadata(marine, bathymetry):
 
     return {
         "marine_source": marine_attrs.get("provider", "Copernicus Marine"),
-        "marine_dataset_id": marine_attrs.get("dataset_id"),
+        "marine_dataset_id": marine_attrs.get("source_dataset_id")
+        or marine_attrs.get("dataset_id"),
         "marine_dataset_version": marine_version,
+        "marine_source_version": marine_source_version,
         "marine_license": marine_attrs.get(
             "license_name", "Copernicus Marine Service Licence"
         ),
         "bathymetry_source": bathymetry_attrs.get("provider", "GEBCO"),
         "bathymetry_dataset_id": bathymetry_attrs.get("source_dataset_id", "GEBCO"),
         "bathymetry_dataset_version": bathymetry_version,
+        "bathymetry_source_version": bathymetry_source_version,
         "bathymetry_license": bathymetry_attrs.get(
             "license", "GEBCO public domain; subject to its terms and disclaimer"
         ),
