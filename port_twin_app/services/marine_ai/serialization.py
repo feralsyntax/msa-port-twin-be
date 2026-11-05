@@ -7,6 +7,7 @@ import numpy as np
 
 from .contracts import (
     CONTRACT_VERSION,
+    FORECAST_STEPS,
     MarineForecastConfig,
     MarineGrid,
     MarinePredictionRequest,
@@ -236,7 +237,7 @@ def load_prepared_dataset(
 
     sample_count = initial_states.shape[0]
 
-    if targets.shape != (sample_count, 6, 3, ny, nx):
+    if targets.shape != (sample_count, FORECAST_STEPS, 3, ny, nx):
         raise ValueError("Saved targets have an invalid shape.")
 
     for name, values in (
