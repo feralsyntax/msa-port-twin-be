@@ -59,6 +59,17 @@ def _validate_coordinates(dataset, name):
             raise ValueError(f"{name} {coordinate} must be strictly increasing.")
 
 
+def _validate_regular_coordinates(dataset, name):
+    for coordinate in ("latitude", "longitude"):
+        values = np.asarray(dataset[coordinate].values, dtype=float)
+        intervals = np.diff(values)
+
+        if not np.allclose(intervals, intervals[0], rtol=1e-5, atol=1e-8):
+            raise ValueError(
+                f"{name} {coordinate} coordinates must be regularly spaced."
+            )
+
+
 def _validate_grid_alignment(marine, bathymetry):
     for coordinate in ("latitude", "longitude"):
         marine_values = np.asarray(marine[coordinate].values)
@@ -186,7 +197,11 @@ def _source_metadata(marine, bathymetry):
         "vertical_reference_warning": (
             "Marine water level and GEBCO elevation use separately documented "
             "vertical references. No datum transformation has been applied."
-            if marine_vertical_reference != bathymetry_vertical_reference
+            if (
+                not marine_vertical_reference
+                or not bathymetry_vertical_reference
+                or marine_vertical_reference != bathymetry_vertical_reference
+            )
             else None
         ),
     }
@@ -213,6 +228,8 @@ def prepare_marine_dataset(
 
     _validate_coordinates(marine, "Marine dataset")
     _validate_coordinates(bathymetry, "Bathymetry dataset")
+    _validate_regular_coordinates(marine, "Marine dataset")
+    _validate_regular_coordinates(bathymetry, "Bathymetry dataset")
     _validate_grid_alignment(marine, bathymetry)
 
     times = _validate_hourly_time(marine)
@@ -289,9 +306,9 @@ def prepare_marine_dataset(
                 target=target,
                 source="Copernicus Marine + GEBCO",
                 source_version=(
-                    f"Copernicus:{marine.attrs.get('source_dataset_version', 'unspecified')}"
+                    f"Copernicus:{marine.attrs.get('source_dataset_version') or marine.attrs.get('dataset_version', 'unspecified')}"
                     f" ({marine.attrs.get('source_version', 'unspecified')});"
-                    f"GEBCO:{bathymetry.attrs.get('source_dataset_version', 'unspecified')}"
+                    f"GEBCO:{bathymetry.attrs.get('source_dataset_version') or bathymetry.attrs.get('dataset_version', 'unspecified')}"
                     f" ({bathymetry.attrs.get('source_version', 'unspecified')})"
                 ),
                 license_name=(
