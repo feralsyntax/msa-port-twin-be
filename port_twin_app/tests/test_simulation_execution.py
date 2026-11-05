@@ -76,12 +76,43 @@ class SimulationExecutionTests(TestCase):
             2,
         )
 
+        summary_result = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="summary",
+        )
         self.assertEqual(
-            SimulationResult.objects.get(
-                simulation_run=self.simulation_run,
-                result_type="summary",
-            ).data["vessels_served"],
-            1,
+            summary_result.data,
+            {
+                "total_arrivals": 1,
+                "vessels_served": 1,
+                "vessels_waiting": 0,
+                "vessels_in_service": 0,
+                "average_waiting_hours": 0,
+                "average_turnaround_hours": 8,
+                "berth_utilization_percent": 33.33,
+            },
+        )
+
+        vessel_result = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="vessel_results",
+        )
+        self.assertEqual(
+            vessel_result.data,
+            {
+                "vessels": [
+                    {
+                        "vessel_id": "test-vessel-1",
+                        "arrival_hour": 0,
+                        "berth_id": "test-berth-1",
+                        "service_start_hour": 0,
+                        "departure_hour": 8,
+                        "waiting_hours": 0,
+                        "status": "completed",
+                        "reason": "",
+                    }
+                ]
+            },
         )
 
     def test_failed_run_records_error(self):
@@ -144,6 +175,23 @@ class SimulationExecutionTests(TestCase):
 
         mock_simulation.assert_not_called()
 
+    def test_running_run_cannot_be_executed_again(self):
+        self.simulation_run.status = SimulationRun.Status.RUNNING
+        self.simulation_run.save(update_fields=["status"])
+
+        with (
+            patch(
+                "port_twin_app.services.simulation_execution.run_scenario_simulation"
+            ) as mock_simulation,
+            self.assertRaisesMessage(
+                ValueError,
+                "Only pending simulation runs can be executed.",
+            ),
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        mock_simulation.assert_not_called()
+
     def test_failed_run_does_not_persist_partial_results(self):
         from port_twin_app.services.simulation import (
             SimulationOutput,
@@ -181,7 +229,10 @@ class SimulationExecutionTests(TestCase):
 
         self.simulation_run.refresh_from_db()
 
-        self.assertEqual(self.simulation_run.status, SimulationRun.Status.FAILED)
+        self.assertEqual(
+            self.simulation_run.status,
+            SimulationRun.Status.FAILED,
+        )
         self.assertEqual(
             self.simulation_run.error_message,
             "Simulation execution failed. Check server logs for details.",
