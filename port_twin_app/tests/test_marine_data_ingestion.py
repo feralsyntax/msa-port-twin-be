@@ -466,6 +466,32 @@ class MarineDataIngestionTests(SimpleTestCase):
                 metadata["dataset_version"],
                 "202311",
             )
+    
+    def test_closes_dataset_when_provenance_persistence_fails(self):
+        closed = []
+
+        class TrackingSource(StubMarineDataSource):
+            def fetch(self, request):
+                dataset = super().fetch(request)
+                dataset.set_close(lambda: closed.append(True))
+                return dataset
+
+        with patch.object(  # noqa: SIM117
+            MarineDataProvenance,
+            "save",
+            side_effect=OSError("Unable to write provenance"),
+        ):
+            with self.assertRaisesRegex(
+                OSError,
+                "Unable to write provenance",
+            ):
+                ingest_marine_data(
+                    TrackingSource(self.source_file),
+                    self.request,
+                    license_name="Test license",
+                )
+
+        self.assertEqual(closed, [True])
 
     def test_bathymetry_ingestion_records_tid_file_path(self):
         source_file = Path(self.temp_dir.name) / "gebco.nc"
