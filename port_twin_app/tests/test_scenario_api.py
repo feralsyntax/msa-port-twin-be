@@ -89,4 +89,4 @@ class ScenarioAPITests(APITestCase):
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
-        self.assertIn("parameters", response.data)
+        self.assertIn("parameters", response.data["error"]["details"])

@@ -103,7 +103,7 @@ class VesselAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("imo_number", response.data)
+        self.assertIn("imo_number", response.data["error"]["details"])
 
     def test_register_vessel_rejects_duplicate_mmsi(self):
         payload = {
@@ -118,7 +118,7 @@ class VesselAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("mmsi", response.data)
+        self.assertIn("mmsi", response.data["error"]["details"])
 
     def test_register_vessel_requires_name(self):
         response = self.client.post(
@@ -128,7 +128,7 @@ class VesselAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("name", response.data)
+        self.assertIn("name", response.data["error"]["details"])
 
 
 class BerthAPITests(APITestCase):
@@ -580,4 +580,4 @@ class ScenarioAPITests(APITestCase):
             response.status_code,
             status.HTTP_400_BAD_REQUEST,
         )
-        self.assertIn("parameters", response.data)
+        self.assertIn("parameters", response.data["error"]["details"])
