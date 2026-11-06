@@ -887,3 +887,20 @@ class BathymetryIngestionTests(SimpleTestCase):
                 self.request,
                 license_name=" ",
             )
+
+    def test_ingestion_preserves_shared_missing_observations(self):
+        result = ingest_marine_data(
+            StubMarineDataSource(self.source_file),
+            self.request,
+            license_name="Test license",
+        )
+
+        for variable in (
+            "sea_surface_height_m",
+            "current_u_ms",
+            "current_v_ms",
+        ):
+            self.assertTrue(
+                np.isnan(result.dataset[variable].values[:, 0, 0]).all(),
+                msg=f"{variable} should preserve missing observations.",
+            )
