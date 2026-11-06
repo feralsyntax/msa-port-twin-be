@@ -904,3 +904,81 @@ class BathymetryIngestionTests(SimpleTestCase):
                 np.isnan(result.dataset[variable].values[:, 0, 0]).all(),
                 msg=f"{variable} should preserve missing observations.",
             )
+    
+    def test_ingests_larger_marine_dataset(self):
+        time_count = 24
+        latitude_count = 40
+        longitude_count = 50
+
+        dataset = xr.Dataset(
+            {
+                "zos": (
+                    ("time", "latitude", "longitude"),
+                    np.full(
+                        (time_count, latitude_count, longitude_count),
+                        0.48,
+                        dtype=np.float32,
+                    ),
+                    {"units": "m"},
+                ),
+                "uo": (
+                    ("time", "depth", "latitude", "longitude"),
+                    np.full(
+                        (time_count, 1, latitude_count, longitude_count),
+                        0.12,
+                        dtype=np.float32,
+                    ),
+                    {"units": "m s-1"},
+                ),
+                "vo": (
+                    ("time", "depth", "latitude", "longitude"),
+                    np.full(
+                        (time_count, 1, latitude_count, longitude_count),
+                        0.24,
+                        dtype=np.float32,
+                    ),
+                    {"units": "m s-1"},
+                ),
+            },
+            coords={
+                "time": np.arange(
+                    np.datetime64("2020-01-01"),
+                    np.datetime64("2020-01-25"),
+                ),
+                "depth": [0.494],
+                "latitude": np.linspace(-4.3, -3.7, latitude_count),
+                "longitude": np.linspace(39.5, 40.0, longitude_count),
+            },
+            attrs={
+                "provider": "Copernicus Marine",
+                "source_dataset_id": "test-dataset",
+                "source_dataset_version": "202311",
+                "source_version": "GLORYS12V1",
+                "source_file_path": str(self.source_file),
+            },
+        )
+
+        class LargerDatasetSource(MarineDataSource):
+            def fetch(self, request):
+                return dataset
+
+        result = ingest_marine_data(
+            LargerDatasetSource(),
+            self.request,
+            license_name="Test license",
+        )
+
+        self.assertEqual(
+            result.dataset["sea_surface_height_m"].shape,
+            (time_count, latitude_count, longitude_count),
+        )
+
+        self.assertEqual(
+            result.dataset["current_u_ms"].shape,
+            (time_count, latitude_count, longitude_count),
+        )
+
+        self.assertEqual(
+            result.dataset["current_v_ms"].shape,
+            (time_count, latitude_count, longitude_count),
+        )
