@@ -1,6 +1,6 @@
-from decimal import Decimal
 import math
 import re
+from decimal import Decimal
 
 from django.contrib.gis.geos import Point
 from rest_framework import serializers
