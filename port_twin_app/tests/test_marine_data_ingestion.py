@@ -293,6 +293,8 @@ class MarineDataNormalizationTests(SimpleTestCase):
         with self.assertRaisesRegex(ValueError, "unsupported units"):
             normalize_copernicus_dataset(dataset)
 
+
+class BathymetryNormalizationTests(SimpleTestCase):
     def test_normalizes_gebco_elevation_to_positive_downward_depth(self):
         normalized = normalize_gebco_bathymetry(create_test_gebco_dataset())
 
@@ -467,37 +469,128 @@ class MarineDataIngestionTests(SimpleTestCase):
                 "202311",
             )
 
-    def test_bathymetry_ingestion_records_tid_file_path(self):
-        source_file = Path(self.temp_dir.name) / "gebco.nc"
-        tid_file = Path(self.temp_dir.name) / "gebco_tid.nc"
+    def test_closes_dataset_when_provenance_persistence_fails(self):
+        closed = []
 
-        request = BathymetryRequest(
-            west=39.5,
-            south=-4.3,
-            east=40.0,
-            north=-3.7,
+        class TrackingSource(StubMarineDataSource):
+            def fetch(self, request):
+                dataset = super().fetch(request)
+                dataset.set_close(lambda: closed.append(True))
+                return dataset
+
+        with (
+            patch.object(
+                MarineDataProvenance,
+                "save",
+                side_effect=OSError("Unable to write provenance"),
+            ),
+            self.assertRaisesRegex(
+                OSError,
+                "Unable to write provenance",
+            ),
+        ):
+            ingest_marine_data(
+                TrackingSource(self.source_file),
+                self.request,
+                license_name="Test license",
+            )
+
+        self.assertEqual(closed, [True])
+
+    def test_ingestion_preserves_shared_missing_observations(self):
+        result = ingest_marine_data(
+            StubMarineDataSource(self.source_file),
+            self.request,
+            license_name="Test license",
         )
 
-        result = ingest_bathymetry_data(
-            StubBathymetryDataSource(
-                file_path=source_file,
-                tid_file_path=tid_file,
-            ),
-            request,
+        for variable in (
+            "sea_surface_height_m",
+            "current_u_ms",
+            "current_v_ms",
+        ):
+            self.assertTrue(
+                np.isnan(result.dataset[variable].values[:, 0, 0]).all(),
+                msg=f"{variable} should preserve missing observations.",
+            )
+
+    def test_ingests_larger_marine_dataset(self):
+        time_count = 24
+        latitude_count = 40
+        longitude_count = 50
+
+        dataset = xr.Dataset(
+            {
+                "zos": (
+                    ("time", "latitude", "longitude"),
+                    np.full(
+                        (time_count, latitude_count, longitude_count),
+                        0.48,
+                        dtype=np.float32,
+                    ),
+                    {"units": "m"},
+                ),
+                "uo": (
+                    ("time", "depth", "latitude", "longitude"),
+                    np.full(
+                        (time_count, 1, latitude_count, longitude_count),
+                        0.12,
+                        dtype=np.float32,
+                    ),
+                    {"units": "m s-1"},
+                ),
+                "vo": (
+                    ("time", "depth", "latitude", "longitude"),
+                    np.full(
+                        (time_count, 1, latitude_count, longitude_count),
+                        0.24,
+                        dtype=np.float32,
+                    ),
+                    {"units": "m s-1"},
+                ),
+            },
+            coords={
+                "time": np.arange(
+                    np.datetime64("2020-01-01"),
+                    np.datetime64("2020-01-25"),
+                ),
+                "depth": [0.494],
+                "latitude": np.linspace(-4.3, -3.7, latitude_count),
+                "longitude": np.linspace(39.5, 40.0, longitude_count),
+            },
+            attrs={
+                "provider": "Copernicus Marine",
+                "source_dataset_id": "test-dataset",
+                "source_dataset_version": "202311",
+                "source_version": "GLORYS12V1",
+                "source_file_path": str(self.source_file),
+            },
+        )
+
+        class LargerDatasetSource(MarineDataSource):
+            def fetch(self, request):
+                return dataset
+
+        result = ingest_marine_data(
+            LargerDatasetSource(),
+            self.request,
             license_name="Test license",
         )
 
         self.assertEqual(
-            result.provenance.tid_file_path,
-            str(tid_file),
+            result.dataset["sea_surface_height_m"].shape,
+            (time_count, latitude_count, longitude_count),
         )
 
-        metadata = json.loads(
-            Path(result.provenance_file_path).read_text(encoding="utf-8")
+        self.assertEqual(
+            result.dataset["current_u_ms"].shape,
+            (time_count, latitude_count, longitude_count),
         )
 
-        self.assertEqual(metadata["file_path"], str(source_file))
-        self.assertEqual(metadata["tid_file_path"], str(tid_file))
+        self.assertEqual(
+            result.dataset["current_v_ms"].shape,
+            (time_count, latitude_count, longitude_count),
+        )
 
 
 class CopernicusMarineSourceTests(SimpleTestCase):
@@ -853,6 +946,30 @@ class BathymetryIngestionTests(SimpleTestCase):
         self.assertIsNone(metadata["start_time"])
         self.assertIsNone(metadata["end_time"])
         self.assertEqual(metadata["license_name"], "Public domain")
+
+    def test_bathymetry_ingestion_records_tid_file_path(self):
+        tid_file = Path(self.temp_dir.name) / "gebco_tid.nc"
+
+        result = ingest_bathymetry_data(
+            StubBathymetryDataSource(
+                file_path=self.source_file,
+                tid_file_path=tid_file,
+            ),
+            self.request,
+            license_name="Test license",
+        )
+
+        self.assertEqual(
+            result.provenance.tid_file_path,
+            str(tid_file),
+        )
+
+        metadata = json.loads(
+            Path(result.provenance_file_path).read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(metadata["file_path"], str(self.source_file))
+        self.assertEqual(metadata["tid_file_path"], str(tid_file))
 
     def test_rejects_empty_license(self):
         with self.assertRaises(ValueError):

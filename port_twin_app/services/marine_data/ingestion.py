@@ -60,6 +60,9 @@ def ingest_marine_data(
     # 1. Retrieve the original dataset.
     raw_dataset = source.fetch(request)
 
+    if not isinstance(raw_dataset, xr.Dataset):
+        raise TypeError("Marine data source must return an xarray.Dataset.")
+
     try:
         # 2. Validate source metadata before processing.
         validate_source_metadata(raw_dataset)
@@ -115,6 +118,9 @@ def ingest_bathymetry_data(
 
     # 1. Retrieve the original bathymetry dataset.
     raw_dataset = source.fetch(request)
+
+    if not isinstance(raw_dataset, xr.Dataset):
+        raise TypeError("Bathymetry data source must return an xarray.Dataset.")
 
     try:
         # 2. Validate source metadata before processing.

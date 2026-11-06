@@ -2,6 +2,7 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 from django.test import SimpleTestCase
@@ -10,6 +11,7 @@ from port_twin_app.services.marine_ai.contracts import (
     MarineForecastConfig,
     MarineGrid,
     MarinePredictionRequest,
+    MarinePredictionResult,
 )
 from port_twin_app.services.marine_ai.inference import (
     MarineInferenceService,
@@ -210,3 +212,43 @@ class MarineInferenceServiceTests(SimpleTestCase):
             "request must be a MarinePredictionRequest instance.",
         ):
             service.predict({"invalid": "request"})
+
+    @patch("port_twin_app.services.marine_ai.inference.predict")
+    def test_propagates_inference_failure(self, mock_predict):
+        service = MarineInferenceService(self.checkpoint_path)
+
+        mock_predict.side_effect = RuntimeError("Model inference failed.")
+
+        with self.assertRaisesMessage(
+            RuntimeError,
+            "Model inference failed.",
+        ):
+            service.predict(self.request)
+
+    @patch("port_twin_app.services.marine_ai.inference.predict")
+    def test_rejects_prediction_with_incorrect_forecast_dimensions(
+        self,
+        mock_predict,
+    ):
+        service = MarineInferenceService(self.checkpoint_path)
+
+        invalid_result = MarinePredictionResult(
+            water_level_m=[
+                [[0.5 for _ in range(8)] for _ in range(8)] for _ in range(5)
+            ],
+            current_u_ms=[
+                [[2.0 for _ in range(8)] for _ in range(8)] for _ in range(5)
+            ],
+            current_v_ms=[
+                [[1.0 for _ in range(8)] for _ in range(8)] for _ in range(5)
+            ],
+            model_version=MODEL_VERSION,
+        )
+
+        mock_predict.return_value = invalid_result
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "water_level_m has shape (5, 8, 8); expected (6, 8, 8).",
+        ):
+            service.predict(self.request)

@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 from django.test import override_settings
 from rest_framework import status
@@ -184,3 +185,45 @@ class MarinePredictionAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], prediction_id)
+
+    @patch("port_twin_app.views.get_configured_marine_inference_service")
+    def test_inference_runtime_failure_returns_503_without_persisting(
+        self,
+        mock_get_service,
+    ):
+        mock_service = mock_get_service.return_value
+        mock_service.predict.side_effect = RuntimeError("Simulated inference failure")
+
+        response = self.client.post(
+            self.create_url,
+            make_api_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+        self.assertEqual(MarinePrediction.objects.count(), 0)
+        mock_service.predict.assert_called_once()
+
+    @patch(
+        "port_twin_app.models.MarinePrediction.save",
+        side_effect=RuntimeError("Simulated database failure"),
+    )
+    def test_database_persistence_failure_returns_500_without_persisting(
+        self,
+        mock_save,
+    ):
+        response = self.client.post(
+            self.create_url,
+            make_api_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        self.assertEqual(MarinePrediction.objects.count(), 0)
+        mock_save.assert_called_once()

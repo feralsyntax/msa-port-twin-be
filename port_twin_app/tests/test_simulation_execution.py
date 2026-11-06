@@ -1,6 +1,8 @@
+import threading
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.db import connections
+from django.test import TestCase, TransactionTestCase
 
 from port_twin_app.models import Scenario, SimulationResult, SimulationRun
 from port_twin_app.services.simulation_execution import (
@@ -239,4 +241,145 @@ class SimulationExecutionTests(TestCase):
         )
         self.assertFalse(
             SimulationResult.objects.filter(simulation_run=self.simulation_run).exists()
+        )
+
+
+class ConcurrentSimulationExecutionTests(TransactionTestCase):
+    def setUp(self):
+        self.scenario = Scenario.objects.create(
+            name="Concurrent Execution Test",
+            description="Scenario for concurrent execution testing.",
+            parameters={
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 1,
+                "average_service_time_hours": 8,
+                "arrival_interval_hours": 2,
+                "available_berths": 2,
+                "marine_conditions_enabled": True,
+                "ai_predictions_enabled": False,
+            },
+            status="ready",
+        )
+        self.simulation_run = SimulationRun.objects.create(scenario=self.scenario)
+
+    def test_concurrent_execution_rejects_duplicate_run(self):
+        from port_twin_app.services.simulation import (
+            SimulationOutput,
+            SimulationSummary,
+        )
+
+        simulation_output = SimulationOutput(
+            vessel_results=(),
+            summary=SimulationSummary(
+                total_arrivals=0,
+                vessels_served=0,
+                vessels_waiting=0,
+                vessels_in_service=0,
+                average_waiting_hours=0,
+                average_turnaround_hours=0,
+                berth_utilization_percent=0,
+            ),
+        )
+
+        first_execution_started = threading.Event()
+        allow_first_execution_to_finish = threading.Event()
+
+        first_errors = []
+        second_errors = []
+
+        def simulate(*args, **kwargs):
+            first_execution_started.set()
+
+            if not allow_first_execution_to_finish.wait(timeout=10):
+                raise TimeoutError("Concurrent test timed out.")
+
+            return simulation_output
+
+        def execute_first():
+            connections.close_all()
+
+            try:
+                run = SimulationRun.objects.get(pk=self.simulation_run.pk)
+                execute_simulation_run(run)
+            except Exception as exc:  # noqa: BLE001
+                first_errors.append(exc)
+            finally:
+                connections.close_all()
+
+        def execute_second():
+            connections.close_all()
+
+            try:
+                run = SimulationRun.objects.get(pk=self.simulation_run.pk)
+                execute_simulation_run(run)
+            except Exception as exc:  # noqa: BLE001
+                second_errors.append(exc)
+            finally:
+                connections.close_all()
+
+        second_thread = None
+
+        with patch(
+            "port_twin_app.services.simulation_execution.run_scenario_simulation",
+            side_effect=simulate,
+        ) as mock_simulation:
+            first_thread = threading.Thread(target=execute_first)
+            first_thread.start()
+
+            started = first_execution_started.wait(timeout=5)
+
+            try:
+                if started:
+                    second_thread = threading.Thread(target=execute_second)
+                    second_thread.start()
+                    second_thread.join(timeout=5)
+
+                    self.assertFalse(
+                        second_thread.is_alive(),
+                        "Second execution did not finish in time.",
+                    )
+            finally:
+                allow_first_execution_to_finish.set()
+
+                first_thread.join(timeout=10)
+
+                if second_thread is not None:
+                    second_thread.join(timeout=10)
+
+        self.assertFalse(
+            first_thread.is_alive(),
+            "First execution did not finish in time.",
+        )
+
+        if second_thread is not None:
+            self.assertFalse(
+                second_thread.is_alive(),
+                "Second execution did not finish in time.",
+            )
+
+        self.assertTrue(
+            started,
+            f"First execution failed before reaching simulation: {first_errors!r}",
+        )
+
+        self.assertEqual(first_errors, [])
+        self.assertEqual(len(second_errors), 1)
+        self.assertIsInstance(second_errors[0], ValueError)
+        self.assertEqual(
+            str(second_errors[0]),
+            "Only pending simulation runs can be executed.",
+        )
+
+        mock_simulation.assert_called_once()
+
+        self.simulation_run.refresh_from_db()
+
+        self.assertEqual(
+            self.simulation_run.status,
+            SimulationRun.Status.COMPLETED,
+        )
+
+        self.assertEqual(
+            SimulationResult.objects.filter(simulation_run=self.simulation_run).count(),
+            2,
         )
