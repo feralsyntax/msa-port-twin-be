@@ -1,6 +1,8 @@
+from decimal import Decimal
 import math
 import re
 
+from django.contrib.gis.geos import Point
 from rest_framework import serializers
 
 from port_twin_app.models import (
@@ -117,6 +119,58 @@ class AssignedVesselSerializer(serializers.ModelSerializer):
             "vessel_type",
         ]
         read_only_fields = fields
+
+
+class BerthCreateRequestSerializer(serializers.ModelSerializer):
+    longitude = serializers.FloatField(min_value=-180, max_value=180)
+    latitude = serializers.FloatField(min_value=-90, max_value=90)
+
+    max_vessel_length = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+    )
+    max_vessel_draft = serializers.DecimalField(
+        max_digits=8,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        required=False,
+        allow_null=True,
+    )
+
+    class Meta:
+        model = Berth
+        fields = [  # noqa: RUF012
+            "name",
+            "longitude",
+            "latitude",
+            "max_vessel_length",
+            "max_vessel_draft",
+            "status",
+        ]
+
+    def validate_name(self, value):
+        value = value.strip()
+
+        if not value:
+            raise serializers.ValidationError("Berth name cannot be empty.")
+
+        if Berth.objects.filter(name__iexact=value).exists():
+            raise serializers.ValidationError("A berth with this name already exists.")
+
+        return value
+
+    def create(self, validated_data):
+        longitude = validated_data.pop("longitude")
+        latitude = validated_data.pop("latitude")
+
+        validated_data["location"] = Point(
+            longitude,
+            latitude,
+            srid=4326,
+        )
+
+        return Berth.objects.create(**validated_data)
 
 
 class BerthSerializer(serializers.ModelSerializer):

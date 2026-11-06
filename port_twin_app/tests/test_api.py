@@ -149,6 +149,95 @@ class BerthAPITests(APITestCase):
             berth=self.berth,
         )
 
+    def test_create_berth(self):
+        payload = {
+            "name": "New Berth",
+            "longitude": 39.66,
+            "latitude": -4.06,
+            "max_vessel_length": "280.00",
+            "max_vessel_draft": "13.00",
+            "status": Berth.OperationalStatus.ACTIVE,
+        }
+
+        response = self.client.post(
+            reverse("port_twin_app:berth-list"),
+            payload,
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["name"], payload["name"])
+        self.assertAlmostEqual(response.data["longitude"], 39.66)
+        self.assertAlmostEqual(response.data["latitude"], -4.06)
+        self.assertFalse(response.data["is_occupied"])
+        self.assertIsNone(response.data["assigned_vessel"])
+
+        berth = Berth.objects.get(name="New Berth")
+        self.assertAlmostEqual(berth.location.x, 39.66)
+        self.assertAlmostEqual(berth.location.y, -4.06)
+
+    def test_create_berth_rejects_duplicate_name(self):
+        response = self.client.post(
+            reverse("port_twin_app:berth-list"),
+            {
+                "name": self.berth.name,
+                "longitude": 39.66,
+                "latitude": -4.06,
+                "max_vessel_length": "280.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("name", response.data["error"]["details"])
+
+    def test_create_berth_requires_coordinates(self):
+        response = self.client.post(
+            reverse("port_twin_app:berth-list"),
+            {
+                "name": "Missing Coordinates",
+                "max_vessel_length": "280.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("longitude", response.data["error"]["details"])
+        self.assertIn("latitude", response.data["error"]["details"])
+
+    def test_create_berth_rejects_invalid_coordinates(self):
+        response = self.client.post(
+            reverse("port_twin_app:berth-list"),
+            {
+                "name": "Invalid Coordinates",
+                "longitude": 200,
+                "latitude": -4.06,
+                "max_vessel_length": "280.00",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("longitude", response.data["error"]["details"])
+
+    def test_create_berth_rejects_non_positive_dimensions(self):
+        response = self.client.post(
+            reverse("port_twin_app:berth-list"),
+            {
+                "name": "Invalid Dimensions",
+                "longitude": 39.66,
+                "latitude": -4.06,
+                "max_vessel_length": "0",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "max_vessel_length",
+            response.data["error"]["details"],
+        )
+
     def test_list_berths_serializes_coordinates(self):
         response = self.client.get(reverse("port_twin_app:berth-list"))
 
@@ -560,7 +649,7 @@ class ScenarioAPITests(APITestCase):
             self.scenario.parameters,
             self.valid_parameters,
         )
-    
+
     def test_create_scenario_rejects_unknown_parameters(self):
         parameters = {
             **self.valid_parameters,
