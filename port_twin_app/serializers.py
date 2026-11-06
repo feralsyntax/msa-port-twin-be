@@ -1,3 +1,4 @@
+from decimal import Decimal
 import math
 import re
 
@@ -127,12 +128,12 @@ class BerthCreateRequestSerializer(serializers.ModelSerializer):
     max_vessel_length = serializers.DecimalField(
         max_digits=8,
         decimal_places=2,
-        min_value=0.01,
+        min_value=Decimal("0.01"),
     )
     max_vessel_draft = serializers.DecimalField(
         max_digits=8,
         decimal_places=2,
-        min_value=0.01,
+        min_value=Decimal("0.01"),
         required=False,
         allow_null=True,
     )
