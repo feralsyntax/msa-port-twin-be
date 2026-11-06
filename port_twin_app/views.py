@@ -23,6 +23,7 @@ from port_twin_app.models import (
 )
 from port_twin_app.serializers import (
     APIErrorResponseSerializer,
+    BerthCreateRequestSerializer,
     BerthSerializer,
     DataStatusSerializer,
     MarineConditionQuerySerializer,
@@ -117,13 +118,50 @@ class VesselDetailAPIView(generics.RetrieveAPIView):
     serializer_class = VesselResponseSerializer
 
 
-class BerthListAPIView(generics.ListAPIView):
+@extend_schema_view(
+    get=extend_schema(
+        responses=BerthSerializer(many=True),
+        operation_id="berths_list",
+        description="Retrieve a paginated list of berths.",
+    ),
+    post=extend_schema(
+        request=BerthCreateRequestSerializer,
+        responses={
+            201: BerthSerializer,
+            400: APIErrorResponseSerializer,
+        },
+        operation_id="berths_create",
+        description="Create a new berth.",
+    ),
+)
+class BerthListAPIView(generics.ListCreateAPIView):
     """
-    Get a list of all berths
+    Get a list of all berths or create a new berth.
     """
 
     queryset = Berth.objects.select_related("assigned_vessel")
     serializer_class = BerthSerializer
+
+    def create(self, request, *args, **kwargs):
+        request_serializer = BerthCreateRequestSerializer(
+            data=request.data,
+            context=self.get_serializer_context(),
+        )
+        request_serializer.is_valid(raise_exception=True)
+        berth = request_serializer.save()
+
+        response_serializer = BerthSerializer(
+            berth,
+            context=self.get_serializer_context(),
+        )
+
+        headers = self.get_success_headers(response_serializer.data)
+
+        return Response(
+            response_serializer.data,
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
 
 
 class BerthDetailAPIView(generics.RetrieveAPIView):
