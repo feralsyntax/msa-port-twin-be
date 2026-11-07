@@ -8,7 +8,7 @@ paths:
   /api/v1/berths/:
     get:
       operationId: berths_list
-      description: Get a list of all berths
+      description: Retrieve a paginated list of berths.
       parameters:
       - name: page
         required: false
@@ -26,6 +26,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedBerthList'
+          description: ''
+    post:
+      operationId: berths_create
+      description: Create a new berth.
+      tags:
+      - berths
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BerthCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/BerthCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/BerthCreateRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Berth'
+          description: ''
+        '400':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/APIErrorResponse'
           description: ''
   /api/v1/berths/{id}/:
     get:
@@ -742,6 +774,38 @@ components:
       - name
       - status
       - updated_at
+    BerthCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        longitude:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+        latitude:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+        max_vessel_length:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+        max_vessel_draft:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,6}(?:\.\d{0,2})?$
+          nullable: true
+        status:
+          $ref: '#/components/schemas/BerthOperationalStatusEnum'
+      required:
+      - latitude
+      - longitude
+      - max_vessel_length
+      - name
     BerthOperationalStatusEnum:
       enum:
       - active
