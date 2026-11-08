@@ -64,12 +64,13 @@ class ScenarioSimulationRunnerTests(TestCase):
         ):
             run_scenario_simulation(self.scenario)
 
-    def test_requires_vessel_profile_when_arrivals_are_expected(self):
+    def test_requires_valid_vessel_profile_when_arrivals_are_expected(self):
         self.vessel.delete()
 
         with self.assertRaisesMessage(
             ValueError,
-            "At least one vessel profile is required to generate arrivals.",
+            "At least one vessel profile with valid length and draft "
+            "is required to generate arrivals.",
         ):
             run_scenario_simulation(self.scenario)
 
@@ -168,13 +169,46 @@ class ScenarioSimulationRunnerTests(TestCase):
         ):
             run_scenario_simulation(self.scenario)
 
-    def test_rejects_vessel_profile_with_missing_dimensions(self):
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    def test_skips_vessel_profiles_with_missing_dimensions(self, mock_run):
         self.vessel.length_overall = None
         self.vessel.save()
 
+        valid_vessel = Vessel.objects.create(
+            name="Valid Vessel",
+            length_overall=180,
+            draft=9,
+        )
+
+        run_scenario_simulation(self.scenario)
+
+        vessels, _, _ = mock_run.call_args.args
+
+        self.assertEqual(len(vessels), 2)
+        self.assertTrue(
+            all(vessel.length == 180 and vessel.draft == 9 for vessel in vessels)
+        )
+        self.assertTrue(
+            all(
+                vessel.vessel_id.startswith(f"{valid_vessel.id}-arrival-")
+                for vessel in vessels
+            )
+        )
+
+    def test_rejects_when_all_vessel_profiles_have_invalid_dimensions(self):
+        self.vessel.length_overall = None
+        self.vessel.save()
+
+        Vessel.objects.create(
+            name="Invalid Vessel",
+            length_overall=0,
+            draft=10,
+        )
+
         with self.assertRaisesMessage(
             ValueError,
-            "Vessel profiles must have valid length and draft dimensions.",
+            "At least one vessel profile with valid length and draft "
+            "is required to generate arrivals.",
         ):
             run_scenario_simulation(self.scenario)
 

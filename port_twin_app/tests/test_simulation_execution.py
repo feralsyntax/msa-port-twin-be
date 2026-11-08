@@ -118,10 +118,21 @@ class SimulationExecutionTests(TestCase):
         )
 
     def test_failed_run_records_error(self):
+        def fail_during_execution(scenario):
+            self.simulation_run.refresh_from_db()
+
+            self.assertEqual(
+                self.simulation_run.status,
+                SimulationRun.Status.RUNNING,
+            )
+            self.assertIsNotNone(self.simulation_run.started_at)
+
+            raise ValueError("Test simulation failure")
+
         with (
             patch(
                 "port_twin_app.services.simulation_execution.run_scenario_simulation",
-                side_effect=ValueError("Test simulation failure"),
+                side_effect=fail_during_execution,
             ),
             self.assertRaisesMessage(
                 ValueError,
@@ -132,15 +143,21 @@ class SimulationExecutionTests(TestCase):
 
         self.simulation_run.refresh_from_db()
 
-        self.assertEqual(self.simulation_run.status, "failed")
+        self.assertEqual(
+            self.simulation_run.status,
+            SimulationRun.Status.FAILED,
+        )
         self.assertEqual(
             self.simulation_run.error_message,
             "Simulation execution failed. Check server logs for details.",
         )
+        self.assertIsNotNone(self.simulation_run.started_at)
         self.assertIsNotNone(self.simulation_run.completed_at)
 
         self.assertFalse(
-            SimulationResult.objects.filter(simulation_run=self.simulation_run).exists()
+            SimulationResult.objects.filter(
+                simulation_run=self.simulation_run,
+            ).exists()
         )
 
     def test_completed_run_cannot_be_executed_again(self):
