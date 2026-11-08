@@ -66,28 +66,27 @@ def run_scenario_simulation(scenario: Scenario):
     available_berths = parameters.get("available_berths", 2)
     _validate_non_negative_integer(available_berths, "Available berths")
 
-    # Load vessel profiles to use as templates for simulated arrivals.
-    vessel_profiles = list(
-        Vessel.objects.all().order_by("id")[: config.expected_arrivals]
-    )
+    # Load valid vessel profiles to use as templates for simulated arrivals.
+    vessel_profiles = []
 
-    if config.expected_arrivals > 0 and not vessel_profiles:
-        raise ValueError(
-            "At least one vessel profile is required to generate arrivals."
-        )
+    if config.expected_arrivals > 0:
+        for profile in Vessel.objects.all().order_by("id").iterator():
+            if _is_valid_dimension(profile.length_overall) and _is_valid_dimension(
+                profile.draft
+            ):
+                vessel_profiles.append(profile)
 
-    # Validate database vessel dimensions before creating simulation inputs.
-    for profile in vessel_profiles:
-        if not (
-            _is_valid_dimension(profile.length_overall)
-            and _is_valid_dimension(profile.draft)
-        ):
+                if len(vessel_profiles) >= config.expected_arrivals:
+                    break
+
+        if not vessel_profiles:
             raise ValueError(
-                "Vessel profiles must have valid length and draft dimensions."
+                "At least one vessel profile with valid length and draft "
+                "is required to generate arrivals."
             )
 
     # Generate a distinct simulation vessel for each expected arrival.
-    # Reuse profile dimensions when fewer profiles than arrivals are available.
+    # Reuse valid profile dimensions when fewer profiles than arrivals exist.
     vessels = [
         SimulationVessel(
             vessel_id=f"{profile.id}-arrival-{index + 1}",
