@@ -199,7 +199,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.vessel.length_overall = None
         self.vessel.save()
 
-        invalid_vessel = Vessel.objects.create(
+        Vessel.objects.create(
             name="Invalid Vessel",
             length_overall=0,
             draft=10,
