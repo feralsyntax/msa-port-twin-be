@@ -14,11 +14,11 @@ from port_twin_app.services.marine_ai.contracts import (
 from port_twin_app.services.marine_ai.django_service import (
     get_marine_inference_service,
 )
-from port_twin_app.services.marine_ai.serialization import (
-    load_prepared_dataset,
-)
 from port_twin_app.services.marine_ai.inference import (
     MarineInferenceService,
+)
+from port_twin_app.services.marine_ai.serialization import (
+    load_prepared_dataset,
 )
 from port_twin_app.tests.test_marine_ai_inference import make_request
 from port_twin_app.tests.test_marine_prediction_api import make_api_payload
@@ -127,7 +127,6 @@ class TrainedMarineFNOAPITests(APITestCase):
                     self.assertEqual(len(row), 8)
                     self.assertTrue(all(math.isfinite(value) for value in row))
 
-
     def test_real_dataset_prediction_is_persisted_and_retrievable(self):
         """Verify API inference using an actual held-out Mombasa sample."""
 
@@ -196,9 +195,7 @@ class TrainedMarineFNOAPITests(APITestCase):
 
                 for row in step:
                     self.assertEqual(len(row), request.grid.nx)
-                    self.assertTrue(
-                        all(math.isfinite(value) for value in row)
-                    )
+                    self.assertTrue(all(math.isfinite(value) for value in row))
 
         detail_response = self.client.get(
             f"/api/v1/marine-predictions/{prediction.pk}/"
