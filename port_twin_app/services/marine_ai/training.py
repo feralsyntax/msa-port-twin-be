@@ -82,6 +82,34 @@ def _target_tensor(
     return fields.permute(1, 0, 2, 3).unsqueeze(0)
 
 
+def _fit_input_normalization(
+    samples: tuple[MarineDatasetSample, ...],
+    device: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Calculate per-channel input statistics from training samples only."""
+
+    if not samples:
+        raise ValueError("Training samples cannot be empty.")
+
+    inputs = torch.cat(
+        [request_to_tensor(sample.request, device=device) for sample in samples],
+        dim=0,
+    )
+
+    # Calculate one mean and standard deviation per input channel.
+    # Result shape: [1, 6, 1, 1].
+    mean = inputs.mean(dim=(0, 2, 3), keepdim=True)
+    std = inputs.std(dim=(0, 2, 3), keepdim=True, unbiased=False)
+
+    if not torch.isfinite(mean).all() or not torch.isfinite(std).all():
+        raise ValueError("Training inputs contain non-finite values.")
+
+    # Constant channels do not need scaling.
+    std = torch.where(std < 1e-6, torch.ones_like(std), std)
+
+    return mean, std
+
+
 def _fit_target_normalization(
     samples: tuple[MarineDatasetSample, ...],
     device: str,
@@ -116,10 +144,13 @@ def _normalized_sample_loss(
     device: str,
     mean: torch.Tensor,
     std: torch.Tensor,
+    input_mean: torch.Tensor,
+    input_std: torch.Tensor,
 ) -> torch.Tensor:
     """Calculate MSE against normalized target fields."""
 
     inputs = request_to_tensor(sample.request, device=device)
+    inputs = (inputs - input_mean) / input_std
     targets = _target_tensor(sample.target, device)
 
     if not torch.isfinite(targets).all():
@@ -150,6 +181,8 @@ def _evaluate(
     device: str,
     mean: torch.Tensor,
     std: torch.Tensor,
+    input_mean: torch.Tensor,
+    input_std: torch.Tensor,
 ) -> float:
     """Return mean normalized loss without updating model parameters."""
 
@@ -167,6 +200,8 @@ def _evaluate(
                 device,
                 mean,
                 std,
+                input_mean,
+                input_std,
             )
 
             if not torch.isfinite(loss):
@@ -214,6 +249,11 @@ def train_model(
         dataset.train,
         str(device),
     )
+    
+    input_mean, input_std = _fit_input_normalization(
+        dataset.train,
+        str(device),
+    )
 
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -239,6 +279,8 @@ def train_model(
                 str(device),
                 target_mean,
                 target_std,
+                input_mean,
+                input_std,
             )
 
             if not torch.isfinite(loss):
@@ -258,6 +300,8 @@ def train_model(
             str(device),
             target_mean,
             target_std,
+            input_mean,
+            input_std,
         )
 
         training_losses.append(training_loss)
@@ -267,15 +311,15 @@ def train_model(
             best_validation_loss = validation_loss
             best_epoch = epoch
 
-            # Preserve normalization statistics alongside the model.
             save_checkpoint(
                 model,
                 checkpoint_path,
                 optimizer=optimizer,
                 epoch=epoch,
+                input_mean=input_mean,
+                input_std=input_std,
             )
 
-            # Add normalization metadata to the saved checkpoint.
             checkpoint = torch.load(
                 checkpoint_path,
                 map_location="cpu",
