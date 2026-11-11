@@ -23,7 +23,8 @@ class TrainingConfig:
     epochs: int = 20
     learning_rate: float = 1e-3
     device: str = "cpu"
-    checkpoint_path: str = "artifacts/marine_fno.pt"
+    checkpoint_path: str = "artifacts/marine_fno_normalized.pt"
+    seed: int = 42
 
     def __post_init__(self):
         if isinstance(self.epochs, bool) or not isinstance(self.epochs, int):
@@ -47,6 +48,12 @@ class TrainingConfig:
             or not self.checkpoint_path.strip()
         ):
             raise ValueError("checkpoint_path must be a non-empty string.")
+
+        if isinstance(self.seed, bool) or not isinstance(self.seed, int):
+            raise ValueError("seed must be a non-negative integer.")  # noqa: TRY004
+
+        if self.seed < 0:
+            raise ValueError("seed must be a non-negative integer.")
 
 
 @dataclass(frozen=True)
@@ -249,7 +256,7 @@ def train_model(
         dataset.train,
         str(device),
     )
-    
+
     input_mean, input_std = _fit_input_normalization(
         dataset.train,
         str(device),
@@ -327,6 +334,17 @@ def train_model(
             )
             checkpoint["target_mean"] = target_mean.detach().cpu()
             checkpoint["target_std"] = target_std.detach().cpu()
+
+            checkpoint["training"] = {
+                "seed": config.seed,
+                "epochs_completed": epoch,
+                "training_losses": list(training_losses),
+                "validation_losses": list(validation_losses),
+                "best_validation_loss": best_validation_loss,
+                "best_epoch": best_epoch,
+                "learning_rate": config.learning_rate,
+            }
+
             torch.save(checkpoint, checkpoint_path)
 
     return TrainingResult(
