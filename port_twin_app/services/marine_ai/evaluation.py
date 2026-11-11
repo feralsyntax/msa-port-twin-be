@@ -60,40 +60,41 @@ def _result_tensor(result: MarinePredictionResult) -> torch.Tensor:
 def _baseline_prediction(
     request: MarinePredictionRequest,
 ) -> MarinePredictionResult:
-    """Create a simple persistence/zero-current baseline.
-
-    Water level remains equal to the initial water-level grid at every
-    forecast step. Both current components are assumed to be zero because
-    the request contract does not provide initial current grids.
-    """
+    """Repeat the initial state across every forecast step."""
 
     steps = request.forecast.steps
     nx = request.grid.nx
     ny = request.grid.ny
 
-    initial_level = torch.as_tensor(
+    def initial_grid(values, name: str) -> torch.Tensor:
+        tensor = torch.as_tensor(values, dtype=torch.float32)
+
+        if tuple(tensor.shape) != (ny, nx):
+            raise ValueError(f"{name} does not match the request grid.")
+
+        if not torch.isfinite(tensor).all():
+            raise ValueError(f"{name} contains non-finite values.")
+
+        return tensor
+
+    initial_level = initial_grid(
         request.initial_water_level_m,
-        dtype=torch.float32,
+        "initial_water_level_m",
     )
-
-    if tuple(initial_level.shape) != (ny, nx):
-        raise ValueError("initial_water_level_m does not match the request grid.")
-
-    if not torch.isfinite(initial_level).all():
-        raise ValueError("initial_water_level_m contains non-finite values.")
-
-    zero_current = torch.zeros(
-        steps,
-        ny,
-        nx,
-        dtype=torch.float32,
+    initial_current_u = initial_grid(
+        request.initial_current_u_ms,
+        "initial_current_u_ms",
+    )
+    initial_current_v = initial_grid(
+        request.initial_current_v_ms,
+        "initial_current_v_ms",
     )
 
     return MarinePredictionResult(
         water_level_m=[initial_level.tolist() for _ in range(steps)],
-        current_u_ms=zero_current.tolist(),
-        current_v_ms=zero_current.tolist(),
-        model_version="persistence-zero-current-baseline",
+        current_u_ms=[initial_current_u.tolist() for _ in range(steps)],
+        current_v_ms=[initial_current_v.tolist() for _ in range(steps)],
+        model_version="persistence-baseline",
     )
 
 
