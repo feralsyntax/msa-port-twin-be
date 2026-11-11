@@ -33,6 +33,13 @@ class MarineInferenceService:
 
         self.target_mean = checkpoint.get("target_mean")
         self.target_std = checkpoint.get("target_std")
+        self.input_mean = checkpoint.get("input_mean")
+        self.input_std = checkpoint.get("input_std")
+
+        if (self.input_mean is None) != (self.input_std is None):
+            raise ValueError(
+                "Checkpoint must contain both input_mean and input_std."
+            )
 
         if (self.target_mean is None) != (self.target_std is None):
             raise ValueError("Checkpoint must contain both target_mean and target_std.")
@@ -52,6 +59,8 @@ class MarineInferenceService:
             device=self.device,
             target_mean=self.target_mean,
             target_std=self.target_std,
+            input_mean=self.input_mean,
+            input_std=self.input_std,
         )
 
         result.validate_against(request)
