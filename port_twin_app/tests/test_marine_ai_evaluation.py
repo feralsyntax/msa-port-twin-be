@@ -134,28 +134,37 @@ class MarineEvaluationTests(SimpleTestCase):
             RegressionMetrics(mae=3.0, rmse=3.0),
         )
 
-    def test_baseline_persists_initial_water_level_and_zero_currents(self):
+    def test_baseline_persists_all_initial_fields(self):
         request = self.dataset.test[0].request
 
         baseline = _baseline_prediction(request)
         baseline.validate_against(request)
 
-        for step in baseline.water_level_m:
-            self.assertTrue(
-                torch.allclose(
-                    torch.tensor(step, dtype=torch.float32),
-                    torch.tensor(
-                        request.initial_water_level_m,
-                        dtype=torch.float32,
-                    ),
-                )
+        expected_fields = (
+            (baseline.water_level_m, request.initial_water_level_m),
+            (baseline.current_u_ms, request.initial_current_u_ms),
+            (baseline.current_v_ms, request.initial_current_v_ms),
+        )
+
+        for predictions, initial_values in expected_fields:
+            expected = torch.tensor(
+                initial_values,
+                dtype=torch.float32,
             )
 
-        for step in baseline.current_u_ms:
-            self.assertTrue(all(value == 0.0 for row in step for value in row))
+            self.assertEqual(
+                len(predictions),
+                request.forecast.steps,
+            )
 
-        for step in baseline.current_v_ms:
-            self.assertTrue(all(value == 0.0 for row in step for value in row))
+            for step in predictions:
+                actual = torch.tensor(step, dtype=torch.float32)
+                self.assertTrue(torch.allclose(actual, expected))
+
+        self.assertEqual(
+            baseline.model_version,
+            "persistence-baseline",
+        )
 
     def test_evaluation_reports_fno_and_baseline_metrics(self):
         result = evaluate_model(
