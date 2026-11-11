@@ -331,3 +331,36 @@ class MarineFNOModelTests(SimpleTestCase):
         outputs = layer(inputs)
 
         self.assertEqual(outputs.shape, inputs.shape)
+
+    def test_predict_applies_input_normalization(self):
+        input_mean = torch.zeros((1, INPUT_CHANNELS, 1, 1))
+        input_std = torch.ones((1, INPUT_CHANNELS, 1, 1))
+
+        input_mean[:, 0] = 20.0
+        input_std[:, 0] = 10.0
+
+        raw_result = predict(self.request, self.model)
+
+        normalized_result = predict(
+            self.request,
+            self.model,
+            input_mean=input_mean,
+            input_std=input_std,
+        )
+
+        self.assertNotEqual(
+            raw_result.water_level_m,
+            normalized_result.water_level_m,
+        )
+
+    def test_checkpoint_without_input_statistics_remains_supported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "legacy.pt"
+
+            save_checkpoint(self.model, checkpoint_path, epoch=1)
+
+            restored_model, checkpoint = load_checkpoint(checkpoint_path)
+
+            self.assertIsInstance(restored_model, MarineFNO)
+            self.assertNotIn("input_mean", checkpoint)
+            self.assertNotIn("input_std", checkpoint)
