@@ -12,11 +12,12 @@ from .contracts import (
     MarinePredictionResult,
 )
 
-MODEL_VERSION = "fno-0.2.0"
+MODEL_VERSION = "fno-0.3.0"
 
 INPUT_CHANNELS = 6
 OUTPUT_CHANNELS = 3
 
+INPUT_STATISTICS_SHAPE = (1, INPUT_CHANNELS, 1, 1)
 TARGET_STATISTICS_SHAPE = (1, 1, OUTPUT_CHANNELS, 1, 1)
 
 
@@ -317,6 +318,39 @@ def request_to_tensor(
     return inputs.unsqueeze(0)
 
 
+def _validate_input_statistics(
+    input_mean: torch.Tensor,
+    input_std: torch.Tensor,
+    device: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Validate and prepare input normalization statistics."""
+
+    mean = torch.as_tensor(
+        input_mean,
+        dtype=torch.float32,
+        device=device,
+    )
+    std = torch.as_tensor(
+        input_std,
+        dtype=torch.float32,
+        device=device,
+    )
+
+    if tuple(mean.shape) != INPUT_STATISTICS_SHAPE:
+        raise ValueError(f"input_mean must have shape {INPUT_STATISTICS_SHAPE}.")
+
+    if tuple(std.shape) != INPUT_STATISTICS_SHAPE:
+        raise ValueError(f"input_std must have shape {INPUT_STATISTICS_SHAPE}.")
+
+    if not torch.isfinite(mean).all():
+        raise ValueError("input_mean contains non-finite values.")
+
+    if not torch.isfinite(std).all() or torch.any(std <= 0):
+        raise ValueError("input_std must contain finite positive values.")
+
+    return mean, std
+
+
 def _validate_target_statistics(
     target_mean: torch.Tensor,
     target_std: torch.Tensor,
@@ -357,6 +391,8 @@ def predict(
     device: str = "cpu",
     target_mean: torch.Tensor | None = None,
     target_std: torch.Tensor | None = None,
+    input_mean: torch.Tensor | None = None,
+    input_std: torch.Tensor | None = None,
 ) -> MarinePredictionResult:
     """Run inference and optionally reverse target normalization."""
 
@@ -365,11 +401,25 @@ def predict(
             "target_mean and target_std must either both be supplied "
             "or both be omitted."
         )
+    
+    if (input_mean is None) != (input_std is None):
+        raise ValueError(
+            "input_mean and input_std must either both be supplied "
+            "or both be omitted."
+        )
 
     model = model.to(device)
     model.eval()
 
     inputs = request_to_tensor(request, device=device)
+
+    if input_mean is not None and input_std is not None:
+        mean, std = _validate_input_statistics(
+            input_mean,
+            input_std,
+            device,
+        )
+        inputs = (inputs - mean) / std
 
     with torch.no_grad():
         outputs = model(inputs)
@@ -411,6 +461,8 @@ def save_checkpoint(
     path: str | Path,
     optimizer: torch.optim.Optimizer | None = None,
     epoch: int | None = None,
+    input_mean: torch.Tensor | None = None,
+    input_std: torch.Tensor | None = None,
 ) -> None:
     """Save model architecture, weights, and optional training state."""
 
@@ -426,6 +478,21 @@ def save_checkpoint(
         },
         "model_state_dict": model.state_dict(),
     }
+    
+    if (input_mean is None) != (input_std is None):
+        raise ValueError(
+            "input_mean and input_std must either both be supplied "
+            "or both be omitted."
+        )
+
+    if input_mean is not None and input_std is not None:
+        mean, std = _validate_input_statistics(
+            input_mean,
+            input_std,
+            "cpu",
+        )
+        checkpoint["input_mean"] = mean.detach().cpu()
+        checkpoint["input_std"] = std.detach().cpu()
 
     if optimizer is not None:
         checkpoint["optimizer_state_dict"] = optimizer.state_dict()
@@ -455,6 +522,17 @@ def load_checkpoint(
         raise ValueError(
             "Checkpoint contract version does not match the current contract."
         )
+    
+    input_mean = checkpoint.get("input_mean")
+    input_std = checkpoint.get("input_std")
+
+    if (input_mean is None) != (input_std is None):
+        raise ValueError(
+            "Checkpoint must contain both input_mean and input_std."
+        )
+
+    if input_mean is not None:
+        _validate_input_statistics(input_mean, input_std, device)
 
     architecture = checkpoint.get("architecture")
 
@@ -494,6 +572,8 @@ def predict_from_checkpoint(
 
     target_mean = checkpoint.get("target_mean")
     target_std = checkpoint.get("target_std")
+    input_mean = checkpoint.get("input_mean")
+    input_std = checkpoint.get("input_std")
 
     if (target_mean is None) != (target_std is None):
         raise ValueError("Checkpoint must contain both target_mean and target_std.")
@@ -504,4 +584,6 @@ def predict_from_checkpoint(
         device=device,
         target_mean=target_mean,
         target_std=target_std,
+        input_mean=input_mean,
+        input_std=input_std,
     )
