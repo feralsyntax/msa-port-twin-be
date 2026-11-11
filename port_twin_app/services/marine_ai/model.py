@@ -401,11 +401,10 @@ def predict(
             "target_mean and target_std must either both be supplied "
             "or both be omitted."
         )
-    
+
     if (input_mean is None) != (input_std is None):
         raise ValueError(
-            "input_mean and input_std must either both be supplied "
-            "or both be omitted."
+            "input_mean and input_std must either both be supplied or both be omitted."
         )
 
     model = model.to(device)
@@ -478,11 +477,10 @@ def save_checkpoint(
         },
         "model_state_dict": model.state_dict(),
     }
-    
+
     if (input_mean is None) != (input_std is None):
         raise ValueError(
-            "input_mean and input_std must either both be supplied "
-            "or both be omitted."
+            "input_mean and input_std must either both be supplied or both be omitted."
         )
 
     if input_mean is not None and input_std is not None:
@@ -522,14 +520,12 @@ def load_checkpoint(
         raise ValueError(
             "Checkpoint contract version does not match the current contract."
         )
-    
+
     input_mean = checkpoint.get("input_mean")
     input_std = checkpoint.get("input_std")
 
     if (input_mean is None) != (input_std is None):
-        raise ValueError(
-            "Checkpoint must contain both input_mean and input_std."
-        )
+        raise ValueError("Checkpoint must contain both input_mean and input_std.")
 
     if input_mean is not None:
         _validate_input_statistics(input_mean, input_std, device)
@@ -578,7 +574,10 @@ def predict_from_checkpoint(
     if (target_mean is None) != (target_std is None):
         raise ValueError("Checkpoint must contain both target_mean and target_std.")
 
-    return predict(
+    if (input_mean is None) != (input_std is None):
+        raise ValueError("Checkpoint must contain both input_mean and input_std.")
+
+    result = predict(
         request,
         model,
         device=device,
@@ -586,4 +585,11 @@ def predict_from_checkpoint(
         target_std=target_std,
         input_mean=input_mean,
         input_std=input_std,
+    )
+
+    return MarinePredictionResult(
+        water_level_m=result.water_level_m,
+        current_u_ms=result.current_u_ms,
+        current_v_ms=result.current_v_ms,
+        model_version=checkpoint["model_version"],
     )
