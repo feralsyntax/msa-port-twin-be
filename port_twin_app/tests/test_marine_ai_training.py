@@ -23,6 +23,7 @@ from port_twin_app.services.marine_ai.model import (
 )
 from port_twin_app.services.marine_ai.training import (
     TrainingConfig,
+    _fit_input_normalization,
     _fit_target_normalization,
     _target_tensor,
     train_model,
@@ -196,13 +197,27 @@ class MarineTrainingTests(SimpleTestCase):
             self.assertTrue(torch.isfinite(checkpoint["target_mean"]).all())
             self.assertTrue(torch.isfinite(checkpoint["target_std"]).all())
             self.assertTrue(torch.all(checkpoint["target_std"] > 0))
-
-        self.assertTrue(
-            any(
-                not torch.equal(old, new.detach())
-                for old, new in zip(before, self.model.parameters())
+            
+            self.assertIn("input_mean", checkpoint)
+            self.assertIn("input_std", checkpoint)
+            self.assertEqual(
+                tuple(checkpoint["input_mean"].shape),
+                (1, 6, 1, 1),
             )
-        )
+            self.assertEqual(
+                tuple(checkpoint["input_std"].shape),
+                (1, 6, 1, 1),
+            )
+            self.assertTrue(torch.isfinite(checkpoint["input_mean"]).all())
+            self.assertTrue(torch.isfinite(checkpoint["input_std"]).all())
+            self.assertTrue(torch.all(checkpoint["input_std"] > 0))
+
+            self.assertTrue(
+                any(
+                    not torch.equal(old, new.detach())
+                    for old, new in zip(before, self.model.parameters())
+                )
+            )
 
     def test_training_rejects_wrong_model_type(self):
         with self.assertRaises(TypeError):
@@ -215,3 +230,15 @@ class MarineTrainingTests(SimpleTestCase):
     def test_training_config_rejects_invalid_epochs(self):
         with self.assertRaises(ValueError):
             TrainingConfig(epochs=0)
+
+    def test_input_normalization_uses_training_samples(self):
+        mean, std = _fit_input_normalization(
+            self.dataset.train,
+            "cpu",
+        )
+
+        self.assertEqual(tuple(mean.shape), (1, 6, 1, 1))
+        self.assertEqual(tuple(std.shape), (1, 6, 1, 1))
+        self.assertTrue(torch.isfinite(mean).all())
+        self.assertTrue(torch.isfinite(std).all())
+        self.assertTrue(torch.all(std > 0))
