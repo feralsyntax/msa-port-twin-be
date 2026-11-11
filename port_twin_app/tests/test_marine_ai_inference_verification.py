@@ -14,6 +14,9 @@ from port_twin_app.services.marine_ai.contracts import (
 from port_twin_app.services.marine_ai.django_service import (
     get_marine_inference_service,
 )
+from port_twin_app.services.marine_ai.serialization import (
+    load_prepared_dataset,
+)
 from port_twin_app.services.marine_ai.inference import (
     MarineInferenceService,
 )
@@ -123,3 +126,97 @@ class TrainedMarineFNOAPITests(APITestCase):
                 for row in step:
                     self.assertEqual(len(row), 8)
                     self.assertTrue(all(math.isfinite(value) for value in row))
+
+
+    def test_real_dataset_prediction_is_persisted_and_retrievable(self):
+        """Verify API inference using an actual held-out Mombasa sample."""
+
+        dataset_path = (
+            Path(__file__).resolve().parents[2]
+            / "data"
+            / "processed"
+            / "marine"
+            / "mombasa_training_dataset.npz"
+        )
+
+        self.assertTrue(
+            dataset_path.is_file(),
+            f"Prepared marine dataset not found: {dataset_path}",
+        )
+
+        prepared = load_prepared_dataset(dataset_path)
+        sample = prepared.split.test[0]
+        request = sample.request
+
+        response = self.client.post(
+            "/api/v1/marine-predictions/create/",
+            make_api_payload(request),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+            response.data,
+        )
+        self.assertEqual(MarinePrediction.objects.count(), 1)
+
+        prediction = MarinePrediction.objects.get()
+
+        self.assertEqual(
+            prediction.model_version,
+            "fno-0.2.0",
+        )
+        self.assertEqual(
+            prediction.contract_version,
+            CONTRACT_VERSION,
+        )
+        self.assertEqual(
+            prediction.status,
+            MarinePrediction.Status.COMPLETED,
+        )
+
+        self.assertEqual(response.data["id"], str(prediction.pk))
+        self.assertEqual(response.data["model_version"], "fno-0.2.0")
+        self.assertEqual(response.data["contract_version"], CONTRACT_VERSION)
+
+        result = prediction.result_data
+
+        for field_name in (
+            "water_level_m",
+            "current_u_ms",
+            "current_v_ms",
+        ):
+            field = result[field_name]
+
+            self.assertEqual(len(field), 6)
+
+            for step in field:
+                self.assertEqual(len(step), request.grid.ny)
+
+                for row in step:
+                    self.assertEqual(len(row), request.grid.nx)
+                    self.assertTrue(
+                        all(math.isfinite(value) for value in row)
+                    )
+
+        detail_response = self.client.get(
+            f"/api/v1/marine-predictions/{prediction.pk}/"
+        )
+
+        self.assertEqual(
+            detail_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            detail_response.data["id"],
+            str(prediction.pk),
+        )
+        self.assertEqual(
+            detail_response.data["model_version"],
+            "fno-0.2.0",
+        )
+        self.assertEqual(
+            detail_response.data["result_data"],
+            result,
+        )
