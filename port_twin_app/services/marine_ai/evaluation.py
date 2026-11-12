@@ -9,6 +9,7 @@ from .contracts import MarinePredictionRequest, MarinePredictionResult
 from .dataset import MarineDatasetSample
 from .model import (
     MODEL_VERSION,
+    PREDICTION_MODE_ABSOLUTE,
     MarineFNO,
     load_checkpoint,
     predict,
@@ -141,11 +142,15 @@ def evaluate_model(
     target_std: torch.Tensor | None = None,
     input_mean: torch.Tensor | None = None,
     input_std: torch.Tensor | None = None,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
 ) -> ModelEvaluationResult:
-    """Evaluate an FNO against a baseline on supplied samples.
+    """Evaluate an FNO against a persistence baseline.
 
     Supply the normalization statistics used during training when evaluating
     a normalized model. Statistics are not fitted or modified here.
+
+    Residual-mode predictions are reconstructed into absolute physical
+    forecasts by predict() before metrics are calculated.
     """
 
     if not isinstance(model, MarineFNO):
@@ -169,6 +174,7 @@ def evaluate_model(
     baseline_predictions = []
     targets = []
     sources = set()
+    evaluated_model_version = MODEL_VERSION
 
     for sample in samples:
         result = predict(
@@ -179,8 +185,10 @@ def evaluate_model(
             target_std=target_std,
             input_mean=input_mean,
             input_std=input_std,
+            prediction_mode=prediction_mode,
         )
         result.validate_against(sample.request)
+        evaluated_model_version = result.model_version
 
         baseline = _baseline_prediction(sample.request)
         baseline.validate_against(sample.request)
@@ -193,7 +201,7 @@ def evaluate_model(
         sources.add(sample.source)
 
     return ModelEvaluationResult(
-        model_version=MODEL_VERSION,
+        model_version=evaluated_model_version,
         samples_evaluated=len(samples),
         fno_metrics=_calculate_metrics(fno_predictions, targets),
         baseline_metrics=_calculate_metrics(baseline_predictions, targets),
@@ -217,6 +225,10 @@ def evaluate_checkpoint(
     target_std = checkpoint.get("target_std")
     input_mean = checkpoint.get("input_mean")
     input_std = checkpoint.get("input_std")
+    prediction_mode = checkpoint.get(
+        "prediction_mode",
+        PREDICTION_MODE_ABSOLUTE,
+    )
 
     if (target_mean is None) != (target_std is None):
         raise ValueError("Checkpoint must contain both target_mean and target_std.")
@@ -232,6 +244,7 @@ def evaluate_checkpoint(
         target_std=target_std,
         input_mean=input_mean,
         input_std=input_std,
+        prediction_mode=prediction_mode,
     )
 
     return ModelEvaluationResult(
