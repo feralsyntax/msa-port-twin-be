@@ -16,6 +16,8 @@ from port_twin_app.services.marine_ai.model import (
     CONTRACT_VERSION,
     INPUT_CHANNELS,
     MODEL_VERSION,
+    PREDICTION_MODE_RESIDUAL,
+    RESIDUAL_MODEL_VERSION,
     MarineFNO,
     SpectralConv2d,
     load_checkpoint,
@@ -59,6 +61,13 @@ class MarineFNOModelTests(SimpleTestCase):
             modes_y=2,
             layers=1,
         )
+
+    def _zero_model_parameters(self):
+        """Make the model produce zero output."""
+
+        with torch.no_grad():
+            for parameter in self.model.parameters():
+                parameter.zero_()
 
     def test_request_to_tensor_has_expected_shape(self):
         inputs = request_to_tensor(self.request)
@@ -175,9 +184,7 @@ class MarineFNOModelTests(SimpleTestCase):
         mean = torch.tensor([0.5, 2.0, -1.0]).view(1, 1, 3, 1, 1)
         std = torch.tensor([0.2, 0.4, 0.6]).view(1, 1, 3, 1, 1)
 
-        with torch.no_grad():
-            for parameter in self.model.parameters():
-                parameter.zero_()
+        self._zero_model_parameters()
 
         result = predict(
             self.request,
@@ -189,6 +196,60 @@ class MarineFNOModelTests(SimpleTestCase):
         self.assertAlmostEqual(result.water_level_m[0][0][0], 0.5, places=5)
         self.assertAlmostEqual(result.current_u_ms[0][0][0], 2.0, places=5)
         self.assertAlmostEqual(result.current_v_ms[0][0][0], -1.0, places=5)
+
+    def test_predict_residual_zero_output_reconstructs_initial_state(self):
+        self._zero_model_parameters()
+
+        result = predict(
+            self.request,
+            self.model,
+            prediction_mode=PREDICTION_MODE_RESIDUAL,
+        )
+
+        result.validate_against(self.request)
+        self.assertEqual(result.model_version, RESIDUAL_MODEL_VERSION)
+
+        expected_fields = (
+            (result.water_level_m, self.request.initial_water_level_m),
+            (result.current_u_ms, self.request.initial_current_u_ms),
+            (result.current_v_ms, self.request.initial_current_v_ms),
+        )
+
+        for predictions, initial_values in expected_fields:
+            expected = torch.tensor(initial_values, dtype=torch.float32)
+
+            for step in predictions:
+                actual = torch.tensor(step, dtype=torch.float32)
+                self.assertTrue(torch.equal(actual, expected))
+
+    def test_predict_residual_denormalizes_before_adding_initial_state(self):
+        mean = torch.tensor([0.1, 0.2, -0.3]).view(1, 1, 3, 1, 1)
+        std = torch.tensor([0.5, 2.0, 3.0]).view(1, 1, 3, 1, 1)
+
+        self._zero_model_parameters()
+
+        result = predict(
+            self.request,
+            self.model,
+            target_mean=mean,
+            target_std=std,
+            prediction_mode=PREDICTION_MODE_RESIDUAL,
+        )
+
+        expected_values = (
+            (0.5 + 0.1, 0.5),
+            (2.0 + 0.2, 2.0),
+            (1.0 - 0.3, 1.0),
+        )
+
+        actual_values = (
+            result.water_level_m[0][0][0],
+            result.current_u_ms[0][0][0],
+            result.current_v_ms[0][0][0],
+        )
+
+        for actual, (expected, _) in zip(actual_values, expected_values):
+            self.assertAlmostEqual(actual, expected, places=5)
 
     def test_predict_requires_both_normalization_statistics(self):
         mean = torch.zeros((1, 1, 3, 1, 1))
@@ -233,13 +294,42 @@ class MarineFNOModelTests(SimpleTestCase):
 
             self.assertTrue(torch.allclose(original_output, restored_output, atol=1e-6))
 
+    def test_residual_checkpoint_round_trip_preserves_prediction_mode(self):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "marine_fno_residual.pt"
+
+            save_checkpoint(
+                self.model,
+                checkpoint_path,
+                epoch=3,
+                prediction_mode=PREDICTION_MODE_RESIDUAL,
+            )
+
+            restored_model, checkpoint = load_checkpoint(checkpoint_path)
+
+            self.assertIsInstance(restored_model, MarineFNO)
+            self.assertEqual(
+                checkpoint["prediction_mode"],
+                PREDICTION_MODE_RESIDUAL,
+            )
+            self.assertEqual(
+                checkpoint["model_version"],
+                RESIDUAL_MODEL_VERSION,
+            )
+
+            result = predict_from_checkpoint(
+                self.request,
+                checkpoint_path,
+            )
+
+            self.assertEqual(result.model_version, RESIDUAL_MODEL_VERSION)
+            result.validate_against(self.request)
+
     def test_predict_from_checkpoint_uses_saved_normalization(self):
         with tempfile.TemporaryDirectory() as directory:
             checkpoint_path = Path(directory) / "marine_fno.pt"
 
-            with torch.no_grad():
-                for parameter in self.model.parameters():
-                    parameter.zero_()
+            self._zero_model_parameters()
 
             save_checkpoint(self.model, checkpoint_path, epoch=2)
 
