@@ -18,6 +18,9 @@ from port_twin_app.services.marine_ai.inference import (
 )
 from port_twin_app.services.marine_ai.model import (
     MODEL_VERSION,
+    PREDICTION_MODE_ABSOLUTE,
+    PREDICTION_MODE_RESIDUAL,
+    RESIDUAL_MODEL_VERSION,
     MarineFNO,
     save_checkpoint,
 )
@@ -252,3 +255,91 @@ class MarineInferenceServiceTests(SimpleTestCase):
             "water_level_m has shape (5, 8, 8); expected (6, 8, 8).",
         ):
             service.predict(self.request)
+
+    def test_residual_checkpoint_returns_absolute_forecasts(self):
+        model = MarineFNO(
+            width=4,
+            modes_x=2,
+            modes_y=2,
+            layers=1,
+        )
+
+        for parameter in model.parameters():
+            torch.nn.init.zeros_(parameter)
+
+        save_checkpoint(
+            model,
+            self.checkpoint_path,
+            epoch=1,
+            prediction_mode=PREDICTION_MODE_RESIDUAL,
+        )
+
+        checkpoint = torch.load(
+            self.checkpoint_path,
+            map_location="cpu",
+            weights_only=True,
+        )
+
+        checkpoint["target_mean"] = torch.zeros(
+            (1, 1, 3, 1, 1),
+            dtype=torch.float32,
+        )
+        checkpoint["target_std"] = torch.ones(
+            (1, 1, 3, 1, 1),
+            dtype=torch.float32,
+        )
+
+        torch.save(checkpoint, self.checkpoint_path)
+
+        service = MarineInferenceService(self.checkpoint_path)
+
+        self.assertEqual(
+            service.prediction_mode,
+            PREDICTION_MODE_RESIDUAL,
+        )
+
+        result = service.predict(self.request)
+
+        expected_fields = (
+            (result.water_level_m, self.request.initial_water_level_m),
+            (result.current_u_ms, self.request.initial_current_u_ms),
+            (result.current_v_ms, self.request.initial_current_v_ms),
+        )
+
+        for predictions, initial_values in expected_fields:
+            expected = torch.tensor(
+                initial_values,
+                dtype=torch.float32,
+            )
+
+            self.assertEqual(
+                len(predictions),
+                self.request.forecast.steps,
+            )
+
+            for step in predictions:
+                actual = torch.tensor(step, dtype=torch.float32)
+                self.assertTrue(torch.allclose(actual, expected))
+
+        self.assertEqual(
+            result.model_version,
+            RESIDUAL_MODEL_VERSION,
+        )
+
+    def test_checkpoint_without_prediction_mode_defaults_to_absolute(self):
+        checkpoint = torch.load(
+            self.checkpoint_path,
+            map_location="cpu",
+            weights_only=True,
+        )
+
+        checkpoint.pop("prediction_mode", None)
+        torch.save(checkpoint, self.checkpoint_path)
+
+        service = MarineInferenceService(self.checkpoint_path)
+
+        self.assertEqual(
+            service.prediction_mode,
+            PREDICTION_MODE_ABSOLUTE,
+        )
+        self.assertEqual(service.model_version, MODEL_VERSION)
