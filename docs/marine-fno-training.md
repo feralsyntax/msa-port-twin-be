@@ -1,5 +1,3 @@
-cat > docs/marine-fno-training.md <<'EOF'
-
 # Marine FNO Training and Evaluation
 
 ## 1. Overview
@@ -139,4 +137,3 @@ real-world forecasting accuracy.
 
 The trained model should therefore be treated as an experimental regional
 prediction model, not a validated operational marine forecasting system.
-EOF
