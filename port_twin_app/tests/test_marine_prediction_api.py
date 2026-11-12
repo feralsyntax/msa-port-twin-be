@@ -16,9 +16,12 @@ from port_twin_app.tests.test_marine_ai_inference import (
 )
 
 
-def make_api_payload():
-    """Convert the existing inference request fixture into JSON input."""
-    request = make_request()
+def make_api_payload(request=None):
+    """Convert a marine prediction request fixture into JSON input."""
+
+    if request is None:
+        request = make_request()
+
     grid = request.grid
     forecast = request.forecast
 

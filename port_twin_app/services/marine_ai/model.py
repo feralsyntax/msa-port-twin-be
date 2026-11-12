@@ -12,12 +12,29 @@ from .contracts import (
     MarinePredictionResult,
 )
 
-MODEL_VERSION = "fno-0.2.0"
+MODEL_VERSION = "fno-0.3.0"
+RESIDUAL_MODEL_VERSION = "fno-0.4.0"
+
+PREDICTION_MODE_ABSOLUTE = "absolute"
+PREDICTION_MODE_RESIDUAL = "residual"
+
+SUPPORTED_PREDICTION_MODES = {
+    PREDICTION_MODE_ABSOLUTE,
+    PREDICTION_MODE_RESIDUAL,
+}
 
 INPUT_CHANNELS = 6
 OUTPUT_CHANNELS = 3
 
+INPUT_STATISTICS_SHAPE = (1, INPUT_CHANNELS, 1, 1)
 TARGET_STATISTICS_SHAPE = (1, 1, OUTPUT_CHANNELS, 1, 1)
+
+
+def _validate_prediction_mode(prediction_mode: str) -> None:
+    """Reject prediction modes that the model does not support."""
+
+    if prediction_mode not in SUPPORTED_PREDICTION_MODES:
+        raise ValueError(f"Unsupported prediction mode: {prediction_mode!r}.")
 
 
 class SpectralConv2d(nn.Module):
@@ -317,6 +334,39 @@ def request_to_tensor(
     return inputs.unsqueeze(0)
 
 
+def _validate_input_statistics(
+    input_mean: torch.Tensor,
+    input_std: torch.Tensor,
+    device: str,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Validate and prepare input normalization statistics."""
+
+    mean = torch.as_tensor(
+        input_mean,
+        dtype=torch.float32,
+        device=device,
+    )
+    std = torch.as_tensor(
+        input_std,
+        dtype=torch.float32,
+        device=device,
+    )
+
+    if tuple(mean.shape) != INPUT_STATISTICS_SHAPE:
+        raise ValueError(f"input_mean must have shape {INPUT_STATISTICS_SHAPE}.")
+
+    if tuple(std.shape) != INPUT_STATISTICS_SHAPE:
+        raise ValueError(f"input_std must have shape {INPUT_STATISTICS_SHAPE}.")
+
+    if not torch.isfinite(mean).all():
+        raise ValueError("input_mean contains non-finite values.")
+
+    if not torch.isfinite(std).all() or torch.any(std <= 0):
+        raise ValueError("input_std must contain finite positive values.")
+
+    return mean, std
+
+
 def _validate_target_statistics(
     target_mean: torch.Tensor,
     target_std: torch.Tensor,
@@ -357,8 +407,17 @@ def predict(
     device: str = "cpu",
     target_mean: torch.Tensor | None = None,
     target_std: torch.Tensor | None = None,
+    input_mean: torch.Tensor | None = None,
+    input_std: torch.Tensor | None = None,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
 ) -> MarinePredictionResult:
-    """Run inference and optionally reverse target normalization."""
+    """Run inference and return predictions in physical units.
+
+    Absolute mode interprets model outputs as future field values.
+    Residual mode interprets model outputs as changes from the initial state.
+    """
+
+    _validate_prediction_mode(prediction_mode)
 
     if (target_mean is None) != (target_std is None):
         raise ValueError(
@@ -366,10 +425,26 @@ def predict(
             "or both be omitted."
         )
 
+    if (input_mean is None) != (input_std is None):
+        raise ValueError(
+            "input_mean and input_std must either both be supplied or both be omitted."
+        )
+
     model = model.to(device)
     model.eval()
 
-    inputs = request_to_tensor(request, device=device)
+    # Keep the raw input so residual predictions can be added to the
+    # original physical initial state, not the normalized input.
+    raw_inputs = request_to_tensor(request, device=device)
+    inputs = raw_inputs
+
+    if input_mean is not None and input_std is not None:
+        mean, std = _validate_input_statistics(
+            input_mean,
+            input_std,
+            device,
+        )
+        inputs = (inputs - mean) / std
 
     with torch.no_grad():
         outputs = model(inputs)
@@ -383,8 +458,13 @@ def predict(
             target_std,
             device,
         )
-
         outputs = outputs * std + mean
+
+    if prediction_mode == PREDICTION_MODE_RESIDUAL:
+        # Input channels 1, 2 and 3 contain the initial physical fields.
+        # Shape [1, 1, 3, ny, nx] broadcasts across the forecast horizon.
+        initial_state = raw_inputs[:, 1:4].unsqueeze(1)
+        outputs = outputs + initial_state
 
     if not torch.isfinite(outputs).all():
         raise ValueError(
@@ -398,7 +478,11 @@ def predict(
         water_level_m=output_values[:, 0].tolist(),
         current_u_ms=output_values[:, 1].tolist(),
         current_v_ms=output_values[:, 2].tolist(),
-        model_version=MODEL_VERSION,
+        model_version=(
+            RESIDUAL_MODEL_VERSION
+            if prediction_mode == PREDICTION_MODE_RESIDUAL
+            else MODEL_VERSION
+        ),
     )
 
     result.validate_against(request)
@@ -411,11 +495,21 @@ def save_checkpoint(
     path: str | Path,
     optimizer: torch.optim.Optimizer | None = None,
     epoch: int | None = None,
+    input_mean: torch.Tensor | None = None,
+    input_std: torch.Tensor | None = None,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
 ) -> None:
-    """Save model architecture, weights, and optional training state."""
+    """Save model architecture, weights, prediction mode, and training state."""
+
+    _validate_prediction_mode(prediction_mode)
 
     checkpoint = {
-        "model_version": MODEL_VERSION,
+        "model_version": (
+            RESIDUAL_MODEL_VERSION
+            if prediction_mode == PREDICTION_MODE_RESIDUAL
+            else MODEL_VERSION
+        ),
+        "prediction_mode": prediction_mode,
         "contract_version": CONTRACT_VERSION,
         "architecture": {
             "width": model.width,
@@ -426,6 +520,20 @@ def save_checkpoint(
         },
         "model_state_dict": model.state_dict(),
     }
+
+    if (input_mean is None) != (input_std is None):
+        raise ValueError(
+            "input_mean and input_std must either both be supplied or both be omitted."
+        )
+
+    if input_mean is not None and input_std is not None:
+        mean, std = _validate_input_statistics(
+            input_mean,
+            input_std,
+            "cpu",
+        )
+        checkpoint["input_mean"] = mean.detach().cpu()
+        checkpoint["input_std"] = std.detach().cpu()
 
     if optimizer is not None:
         checkpoint["optimizer_state_dict"] = optimizer.state_dict()
@@ -443,7 +551,7 @@ def load_checkpoint(
     path: str | Path,
     device: str = "cpu",
 ) -> tuple[MarineFNO, dict]:
-    """Load a saved FNO checkpoint and validate its contract version."""
+    """Load a saved FNO checkpoint and validate its metadata."""
 
     checkpoint = torch.load(
         path,
@@ -455,6 +563,31 @@ def load_checkpoint(
         raise ValueError(
             "Checkpoint contract version does not match the current contract."
         )
+
+    # Older checkpoints do not contain prediction_mode. They were trained
+    # to predict absolute future values, so retain that interpretation.
+    prediction_mode = checkpoint.get(
+        "prediction_mode",
+        PREDICTION_MODE_ABSOLUTE,
+    )
+    _validate_prediction_mode(prediction_mode)
+    checkpoint["prediction_mode"] = prediction_mode
+
+    if "model_version" not in checkpoint:
+        checkpoint["model_version"] = (
+            RESIDUAL_MODEL_VERSION
+            if prediction_mode == PREDICTION_MODE_RESIDUAL
+            else MODEL_VERSION
+        )
+
+    input_mean = checkpoint.get("input_mean")
+    input_std = checkpoint.get("input_std")
+
+    if (input_mean is None) != (input_std is None):
+        raise ValueError("Checkpoint must contain both input_mean and input_std.")
+
+    if input_mean is not None:
+        _validate_input_statistics(input_mean, input_std, device)
 
     architecture = checkpoint.get("architecture")
 
@@ -494,14 +627,29 @@ def predict_from_checkpoint(
 
     target_mean = checkpoint.get("target_mean")
     target_std = checkpoint.get("target_std")
+    input_mean = checkpoint.get("input_mean")
+    input_std = checkpoint.get("input_std")
 
     if (target_mean is None) != (target_std is None):
         raise ValueError("Checkpoint must contain both target_mean and target_std.")
 
-    return predict(
+    if (input_mean is None) != (input_std is None):
+        raise ValueError("Checkpoint must contain both input_mean and input_std.")
+
+    result = predict(
         request,
         model,
         device=device,
         target_mean=target_mean,
         target_std=target_std,
+        input_mean=input_mean,
+        input_std=input_std,
+        prediction_mode=checkpoint["prediction_mode"],
+    )
+
+    return MarinePredictionResult(
+        water_level_m=result.water_level_m,
+        current_u_ms=result.current_u_ms,
+        current_v_ms=result.current_v_ms,
+        model_version=checkpoint["model_version"],
     )

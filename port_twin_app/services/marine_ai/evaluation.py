@@ -9,6 +9,7 @@ from .contracts import MarinePredictionRequest, MarinePredictionResult
 from .dataset import MarineDatasetSample
 from .model import (
     MODEL_VERSION,
+    PREDICTION_MODE_ABSOLUTE,
     MarineFNO,
     load_checkpoint,
     predict,
@@ -60,40 +61,41 @@ def _result_tensor(result: MarinePredictionResult) -> torch.Tensor:
 def _baseline_prediction(
     request: MarinePredictionRequest,
 ) -> MarinePredictionResult:
-    """Create a simple persistence/zero-current baseline.
-
-    Water level remains equal to the initial water-level grid at every
-    forecast step. Both current components are assumed to be zero because
-    the request contract does not provide initial current grids.
-    """
+    """Repeat the initial state across every forecast step."""
 
     steps = request.forecast.steps
     nx = request.grid.nx
     ny = request.grid.ny
 
-    initial_level = torch.as_tensor(
+    def initial_grid(values, name: str) -> torch.Tensor:
+        tensor = torch.as_tensor(values, dtype=torch.float32)
+
+        if tuple(tensor.shape) != (ny, nx):
+            raise ValueError(f"{name} does not match the request grid.")
+
+        if not torch.isfinite(tensor).all():
+            raise ValueError(f"{name} contains non-finite values.")
+
+        return tensor
+
+    initial_level = initial_grid(
         request.initial_water_level_m,
-        dtype=torch.float32,
+        "initial_water_level_m",
     )
-
-    if tuple(initial_level.shape) != (ny, nx):
-        raise ValueError("initial_water_level_m does not match the request grid.")
-
-    if not torch.isfinite(initial_level).all():
-        raise ValueError("initial_water_level_m contains non-finite values.")
-
-    zero_current = torch.zeros(
-        steps,
-        ny,
-        nx,
-        dtype=torch.float32,
+    initial_current_u = initial_grid(
+        request.initial_current_u_ms,
+        "initial_current_u_ms",
+    )
+    initial_current_v = initial_grid(
+        request.initial_current_v_ms,
+        "initial_current_v_ms",
     )
 
     return MarinePredictionResult(
         water_level_m=[initial_level.tolist() for _ in range(steps)],
-        current_u_ms=zero_current.tolist(),
-        current_v_ms=zero_current.tolist(),
-        model_version="persistence-zero-current-baseline",
+        current_u_ms=[initial_current_u.tolist() for _ in range(steps)],
+        current_v_ms=[initial_current_v.tolist() for _ in range(steps)],
+        model_version="persistence-baseline",
     )
 
 
@@ -119,7 +121,6 @@ def _calculate_metrics(
     metrics = {}
 
     for channel, field_name in enumerate(OUTPUT_FIELDS):
-        # Shape: [total_steps, 3, ny, nx].
         field_errors = errors[:, channel, :, :]
 
         mae = field_errors.abs().mean().item()
@@ -139,12 +140,17 @@ def evaluate_model(
     device: str = "cpu",
     target_mean: torch.Tensor | None = None,
     target_std: torch.Tensor | None = None,
+    input_mean: torch.Tensor | None = None,
+    input_std: torch.Tensor | None = None,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
 ) -> ModelEvaluationResult:
-    """Evaluate an FNO against a baseline on supplied samples.
+    """Evaluate an FNO against a persistence baseline.
 
-    This function does not train the model, fit normalization statistics,
-    or modify model parameters. Supply target_mean and target_std when the
-    model was trained using normalized targets.
+    Supply the normalization statistics used during training when evaluating
+    a normalized model. Statistics are not fitted or modified here.
+
+    Residual-mode predictions are reconstructed into absolute physical
+    forecasts by predict() before metrics are calculated.
     """
 
     if not isinstance(model, MarineFNO):
@@ -159,10 +165,16 @@ def evaluate_model(
             "or both be omitted."
         )
 
+    if (input_mean is None) != (input_std is None):
+        raise ValueError(
+            "input_mean and input_std must either both be supplied or both be omitted."
+        )
+
     fno_predictions = []
     baseline_predictions = []
     targets = []
     sources = set()
+    evaluated_model_version = MODEL_VERSION
 
     for sample in samples:
         result = predict(
@@ -171,8 +183,12 @@ def evaluate_model(
             device=device,
             target_mean=target_mean,
             target_std=target_std,
+            input_mean=input_mean,
+            input_std=input_std,
+            prediction_mode=prediction_mode,
         )
         result.validate_against(sample.request)
+        evaluated_model_version = result.model_version
 
         baseline = _baseline_prediction(sample.request)
         baseline.validate_against(sample.request)
@@ -185,7 +201,7 @@ def evaluate_model(
         sources.add(sample.source)
 
     return ModelEvaluationResult(
-        model_version=MODEL_VERSION,
+        model_version=evaluated_model_version,
         samples_evaluated=len(samples),
         fno_metrics=_calculate_metrics(fno_predictions, targets),
         baseline_metrics=_calculate_metrics(baseline_predictions, targets),
@@ -207,9 +223,18 @@ def evaluate_checkpoint(
 
     target_mean = checkpoint.get("target_mean")
     target_std = checkpoint.get("target_std")
+    input_mean = checkpoint.get("input_mean")
+    input_std = checkpoint.get("input_std")
+    prediction_mode = checkpoint.get(
+        "prediction_mode",
+        PREDICTION_MODE_ABSOLUTE,
+    )
 
     if (target_mean is None) != (target_std is None):
         raise ValueError("Checkpoint must contain both target_mean and target_std.")
+
+    if (input_mean is None) != (input_std is None):
+        raise ValueError("Checkpoint must contain both input_mean and input_std.")
 
     result = evaluate_model(
         model,
@@ -217,6 +242,9 @@ def evaluate_checkpoint(
         device=device,
         target_mean=target_mean,
         target_std=target_std,
+        input_mean=input_mean,
+        input_std=input_std,
+        prediction_mode=prediction_mode,
     )
 
     return ModelEvaluationResult(

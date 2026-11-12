@@ -3,6 +3,7 @@
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 from django.test import SimpleTestCase
@@ -25,6 +26,8 @@ from port_twin_app.services.marine_ai.evaluation import (
     evaluate_model,
 )
 from port_twin_app.services.marine_ai.model import (
+    PREDICTION_MODE_ABSOLUTE,
+    PREDICTION_MODE_RESIDUAL,
     MarineFNO,
     save_checkpoint,
 )
@@ -134,28 +137,37 @@ class MarineEvaluationTests(SimpleTestCase):
             RegressionMetrics(mae=3.0, rmse=3.0),
         )
 
-    def test_baseline_persists_initial_water_level_and_zero_currents(self):
+    def test_baseline_persists_all_initial_fields(self):
         request = self.dataset.test[0].request
 
         baseline = _baseline_prediction(request)
         baseline.validate_against(request)
 
-        for step in baseline.water_level_m:
-            self.assertTrue(
-                torch.allclose(
-                    torch.tensor(step, dtype=torch.float32),
-                    torch.tensor(
-                        request.initial_water_level_m,
-                        dtype=torch.float32,
-                    ),
-                )
+        expected_fields = (
+            (baseline.water_level_m, request.initial_water_level_m),
+            (baseline.current_u_ms, request.initial_current_u_ms),
+            (baseline.current_v_ms, request.initial_current_v_ms),
+        )
+
+        for predictions, initial_values in expected_fields:
+            expected = torch.tensor(
+                initial_values,
+                dtype=torch.float32,
             )
 
-        for step in baseline.current_u_ms:
-            self.assertTrue(all(value == 0.0 for row in step for value in row))
+            self.assertEqual(
+                len(predictions),
+                request.forecast.steps,
+            )
 
-        for step in baseline.current_v_ms:
-            self.assertTrue(all(value == 0.0 for row in step for value in row))
+            for step in predictions:
+                actual = torch.tensor(step, dtype=torch.float32)
+                self.assertTrue(torch.allclose(actual, expected))
+
+        self.assertEqual(
+            baseline.model_version,
+            "persistence-baseline",
+        )
 
     def test_evaluation_reports_fno_and_baseline_metrics(self):
         result = evaluate_model(
@@ -197,6 +209,36 @@ class MarineEvaluationTests(SimpleTestCase):
                 target_mean=mean,
             )
 
+    @patch("port_twin_app.services.marine_ai.evaluation.predict")
+    def test_residual_evaluation_passes_mode_and_compares_absolute_forecasts(
+        self,
+        mock_predict,
+    ):
+        sample = self.dataset.test[0]
+        baseline = _baseline_prediction(sample.request)
+        mock_predict.return_value = baseline
+
+        result = evaluate_model(
+            self.model,
+            (sample,),
+            prediction_mode=PREDICTION_MODE_RESIDUAL,
+        )
+
+        self.assertEqual(
+            mock_predict.call_args.kwargs["prediction_mode"],
+            PREDICTION_MODE_RESIDUAL,
+        )
+
+        for field_name in (
+            "water_level_m",
+            "current_u_ms",
+            "current_v_ms",
+        ):
+            self.assertEqual(
+                result.fno_metrics[field_name],
+                result.baseline_metrics[field_name],
+            )
+
     def test_evaluate_checkpoint_uses_saved_normalization(self):
         with tempfile.TemporaryDirectory() as directory:
             checkpoint_path = Path(directory) / "marine_fno.pt"
@@ -233,3 +275,66 @@ class MarineEvaluationTests(SimpleTestCase):
             )
             self.assertIn("water_level_m", result.fno_metrics)
             self.assertIn("water_level_m", result.baseline_metrics)
+
+    @patch("port_twin_app.services.marine_ai.evaluation.predict")
+    def test_evaluate_checkpoint_uses_residual_prediction_mode(
+        self,
+        mock_predict,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "marine_fno_residual.pt"
+
+            save_checkpoint(
+                self.model,
+                checkpoint_path,
+                epoch=1,
+                prediction_mode=PREDICTION_MODE_RESIDUAL,
+            )
+
+            sample = self.dataset.test[0]
+            mock_predict.return_value = _baseline_prediction(sample.request)
+
+            result = evaluate_checkpoint(
+                checkpoint_path,
+                (sample,),
+            )
+
+            self.assertEqual(
+                mock_predict.call_args.kwargs["prediction_mode"],
+                PREDICTION_MODE_RESIDUAL,
+            )
+            self.assertEqual(
+                result.model_version,
+                "fno-0.4.0",
+            )
+
+    @patch("port_twin_app.services.marine_ai.evaluation.predict")
+    def test_legacy_checkpoint_defaults_to_absolute_mode(
+        self,
+        mock_predict,
+    ):
+        with tempfile.TemporaryDirectory() as directory:
+            checkpoint_path = Path(directory) / "legacy_fno.pt"
+
+            save_checkpoint(self.model, checkpoint_path, epoch=1)
+
+            checkpoint = torch.load(
+                checkpoint_path,
+                map_location="cpu",
+                weights_only=True,
+            )
+            checkpoint.pop("prediction_mode", None)
+            torch.save(checkpoint, checkpoint_path)
+
+            sample = self.dataset.test[0]
+            mock_predict.return_value = _baseline_prediction(sample.request)
+
+            evaluate_checkpoint(
+                checkpoint_path,
+                (sample,),
+            )
+
+            self.assertEqual(
+                mock_predict.call_args.kwargs["prediction_mode"],
+                PREDICTION_MODE_ABSOLUTE,
+            )
