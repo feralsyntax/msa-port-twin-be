@@ -10,6 +10,10 @@ from .contracts import MarinePredictionResult
 from .dataset import MarineDatasetSample, MarineDatasetSplit
 from .model import (
     MODEL_VERSION,
+    PREDICTION_MODE_ABSOLUTE,
+    PREDICTION_MODE_RESIDUAL,
+    RESIDUAL_MODEL_VERSION,
+    SUPPORTED_PREDICTION_MODES,
     MarineFNO,
     request_to_tensor,
     save_checkpoint,
@@ -25,6 +29,7 @@ class TrainingConfig:
     device: str = "cpu"
     checkpoint_path: str = "artifacts/marine_fno_normalized.pt"
     seed: int = 42
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE
 
     def __post_init__(self):
         if isinstance(self.epochs, bool) or not isinstance(self.epochs, int):
@@ -54,6 +59,9 @@ class TrainingConfig:
 
         if self.seed < 0:
             raise ValueError("seed must be a non-negative integer.")
+
+        if self.prediction_mode not in SUPPORTED_PREDICTION_MODES:
+            raise ValueError(f"Unsupported prediction mode: {self.prediction_mode!r}.")
 
 
 @dataclass(frozen=True)
@@ -89,6 +97,31 @@ def _target_tensor(
     return fields.permute(1, 0, 2, 3).unsqueeze(0)
 
 
+def _training_target_tensor(
+    sample: MarineDatasetSample,
+    device: str,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
+) -> torch.Tensor:
+    """Return either absolute future fields or changes from initial fields."""
+
+    if prediction_mode not in SUPPORTED_PREDICTION_MODES:
+        raise ValueError(f"Unsupported prediction mode: {prediction_mode!r}.")
+
+    targets = _target_tensor(sample.target, device)
+
+    if prediction_mode == PREDICTION_MODE_ABSOLUTE:
+        return targets
+
+    # request_to_tensor channels 1:4 are the initial physical fields:
+    # water level, eastward current, and northward current.
+    initial_state = request_to_tensor(
+        sample.request,
+        device=device,
+    )[:, 1:4].unsqueeze(1)
+
+    return targets - initial_state
+
+
 def _fit_input_normalization(
     samples: tuple[MarineDatasetSample, ...],
     device: str,
@@ -120,14 +153,25 @@ def _fit_input_normalization(
 def _fit_target_normalization(
     samples: tuple[MarineDatasetSample, ...],
     device: str,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Calculate per-variable target statistics from training samples only."""
+    """Calculate per-variable target statistics from training samples only.
+
+    In residual mode, statistics are fitted to future-minus-initial changes,
+    rather than to absolute future field values.
+    """
 
     if not samples:
         raise ValueError("Training samples cannot be empty.")
 
+    if prediction_mode not in SUPPORTED_PREDICTION_MODES:
+        raise ValueError(f"Unsupported prediction mode: {prediction_mode!r}.")
+
     targets = torch.cat(
-        [_target_tensor(sample.target, device) for sample in samples],
+        [
+            _training_target_tensor(sample, device, prediction_mode)
+            for sample in samples
+        ],
         dim=0,
     )
 
@@ -153,12 +197,21 @@ def _normalized_sample_loss(
     std: torch.Tensor,
     input_mean: torch.Tensor,
     input_std: torch.Tensor,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
 ) -> torch.Tensor:
-    """Calculate MSE against normalized target fields."""
+    """Calculate MSE against normalized absolute or residual target fields."""
+
+    if prediction_mode not in SUPPORTED_PREDICTION_MODES:
+        raise ValueError(f"Unsupported prediction mode: {prediction_mode!r}.")
 
     inputs = request_to_tensor(sample.request, device=device)
     inputs = (inputs - input_mean) / input_std
-    targets = _target_tensor(sample.target, device)
+
+    targets = _training_target_tensor(
+        sample,
+        device,
+        prediction_mode,
+    )
 
     if not torch.isfinite(targets).all():
         raise ValueError(
@@ -190,6 +243,7 @@ def _evaluate(
     std: torch.Tensor,
     input_mean: torch.Tensor,
     input_std: torch.Tensor,
+    prediction_mode: str = PREDICTION_MODE_ABSOLUTE,
 ) -> float:
     """Return mean normalized loss without updating model parameters."""
 
@@ -209,6 +263,7 @@ def _evaluate(
                 std,
                 input_mean,
                 input_std,
+                prediction_mode,
             )
 
             if not torch.isfinite(loss):
@@ -228,7 +283,10 @@ def train_model(
 ) -> TrainingResult:
     """Train an FNO and save the checkpoint with the best validation loss.
 
-    Target normalization is fitted exclusively on the training partition.
+    Input and target normalization are fitted exclusively on the training
+    partition. In residual mode, targets represent future-minus-initial
+    field changes.
+
     Validation is used for checkpoint selection; the test partition is
     intentionally not used during training.
     """
@@ -255,6 +313,7 @@ def train_model(
     target_mean, target_std = _fit_target_normalization(
         dataset.train,
         str(device),
+        config.prediction_mode,
     )
 
     input_mean, input_std = _fit_input_normalization(
@@ -288,6 +347,7 @@ def train_model(
                 target_std,
                 input_mean,
                 input_std,
+                config.prediction_mode,
             )
 
             if not torch.isfinite(loss):
@@ -309,6 +369,7 @@ def train_model(
             target_std,
             input_mean,
             input_std,
+            config.prediction_mode,
         )
 
         training_losses.append(training_loss)
@@ -325,6 +386,7 @@ def train_model(
                 epoch=epoch,
                 input_mean=input_mean,
                 input_std=input_std,
+                prediction_mode=config.prediction_mode,
             )
 
             checkpoint = torch.load(
@@ -347,8 +409,14 @@ def train_model(
 
             torch.save(checkpoint, checkpoint_path)
 
+    model_version = (
+        RESIDUAL_MODEL_VERSION
+        if config.prediction_mode == PREDICTION_MODE_RESIDUAL
+        else MODEL_VERSION
+    )
+
     return TrainingResult(
-        model_version=MODEL_VERSION,
+        model_version=model_version,
         epochs_completed=config.epochs,
         training_losses=tuple(training_losses),
         validation_losses=tuple(validation_losses),
