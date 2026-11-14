@@ -311,10 +311,12 @@ class SimulationResult(models.Model):
 
 class MarinePrediction(models.Model):
     """
-    Stores a complete AI-generated marine forecast and its inputs.
+    Stores a marine forecast, its validated inputs, and source provenance.
     """
 
     class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
         COMPLETED = "completed", "Completed"
         FAILED = "failed", "Failed"
 
@@ -330,7 +332,11 @@ class MarinePrediction(models.Model):
         help_text="Forecast start time, steps, and time interval.",
     )
     input_data = models.JSONField(
-        help_text="Inputs used to generate the prediction.",
+        help_text="Validated inputs used to generate the prediction.",
+    )
+    provenance = models.JSONField(
+        default=dict,
+        help_text="Source dataset provenance for the prediction.",
     )
     result_data = models.JSONField(
         null=True,
@@ -339,10 +345,13 @@ class MarinePrediction(models.Model):
     )
     model_version = models.CharField(max_length=100)
     contract_version = models.CharField(max_length=20)
+    prediction_mode = models.CharField(max_length=30, default="residual")
+    model_status = models.CharField(max_length=30, default="experimental")
+    forecast_horizon_hours = models.PositiveIntegerField(default=6)
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.COMPLETED,
+        default=Status.PENDING,
     )
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

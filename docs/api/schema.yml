@@ -178,28 +178,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/MarinePrediction'
           description: ''
+  /api/v1/marine-predictions/{id}/status/:
+    get:
+      operationId: marine_predictions_status_retrieve
+      description: Retrieve the current status of a marine prediction.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - marine-predictions
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarinePredictionStatus'
+          description: ''
   /api/v1/marine-predictions/create/:
     post:
       operationId: marine_predictions_create_create
-      description: Generate and store a new forecast.
       tags:
       - marine-predictions
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MarinePredictionRequest'
+              $ref: '#/components/schemas/MarinePredictionPublicRequest'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/MarinePredictionRequest'
+              $ref: '#/components/schemas/MarinePredictionPublicRequest'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/MarinePredictionRequest'
+              $ref: '#/components/schemas/MarinePredictionPublicRequest'
         required: true
       security:
       - {}
       responses:
-        '201':
+        '202':
           content:
             application/json:
               schema:
@@ -843,6 +864,11 @@ components:
       - generated_at
       - marine_conditions
       - vessel_positions
+    DomainEnum:
+      enum:
+      - mombasa_offshore
+      type: string
+      description: '* `mombasa_offshore` - Mombasa offshore'
     MarineCondition:
       type: object
       properties:
@@ -952,37 +978,6 @@ components:
           format: date-time
       required:
       - start_time
-    MarineGridInput:
-      type: object
-      properties:
-        west:
-          type: number
-          format: double
-        south:
-          type: number
-          format: double
-        east:
-          type: number
-          format: double
-        north:
-          type: number
-          format: double
-        nx:
-          type: integer
-          minimum: 2
-        ny:
-          type: integer
-          minimum: 2
-        crs:
-          type: string
-          default: EPSG:4326
-      required:
-      - east
-      - north
-      - nx
-      - ny
-      - south
-      - west
     MarinePrediction:
       type: object
       properties:
@@ -998,7 +993,10 @@ components:
           description: Forecast start time, steps, and time interval.
         input_data:
           readOnly: true
-          description: Inputs used to generate the prediction.
+          description: Validated inputs used to generate the prediction.
+        provenance:
+          readOnly: true
+          description: Source dataset provenance for the prediction.
         result_data:
           readOnly: true
           nullable: true
@@ -1009,9 +1007,18 @@ components:
         contract_version:
           type: string
           readOnly: true
+        prediction_mode:
+          type: string
+          readOnly: true
+        model_status:
+          type: string
+          readOnly: true
+        forecast_horizon_hours:
+          type: integer
+          readOnly: true
         status:
           allOf:
-          - $ref: '#/components/schemas/MarinePredictionStatusEnum'
+          - $ref: '#/components/schemas/SimulationRunStatusEnum'
           readOnly: true
         error_message:
           type: string
@@ -1025,38 +1032,67 @@ components:
       - created_at
       - error_message
       - forecast
+      - forecast_horizon_hours
       - grid
       - id
       - input_data
+      - model_status
       - model_version
+      - prediction_mode
+      - provenance
       - result_data
       - status
-    MarinePredictionRequest:
+    MarinePredictionPublicRequest:
       type: object
+      description: Simplified request accepted by the frontend.
       properties:
-        grid:
-          $ref: '#/components/schemas/MarineGridInput'
         forecast:
           $ref: '#/components/schemas/MarineForecastInput'
-        bathymetry_m: {}
-        initial_water_level_m: {}
-        initial_current_u_ms: {}
-        initial_current_v_ms: {}
+        domain:
+          allOf:
+          - $ref: '#/components/schemas/DomainEnum'
+          default: mombasa_offshore
       required:
-      - bathymetry_m
       - forecast
-      - grid
-      - initial_current_u_ms
-      - initial_current_v_ms
-      - initial_water_level_m
-    MarinePredictionStatusEnum:
-      enum:
-      - completed
-      - failed
-      type: string
-      description: |-
-        * `completed` - Completed
-        * `failed` - Failed
+    MarinePredictionStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SimulationRunStatusEnum'
+          readOnly: true
+        error_message:
+          type: string
+          readOnly: true
+        model_version:
+          type: string
+          readOnly: true
+        model_status:
+          type: string
+          readOnly: true
+        prediction_mode:
+          type: string
+          readOnly: true
+        forecast_horizon_hours:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - error_message
+      - forecast_horizon_hours
+      - id
+      - model_status
+      - model_version
+      - prediction_mode
+      - status
     OperationsBerthOverview:
       type: object
       properties:

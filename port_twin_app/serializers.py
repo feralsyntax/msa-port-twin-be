@@ -604,11 +604,31 @@ class MarinePredictionSerializer(serializers.ModelSerializer):
             "grid",
             "forecast",
             "input_data",
+            "provenance",
             "result_data",
             "model_version",
             "contract_version",
+            "prediction_mode",
+            "model_status",
+            "forecast_horizon_hours",
             "status",
             "error_message",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class MarinePredictionStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarinePrediction
+        fields = [  # noqa: RUF012
+            "id",
+            "status",
+            "error_message",
+            "model_version",
+            "model_status",
+            "prediction_mode",
+            "forecast_horizon_hours",
             "created_at",
         ]
         read_only_fields = fields
