@@ -170,7 +170,6 @@ SPECTACULAR_SETTINGS = {
         "MarineConditionDataSourceEnum": "port_twin_app.schema_enums.MARINE_CONDITION_SOURCE_CHOICES",
         "ScenarioStatusEnum": "port_twin_app.schema_enums.SCENARIO_STATUS_CHOICES",
         "SimulationRunStatusEnum": "port_twin_app.schema_enums.SIMULATION_RUN_STATUS_CHOICES",
-        "MarinePredictionStatusEnum": "port_twin_app.schema_enums.MARINE_PREDICTION_STATUS_CHOICES",
     },
 }
 
