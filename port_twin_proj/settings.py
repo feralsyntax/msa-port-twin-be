@@ -258,14 +258,7 @@ MAILERS = {
 
 MARINE_AI_CHECKPOINT = config(
     "MARINE_AI_CHECKPOINT",
-    default=str(
-        BASE_DIR
-        / "port_twin_app"
-        / "services"
-        / "marine_ai"
-        / "checkpoints"
-        / "marine_fno.pt"
-    ),
+    default=str(BASE_DIR / "artifacts" / "marine_fno_residual.pt"),
 )
 
 MARINE_AI_BACKEND = (
@@ -298,21 +291,14 @@ MARINE_AI_MODELARTS_VERSION = config(
 MARINE_COPERNICUS_DATASET_PATH = config(
     "MARINE_COPERNICUS_DATASET_PATH",
     str(
-        BASE_DIR
-        / "data/raw/copernicus/"
-        "copernicus_c3aba26804f0488e86a8513e71ac2a57.nc"
+        BASE_DIR / "data/raw/copernicus/copernicus_c3aba26804f0488e86a8513e71ac2a57.nc"
     ),
 )
 MARINE_GEBCO_DATASET_PATH = config(
     "MARINE_GEBCO_DATASET_PATH",
-    str(
-        BASE_DIR
-        / "data/raw/gebco/gebco_2026_mombasa_extended.nc"
-    ),
+    str(BASE_DIR / "data/raw/gebco/gebco_2026_mombasa_extended.nc"),
 )
-MARINE_DATA_MAX_AGE_HOURS = int(
-    config("MARINE_DATA_MAX_AGE_HOURS", "3")
-)
+MARINE_DATA_MAX_AGE_HOURS = int(config("MARINE_DATA_MAX_AGE_HOURS", "3"))
 
 # Logging configs
 LOGGING = {
