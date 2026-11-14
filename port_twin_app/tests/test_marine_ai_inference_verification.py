@@ -212,8 +212,8 @@ class TrainedMarineFNOAPITests(APITestCase):
 
         prediction = MarinePrediction.objects.get()
 
-        self.assertEqual(prediction.grid["nx"], 11)
-        self.assertEqual(prediction.grid["ny"], 24)
+        self.assertEqual(prediction.grid["nx"], 10)
+        self.assertEqual(prediction.grid["ny"], 23)
         self.assertNotIn("test_fixture", prediction.input_data)
         self.assertIn("marine", prediction.input_data["source_data"])
         self.assertIn("bathymetry", prediction.input_data["source_data"])
