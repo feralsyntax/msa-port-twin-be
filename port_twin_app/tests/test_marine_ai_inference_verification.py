@@ -19,16 +19,15 @@ from port_twin_app.services.marine_ai.inference import (
 from port_twin_app.services.marine_ai.input_preparation import (
     PreparedMarineInputs,
 )
+from port_twin_app.services.marine_ai.model import (
+    PREDICTION_MODE_RESIDUAL,
+    RESIDUAL_MODEL_VERSION,
+)
 from port_twin_app.services.marine_ai.serialization import (
     load_prepared_dataset,
 )
 from port_twin_app.tests.test_marine_ai_inference import make_request
 from port_twin_app.tests.test_marine_prediction_api import make_api_payload
-from port_twin_app.services.marine_ai.model import (
-    PREDICTION_MODE_RESIDUAL,
-    RESIDUAL_MODEL_VERSION,
-)
-
 
 CHECKPOINT_PATH = (
     Path(__file__).resolve().parents[2] / "artifacts" / "marine_fno_residual.pt"
@@ -212,7 +211,7 @@ class TrainedMarineFNOAPITests(APITestCase):
         self.assertEqual(MarinePrediction.objects.count(), 1)
 
         prediction = MarinePrediction.objects.get()
-        
+
         self.assertEqual(prediction.grid["nx"], 11)
         self.assertEqual(prediction.grid["ny"], 24)
         self.assertNotIn("test_fixture", prediction.input_data)
