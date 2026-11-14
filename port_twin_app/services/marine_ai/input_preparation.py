@@ -246,7 +246,7 @@ def prepare_marine_prediction_inputs(start_time, domain=DOMAIN):
         raise
     except Exception as exc:
         raise MarineInputUnavailable(
-            "Could not load or validate configured marine datasets."
+            f"Could not load or validate configured marine datasets: {exc}"
         ) from exc
 
     _check_spatial_coverage(marine, "Copernicus")
