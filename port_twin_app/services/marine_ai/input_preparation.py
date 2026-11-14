@@ -27,14 +27,14 @@ from port_twin_app.services.marine_data.validation import (
 DOMAIN = "mombasa_offshore"
 
 GRID_BOUNDS = {
-    "west": 40.16667,
-    "south": -5.0,
-    "east": 41.0,
-    "north": -3.08333,
+    "west": 40.16667175292969,
+    "south": -4.916664123535156,
+    "east": 40.91667175292969,
+    "north": -3.0833282470703125,
 }
 
-GRID_NX = 11
-GRID_NY = 24
+GRID_NX = 10
+GRID_NY = 23
 
 
 class MarineInputUnavailable(Exception):
@@ -152,17 +152,21 @@ def _check_spatial_coverage(dataset, dataset_name):
         )
 
 
-def _grid_coordinates():
-    longitude = np.linspace(
-        GRID_BOUNDS["west"],
-        GRID_BOUNDS["east"],
-        GRID_NX,
-    )
-    latitude = np.linspace(
-        GRID_BOUNDS["south"],
-        GRID_BOUNDS["north"],
-        GRID_NY,
-    )
+def _grid_coordinates(dataset):
+    latitude = dataset.latitude.values
+    longitude = dataset.longitude.values
+
+    latitude = latitude[
+        (latitude >= GRID_BOUNDS["south"]) & (latitude <= GRID_BOUNDS["north"])
+    ]
+    longitude = longitude[
+        (longitude >= GRID_BOUNDS["west"]) & (longitude <= GRID_BOUNDS["east"])
+    ]
+
+    if len(latitude) == 0 or len(longitude) == 0:
+        raise MarineInputUnavailable(
+            "The Copernicus dataset contains no coordinates in the configured grid."
+        )
 
     return latitude, longitude
 
@@ -177,7 +181,10 @@ def _interpolate(dataset, latitude, longitude, variables):
     arrays = {}
 
     for variable in variables:
-        values = np.asarray(interpolated[variable].values, dtype=np.float64)
+        values = np.asarray(
+            interpolated[variable].values,
+            dtype=np.float64,
+        )
 
         if not np.isfinite(values).all():
             raise MarineInputUnavailable(
@@ -239,7 +246,7 @@ def prepare_marine_prediction_inputs(start_time, domain=DOMAIN):
         raise
     except Exception as exc:
         raise MarineInputUnavailable(
-            "Could not load or validate configured marine datasets."
+            f"Could not load or validate configured marine datasets: {exc}"
         ) from exc
 
     _check_spatial_coverage(marine, "Copernicus")
@@ -259,19 +266,34 @@ def prepare_marine_prediction_inputs(start_time, domain=DOMAIN):
 
     marine_at_start = marine.sel(time=requested_time64)
 
-    latitude, longitude = _grid_coordinates()
+    # Use the native Copernicus coordinates, matching the training pipeline.
+    latitude, longitude = _grid_coordinates(marine)
 
-    marine_arrays = _interpolate(
-        marine_at_start,
-        latitude,
-        longitude,
-        (
-            "sea_surface_height_m",
-            "current_u_ms",
-            "current_v_ms",
-        ),
+    marine_at_start = marine_at_start.sel(
+        latitude=latitude,
+        longitude=longitude,
     )
 
+    marine_arrays = {}
+
+    for variable in (
+        "sea_surface_height_m",
+        "current_u_ms",
+        "current_v_ms",
+    ):
+        values = np.asarray(
+            marine_at_start[variable].values,
+            dtype=np.float64,
+        )
+
+        if not np.isfinite(values).all():
+            raise MarineInputUnavailable(
+                f"Copernicus data contains missing or non-finite values for {variable}."
+            )
+
+        marine_arrays[variable] = values
+
+    # GEBCO uses a different source grid, so interpolate bathymetry only.
     bathymetry_arrays = _interpolate(
         bathymetry,
         latitude,
@@ -286,10 +308,20 @@ def prepare_marine_prediction_inputs(start_time, domain=DOMAIN):
             "The offshore grid contains invalid or non-positive bathymetry."
         )
 
+    grid_bounds = {
+        "west": float(longitude[0]),
+        "south": float(latitude[0]),
+        "east": float(longitude[-1]),
+        "north": float(latitude[-1]),
+    }
+
+    grid_nx = len(longitude)
+    grid_ny = len(latitude)
+
     grid = MarineGrid(
-        **GRID_BOUNDS,
-        nx=GRID_NX,
-        ny=GRID_NY,
+        **grid_bounds,
+        nx=grid_nx,
+        ny=grid_ny,
     )
 
     forecast = MarineForecastConfig(start_time=requested_time.isoformat())
@@ -299,14 +331,14 @@ def prepare_marine_prediction_inputs(start_time, domain=DOMAIN):
         forecast=forecast,
         bathymetry_m=bathymetry_values.tolist(),
         initial_water_level_m=(marine_arrays["sea_surface_height_m"].tolist()),
-        initial_current_u_ms=marine_arrays["current_u_ms"].tolist(),
-        initial_current_v_ms=marine_arrays["current_v_ms"].tolist(),
+        initial_current_u_ms=(marine_arrays["current_u_ms"].tolist()),
+        initial_current_v_ms=(marine_arrays["current_v_ms"].tolist()),
     )
 
     grid_data = {
-        **GRID_BOUNDS,
-        "nx": GRID_NX,
-        "ny": GRID_NY,
+        **grid_bounds,
+        "nx": grid_nx,
+        "ny": grid_ny,
         "crs": "EPSG:4326",
         "domain": DOMAIN,
     }

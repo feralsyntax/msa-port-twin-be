@@ -47,12 +47,17 @@ from port_twin_app.serializers import (
     VesselResponseSerializer,
     safe_simulation_error_message,
 )
+from port_twin_app.services.marine_ai.contracts import CONTRACT_VERSION
 from port_twin_app.services.marine_ai.django_service import (
     get_configured_marine_inference_service,
 )
 from port_twin_app.services.marine_ai.input_preparation import (
     MarineInputUnavailable,
     prepare_marine_prediction_inputs,
+)
+from port_twin_app.services.marine_ai.model import (
+    PREDICTION_MODE_RESIDUAL,
+    RESIDUAL_MODEL_VERSION,
 )
 from port_twin_app.tasks import execute_simulation_task
 
@@ -698,9 +703,38 @@ class DataStatusAPIView(APIView):
         endpoint_configured = bool(settings.MARINE_AI_MODELARTS_ENDPOINT.strip())
 
         if backend == "local":
-            configured = checkpoint_path.is_file()
-            readiness = "ready" if configured else "unavailable"
-            configured_version = ""
+            if not checkpoint_path.is_file():
+                configured = False
+                readiness = "unavailable"
+                configured_version = ""
+            else:
+                try:
+                    inference_service = get_configured_marine_inference_service()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Local marine AI checkpoint could not be loaded: %s",
+                        exc,
+                    )
+                    configured = False
+                    readiness = "invalid_checkpoint"
+                    configured_version = ""
+                else:
+                    configured_version = inference_service.model_version
+
+                    checkpoint_is_valid = (
+                        inference_service.model_version == RESIDUAL_MODEL_VERSION
+                        and inference_service.prediction_mode
+                        == PREDICTION_MODE_RESIDUAL
+                        and inference_service.contract_version == CONTRACT_VERSION
+                    )
+
+                    configured = checkpoint_is_valid
+                    readiness = "ready" if checkpoint_is_valid else "invalid_checkpoint"
+                    if not checkpoint_is_valid:
+                        logger.warning(
+                            "Local marine AI checkpoint metadata does not match "
+                            "the expected model version, prediction mode, and contract."
+                        )
         elif backend == "modelarts":
             configured = endpoint_configured
             readiness = "configured" if configured else "unconfigured"

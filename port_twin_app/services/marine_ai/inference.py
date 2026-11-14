@@ -35,6 +35,7 @@ class MarineInferenceService:
         )
 
         self.model_version = checkpoint["model_version"]
+        self.contract_version = checkpoint["contract_version"]
         self.prediction_mode = checkpoint.get(
             "prediction_mode",
             PREDICTION_MODE_ABSOLUTE,

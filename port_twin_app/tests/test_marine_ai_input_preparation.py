@@ -12,11 +12,12 @@ from django.utils import timezone
 
 from port_twin_app.services.marine_ai.input_preparation import (
     GRID_BOUNDS,
-    GRID_NX,
-    GRID_NY,
     MarineInputUnavailable,
     prepare_marine_prediction_inputs,
 )
+
+TEST_GRID_NX = 5
+TEST_GRID_NY = 5
 
 
 class MarineInputPreparationTests(SimpleTestCase):
@@ -194,13 +195,13 @@ class MarineInputPreparationTests(SimpleTestCase):
 
         request = prepared.prediction_request
 
-        self.assertEqual(request.grid.nx, GRID_NX)
-        self.assertEqual(request.grid.ny, GRID_NY)
+        self.assertEqual(request.grid.nx, TEST_GRID_NX)
+        self.assertEqual(request.grid.ny, TEST_GRID_NY)
 
-        self.assertEqual(len(request.bathymetry_m), GRID_NY)
-        self.assertEqual(len(request.initial_water_level_m), GRID_NY)
-        self.assertEqual(len(request.initial_current_u_ms), GRID_NY)
-        self.assertEqual(len(request.initial_current_v_ms), GRID_NY)
+        self.assertEqual(len(request.bathymetry_m), TEST_GRID_NY)
+        self.assertEqual(len(request.initial_water_level_m), TEST_GRID_NY)
+        self.assertEqual(len(request.initial_current_u_ms), TEST_GRID_NY)
+        self.assertEqual(len(request.initial_current_v_ms), TEST_GRID_NY)
 
         for field in (
             request.bathymetry_m,
@@ -209,7 +210,7 @@ class MarineInputPreparationTests(SimpleTestCase):
             request.initial_current_v_ms,
         ):
             for row in field:
-                self.assertEqual(len(row), GRID_NX)
+                self.assertEqual(len(row), TEST_GRID_NX)
                 self.assertTrue(all(np.isfinite(value) for value in row))
 
         self.assertTrue(all(value > 0 for row in request.bathymetry_m for value in row))
@@ -236,8 +237,8 @@ class MarineInputPreparationTests(SimpleTestCase):
             prepared.grid_data["domain"],
             "mombasa_offshore",
         )
-        self.assertEqual(prepared.grid_data["nx"], GRID_NX)
-        self.assertEqual(prepared.grid_data["ny"], GRID_NY)
+        self.assertEqual(prepared.grid_data["nx"], TEST_GRID_NX)
+        self.assertEqual(prepared.grid_data["ny"], TEST_GRID_NY)
 
         self.assertEqual(
             prepared.forecast_data["start_time"],
