@@ -294,6 +294,17 @@ MARINE_AI_MODELARTS_VERSION = config(
     default="modelarts-unknown",
 )
 
+MARINE_COPERNICUS_DATASET_PATH = BASE_DIR / (
+    "data/raw/copernicus/"
+    "copernicus_c3aba26804f0488e86a8513e71ac2a57.nc"
+)
+MARINE_GEBCO_DATASET_PATH = BASE_DIR / (
+    "data/raw/gebco/gebco_2026_mombasa_extended.nc"
+)
+MARINE_DATA_MAX_AGE_HOURS = int(
+    config("MARINE_DATA_MAX_AGE_HOURS", "3")
+)
+
 # Logging configs
 LOGGING = {
     "version": 1,
