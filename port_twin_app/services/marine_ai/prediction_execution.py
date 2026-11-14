@@ -22,8 +22,24 @@ def _build_prediction_request(prediction):
 
     validated_inputs = prediction.input_data["validated_inputs"]
 
+    grid_fields = (
+        "west",
+        "south",
+        "east",
+        "north",
+        "nx",
+        "ny",
+        "crs",
+    )
+
+    grid_data = {
+        field: prediction.grid[field]
+        for field in grid_fields
+        if field in prediction.grid
+    }
+
     return MarinePredictionRequest(
-        grid=MarineGrid(**prediction.grid),
+        grid=MarineGrid(**grid_data),
         forecast=MarineForecastConfig(**prediction.forecast),
         **validated_inputs,
     )
