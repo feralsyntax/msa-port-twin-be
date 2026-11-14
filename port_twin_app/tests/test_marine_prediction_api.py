@@ -10,6 +10,10 @@ from port_twin_app.models import MarinePrediction
 from port_twin_app.services.marine_ai.django_service import (
     get_marine_inference_service,
 )
+from port_twin_app.services.marine_ai.input_preparation import (
+    MarineInputUnavailable,
+    PreparedMarineInputs,
+)
 from port_twin_app.tests.test_marine_ai_inference import (
     create_test_checkpoint,
     make_request,
@@ -17,34 +21,62 @@ from port_twin_app.tests.test_marine_ai_inference import (
 
 
 def make_api_payload(request=None):
-    """Convert a marine prediction request fixture into JSON input."""
-
+    """Build the simplified public marine prediction payload."""
     if request is None:
         request = make_request()
 
-    grid = request.grid
-    forecast = request.forecast
-
     return {
-        "grid": {
-            "west": grid.west,
-            "south": grid.south,
-            "east": grid.east,
-            "north": grid.north,
-            "nx": grid.nx,
-            "ny": grid.ny,
-            "crs": grid.crs,
-        },
         "forecast": {
-            "start_time": forecast.start_time,
-            "steps": forecast.steps,
-            "step_seconds": forecast.step_seconds,
+            "start_time": request.forecast.start_time,
         },
-        "bathymetry_m": request.bathymetry_m,
-        "initial_water_level_m": request.initial_water_level_m,
-        "initial_current_u_ms": request.initial_current_u_ms,
-        "initial_current_v_ms": request.initial_current_v_ms,
     }
+
+
+def make_prepared_inputs():
+    """Build deterministic assembled inputs for API tests."""
+    request = make_request()
+
+    grid_data = {
+        "west": request.grid.west,
+        "south": request.grid.south,
+        "east": request.grid.east,
+        "north": request.grid.north,
+        "nx": request.grid.nx,
+        "ny": request.grid.ny,
+        "crs": request.grid.crs,
+        "domain": "mombasa_offshore",
+    }
+
+    forecast_data = {
+        "start_time": request.forecast.start_time,
+        "steps": request.forecast.steps,
+        "step_seconds": request.forecast.step_seconds,
+    }
+
+    input_data = {
+        "domain": "mombasa_offshore",
+        "grid": grid_data,
+        "source_data": {
+            "marine": {
+                "provider": "Copernicus Marine",
+                "dataset_id": "test-copernicus-dataset",
+                "dataset_version": "test",
+                "selected_time": request.forecast.start_time,
+            },
+            "bathymetry": {
+                "provider": "GEBCO",
+                "dataset_id": "test-gebco-dataset",
+                "dataset_version": "GEBCO_2026",
+            },
+        },
+    }
+
+    return PreparedMarineInputs(
+        prediction_request=request,
+        grid_data=grid_data,
+        forecast_data=forecast_data,
+        input_data=input_data,
+    )
 
 
 class MarinePredictionAPITests(APITestCase):
@@ -67,12 +99,22 @@ class MarinePredictionAPITests(APITestCase):
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)
 
-        # Prevent a cached service from using another test's checkpoint.
         get_marine_inference_service.cache_clear()
         self.addCleanup(get_marine_inference_service.cache_clear)
 
         self.list_url = "/api/v1/marine-predictions/"
         self.create_url = "/api/v1/marine-predictions/create/"
+
+        self.prepared_inputs = make_prepared_inputs()
+
+        # API tests use controlled assembled inputs rather than depending
+        # on the freshness of the developer's local marine datasets.
+        self.input_preparation_patcher = patch(
+            "port_twin_app.views.prepare_marine_prediction_inputs",
+            return_value=self.prepared_inputs,
+        )
+        self.mock_prepare_inputs = self.input_preparation_patcher.start()
+        self.addCleanup(self.input_preparation_patcher.stop)
 
     def test_valid_request_creates_and_stores_prediction(self):
         response = self.client.post(
@@ -92,6 +134,32 @@ class MarinePredictionAPITests(APITestCase):
         )
         self.assertEqual(str(prediction.id), response.data["id"])
 
+        self.mock_prepare_inputs.assert_called_once()
+
+    def test_public_request_does_not_require_internal_fno_arrays(self):
+        response = self.client.post(
+            self.create_url,
+            make_api_payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_default_domain_is_passed_to_input_preparation(self):
+        response = self.client.post(
+            self.create_url,
+            make_api_payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        self.mock_prepare_inputs.assert_called_once()
+        self.assertEqual(
+            self.mock_prepare_inputs.call_args.kwargs["domain"],
+            "mombasa_offshore",
+        )
+
     def test_response_contains_forecast_fields_and_model_version(self):
         response = self.client.post(
             self.create_url,
@@ -108,9 +176,59 @@ class MarinePredictionAPITests(APITestCase):
         self.assertIn("current_v_ms", result)
         self.assertTrue(response.data["model_version"])
 
-    def test_invalid_grid_dimensions_return_400(self):
+    def test_prediction_persists_source_provenance(self):
+        response = self.client.post(
+            self.create_url,
+            make_api_payload(),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        prediction = MarinePrediction.objects.get()
+
+        self.assertEqual(
+            prediction.input_data["domain"],
+            "mombasa_offshore",
+        )
+        self.assertEqual(
+            prediction.input_data["source_data"]["marine"]["provider"],
+            "Copernicus Marine",
+        )
+        self.assertEqual(
+            prediction.input_data["source_data"]["bathymetry"]["provider"],
+            "GEBCO",
+        )
+        self.assertEqual(
+            prediction.grid["domain"],
+            "mombasa_offshore",
+        )
+
+    def test_missing_forecast_returns_400(self):
+        response = self.client.post(
+            self.create_url,
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(MarinePrediction.objects.count(), 0)
+        self.mock_prepare_inputs.assert_not_called()
+
+    def test_missing_start_time_returns_400(self):
+        response = self.client.post(
+            self.create_url,
+            {"forecast": {}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(MarinePrediction.objects.count(), 0)
+        self.mock_prepare_inputs.assert_not_called()
+
+    def test_unsupported_domain_returns_400(self):
         payload = make_api_payload()
-        payload["grid"]["nx"] = 1
+        payload["domain"] = "mombasa_harbour"
 
         response = self.client.post(
             self.create_url,
@@ -120,15 +238,40 @@ class MarinePredictionAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(MarinePrediction.objects.count(), 0)
+        self.mock_prepare_inputs.assert_not_called()
 
-    def test_malformed_request_returns_400(self):
+    def test_missing_marine_data_returns_503(self):
+        self.mock_prepare_inputs.side_effect = MarineInputUnavailable(
+            "Copernicus dataset is missing."
+        )
+
         response = self.client.post(
             self.create_url,
-            {"grid": {}, "forecast": {}},
+            make_api_payload(),
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+        self.assertEqual(MarinePrediction.objects.count(), 0)
+
+    def test_stale_marine_data_returns_503(self):
+        self.mock_prepare_inputs.side_effect = MarineInputUnavailable(
+            "Copernicus dataset is stale."
+        )
+
+        response = self.client.post(
+            self.create_url,
+            make_api_payload(),
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
         self.assertEqual(MarinePrediction.objects.count(), 0)
 
     def test_missing_checkpoint_returns_503(self):
