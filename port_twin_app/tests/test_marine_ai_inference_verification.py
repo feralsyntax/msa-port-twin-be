@@ -2,20 +2,22 @@
 
 import math
 from pathlib import Path
+from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from port_twin_app.models import MarinePrediction
-from port_twin_app.services.marine_ai.contracts import (
-    CONTRACT_VERSION,
-)
+from port_twin_app.services.marine_ai.contracts import CONTRACT_VERSION
 from port_twin_app.services.marine_ai.django_service import (
     get_marine_inference_service,
 )
 from port_twin_app.services.marine_ai.inference import (
     MarineInferenceService,
+)
+from port_twin_app.services.marine_ai.input_preparation import (
+    PreparedMarineInputs,
 )
 from port_twin_app.services.marine_ai.serialization import (
     load_prepared_dataset,
@@ -24,6 +26,37 @@ from port_twin_app.tests.test_marine_ai_inference import make_request
 from port_twin_app.tests.test_marine_prediction_api import make_api_payload
 
 CHECKPOINT_PATH = Path(__file__).resolve().parents[2] / "artifacts" / "marine_fno.pt"
+
+
+def make_prepared_inputs(request):
+    """Build prepared inputs around an existing internal FNO test request."""
+
+    grid = request.grid
+    forecast = request.forecast
+
+    return PreparedMarineInputs(
+        prediction_request=request,
+        grid_data={
+            "west": grid.west,
+            "south": grid.south,
+            "east": grid.east,
+            "north": grid.north,
+            "nx": grid.nx,
+            "ny": grid.ny,
+            "crs": grid.crs,
+            "domain": "mombasa_offshore",
+        },
+        forecast_data={
+            "start_time": forecast.start_time,
+            "steps": forecast.steps,
+            "step_seconds": forecast.step_seconds,
+        },
+        input_data={
+            "domain": "mombasa_offshore",
+            "test_fixture": True,
+            "source": "held_out_test_sample",
+        },
+    )
 
 
 class TrainedMarineFNOInferenceTests(SimpleTestCase):
@@ -89,11 +122,18 @@ class TrainedMarineFNOAPITests(APITestCase):
         self.addCleanup(get_marine_inference_service.cache_clear)
 
     def test_trained_checkpoint_prediction_is_persisted_through_api(self):
-        response = self.client.post(
-            "/api/v1/marine-predictions/create/",
-            make_api_payload(),
-            format="json",
-        )
+        request = make_request()
+        prepared_inputs = make_prepared_inputs(request)
+
+        with patch(
+            "port_twin_app.views.prepare_marine_prediction_inputs",
+            return_value=prepared_inputs,
+        ):
+            response = self.client.post(
+                "/api/v1/marine-predictions/create/",
+                make_api_payload(request),
+                format="json",
+            )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(MarinePrediction.objects.count(), 1)
@@ -147,11 +187,17 @@ class TrainedMarineFNOAPITests(APITestCase):
         sample = prepared.split.test[0]
         request = sample.request
 
-        response = self.client.post(
-            "/api/v1/marine-predictions/create/",
-            make_api_payload(request),
-            format="json",
-        )
+        prepared_inputs = make_prepared_inputs(request)
+
+        with patch(
+            "port_twin_app.views.prepare_marine_prediction_inputs",
+            return_value=prepared_inputs,
+        ):
+            response = self.client.post(
+                "/api/v1/marine-predictions/create/",
+                make_api_payload(request),
+                format="json",
+            )
 
         self.assertEqual(
             response.status_code,
@@ -162,14 +208,8 @@ class TrainedMarineFNOAPITests(APITestCase):
 
         prediction = MarinePrediction.objects.get()
 
-        self.assertEqual(
-            prediction.model_version,
-            "fno-0.2.0",
-        )
-        self.assertEqual(
-            prediction.contract_version,
-            CONTRACT_VERSION,
-        )
+        self.assertEqual(prediction.model_version, "fno-0.2.0")
+        self.assertEqual(prediction.contract_version, CONTRACT_VERSION)
         self.assertEqual(
             prediction.status,
             MarinePrediction.Status.COMPLETED,
