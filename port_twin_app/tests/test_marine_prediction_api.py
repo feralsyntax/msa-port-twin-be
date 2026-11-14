@@ -33,6 +33,11 @@ def make_public_payload(request=None):
     }
 
 
+def make_api_payload(request=None):
+    """Backward-compatible alias for the public API payload fixture."""
+    return make_public_payload(request)
+
+
 class MarinePredictionAPITests(APITestCase):
     def setUp(self):
         super().setUp()
