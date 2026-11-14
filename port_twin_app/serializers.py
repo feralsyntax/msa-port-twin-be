@@ -551,6 +551,20 @@ class MarineForecastInputSerializer(serializers.Serializer):
     start_time = serializers.DateTimeField()
 
 
+class MarinePredictionPublicRequestSerializer(serializers.Serializer):
+    """Simplified request accepted by the frontend."""
+
+    forecast = MarineForecastInputSerializer()
+
+    domain = serializers.ChoiceField(
+        choices=[
+            ("mombasa_offshore", "Mombasa offshore"),
+        ],
+        required=False,
+        default="mombasa_offshore",
+    )
+
+
 class MarinePredictionRequestSerializer(serializers.Serializer):
     grid = MarineGridInputSerializer()
     forecast = MarineForecastInputSerializer()
