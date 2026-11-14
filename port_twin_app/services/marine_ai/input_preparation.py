@@ -27,14 +27,14 @@ from port_twin_app.services.marine_data.validation import (
 DOMAIN = "mombasa_offshore"
 
 GRID_BOUNDS = {
-    "west": 40.16667,
-    "south": -5.0,
-    "east": 41.0,
-    "north": -3.08333,
+    "west": 40.16667175292969,
+    "south": -4.916664123535156,
+    "east": 40.91667175292969,
+    "north": -3.0833282470703125,
 }
 
-GRID_NX = 11
-GRID_NY = 24
+GRID_NX = 10
+GRID_NY = 23
 
 
 class MarineInputUnavailable(Exception):
