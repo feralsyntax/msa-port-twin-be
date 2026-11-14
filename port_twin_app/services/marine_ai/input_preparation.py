@@ -33,6 +33,9 @@ GRID_BOUNDS = {
     "north": -3.0833282470703125,
 }
 
+GRID_NX = 10
+GRID_NY = 23
+
 
 class MarineInputUnavailable(Exception):
     """Raised when configured marine inputs cannot support a prediction."""
