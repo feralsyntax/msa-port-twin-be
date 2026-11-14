@@ -208,7 +208,6 @@ def prepare_marine_prediction_inputs(start_time, domain=DOMAIN):
     gebco_provenance = _read_provenance(gebco_path)
 
     _check_freshness(copernicus_provenance, "Copernicus")
-    _check_freshness(gebco_provenance, "GEBCO")
 
     try:
         with xr.open_dataset(copernicus_path) as raw_marine:
