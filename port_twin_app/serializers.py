@@ -618,6 +618,22 @@ class MarinePredictionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class MarinePredictionStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MarinePrediction
+        fields = [  # noqa: RUF012
+            "id",
+            "status",
+            "error_message",
+            "model_version",
+            "model_status",
+            "prediction_mode",
+            "forecast_horizon_hours",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
 class DataSourceCountSerializer(serializers.Serializer):
     source = serializers.CharField()
     count = serializers.IntegerField()
