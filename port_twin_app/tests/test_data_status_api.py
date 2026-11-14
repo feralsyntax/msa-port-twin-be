@@ -1,7 +1,12 @@
+from pathlib import Path
+
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from port_twin_app.models import MarineCondition, MarinePrediction
+from port_twin_app.services.marine_ai.model import (
+    RESIDUAL_MODEL_VERSION,
+)
 
 
 class DataStatusAPITests(TestCase):
@@ -100,3 +105,21 @@ class DataStatusAPITests(TestCase):
             prediction.contract_version,
         )
         self.assertIsNotNone(response.data["ai"]["latest_prediction_at"])
+
+    @override_settings(
+        MARINE_AI_BACKEND="local",
+        MARINE_AI_CHECKPOINT=str(
+            Path(__file__).resolve().parents[2] / "artifacts" / "marine_fno_residual.pt"
+        ),
+    )
+    def test_valid_residual_checkpoint_is_reported_as_ready(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["ai"]["backend"], "local")
+        self.assertTrue(response.data["ai"]["configured"])
+        self.assertEqual(response.data["ai"]["readiness"], "ready")
+        self.assertEqual(
+            response.data["ai"]["configured_model_version"],
+            RESIDUAL_MODEL_VERSION,
+        )
