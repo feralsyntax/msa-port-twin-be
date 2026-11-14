@@ -28,7 +28,7 @@ from port_twin_app.serializers import (
     DataStatusSerializer,
     MarineConditionQuerySerializer,
     MarineConditionSerializer,
-    MarinePredictionRequestSerializer,
+    MarinePredictionPublicRequestSerializer,
     MarinePredictionSerializer,
     OperationsOverviewSerializer,
     ScenarioCreateUpdateRequestSerializer,
@@ -49,6 +49,10 @@ from port_twin_app.serializers import (
 )
 from port_twin_app.services.marine_ai.django_service import (
     get_configured_marine_inference_service,
+)
+from port_twin_app.services.marine_ai.input_preparation import (
+    MarineInputUnavailable,
+    prepare_marine_prediction_inputs,
 )
 from port_twin_app.tasks import execute_simulation_task
 
@@ -768,14 +772,10 @@ class MarinePredictionServiceUnavailable(APIException):
 
 
 class MarinePredictionCreateAPIView(APIView):
-    """
-    Generate and store a new forecast.
-    """
-
     throttle_scope = "marine_prediction"
 
     @extend_schema(
-        request=MarinePredictionRequestSerializer,
+        request=MarinePredictionPublicRequestSerializer,
         responses={
             201: MarinePredictionSerializer,
             400: APIErrorResponseSerializer,
@@ -783,35 +783,40 @@ class MarinePredictionCreateAPIView(APIView):
         },
     )
     def post(self, request):
-        request_serializer = MarinePredictionRequestSerializer(data=request.data)
+        request_serializer = MarinePredictionPublicRequestSerializer(data=request.data)
         request_serializer.is_valid(raise_exception=True)
 
-        prediction_request = request_serializer.validated_data["_prediction_request"]
+        validated_data = request_serializer.validated_data
+        start_time = validated_data["forecast"]["start_time"]
+        domain = validated_data["domain"]
 
         try:
+            prepared_inputs = prepare_marine_prediction_inputs(
+                start_time=start_time.isoformat(),
+                domain=domain,
+            )
+
             inference_service = get_configured_marine_inference_service()
-            result = inference_service.predict(prediction_request)
-        except (
-            FileNotFoundError,
-            OSError,
-            ValueError,
-            RuntimeError,
-        ) as exc:
+            result = inference_service.predict(prepared_inputs.prediction_request)
+
+        except MarineInputUnavailable as exc:
+            logger.warning(
+                "Marine prediction inputs unavailable: %s",
+                exc,
+            )
+            raise MarinePredictionServiceUnavailable() from exc
+
+        except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
             logger.error(
-                "Marine prediction failed: path=%s exception_type=%s",
-                request.path,
-                type(exc).__name__,
+                "Marine prediction inference failed: %s",
+                exc,
             )
             raise MarinePredictionServiceUnavailable() from exc
 
         prediction = MarinePrediction.objects.create(
-            grid=request.data["grid"],
-            forecast=request.data["forecast"],
-            input_data={
-                key: value
-                for key, value in request.data.items()
-                if key not in {"grid", "forecast"}
-            },
+            grid=prepared_inputs.grid_data,
+            forecast=prepared_inputs.forecast_data,
+            input_data=prepared_inputs.input_data,
             result_data={
                 "water_level_m": result.water_level_m,
                 "current_u_ms": result.current_u_ms,
