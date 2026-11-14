@@ -24,8 +24,15 @@ from port_twin_app.services.marine_ai.serialization import (
 )
 from port_twin_app.tests.test_marine_ai_inference import make_request
 from port_twin_app.tests.test_marine_prediction_api import make_api_payload
+from port_twin_app.services.marine_ai.model import (
+    PREDICTION_MODE_RESIDUAL,
+    RESIDUAL_MODEL_VERSION,
+)
 
-CHECKPOINT_PATH = Path(__file__).resolve().parents[2] / "artifacts" / "marine_fno.pt"
+
+CHECKPOINT_PATH = (
+    Path(__file__).resolve().parents[2] / "artifacts" / "marine_fno_residual.pt"
+)
 
 
 def make_prepared_inputs(request):
@@ -74,7 +81,10 @@ class TrainedMarineFNOInferenceTests(SimpleTestCase):
         result = service.predict(request)
         result.validate_against(request)
 
-        self.assertEqual(result.model_version, "fno-0.2.0")
+        self.assertEqual(result.model_version, RESIDUAL_MODEL_VERSION)
+        self.assertEqual(service.model_version, RESIDUAL_MODEL_VERSION)
+        self.assertEqual(service.prediction_mode, PREDICTION_MODE_RESIDUAL)
+        self.assertEqual(service.contract_version, CONTRACT_VERSION)
         self.assertEqual(result.contract_version, CONTRACT_VERSION)
         self.assertEqual(result.status, "success")
 
@@ -141,14 +151,14 @@ class TrainedMarineFNOAPITests(APITestCase):
         prediction = MarinePrediction.objects.get()
         result = prediction.result_data
 
-        self.assertEqual(prediction.model_version, "fno-0.2.0")
+        self.assertEqual(prediction.model_version, RESIDUAL_MODEL_VERSION)
         self.assertEqual(prediction.contract_version, CONTRACT_VERSION)
         self.assertEqual(
             prediction.status,
             MarinePrediction.Status.COMPLETED,
         )
 
-        self.assertEqual(response.data["model_version"], "fno-0.2.0")
+        self.assertEqual(response.data["model_version"], RESIDUAL_MODEL_VERSION)
         self.assertEqual(response.data["contract_version"], CONTRACT_VERSION)
 
         for field_name in (
@@ -187,12 +197,7 @@ class TrainedMarineFNOAPITests(APITestCase):
         sample = prepared.split.test[0]
         request = sample.request
 
-        prepared_inputs = make_prepared_inputs(request)
-
-        with patch(
-            "port_twin_app.views.prepare_marine_prediction_inputs",
-            return_value=prepared_inputs,
-        ):
+        with override_settings(MARINE_DATA_MAX_AGE_HOURS=24 * 30):
             response = self.client.post(
                 "/api/v1/marine-predictions/create/",
                 make_api_payload(request),
@@ -207,8 +212,14 @@ class TrainedMarineFNOAPITests(APITestCase):
         self.assertEqual(MarinePrediction.objects.count(), 1)
 
         prediction = MarinePrediction.objects.get()
+        
+        self.assertEqual(prediction.grid["nx"], 11)
+        self.assertEqual(prediction.grid["ny"], 24)
+        self.assertNotIn("test_fixture", prediction.input_data)
+        self.assertIn("marine", prediction.input_data["source_data"])
+        self.assertIn("bathymetry", prediction.input_data["source_data"])
 
-        self.assertEqual(prediction.model_version, "fno-0.2.0")
+        self.assertEqual(prediction.model_version, RESIDUAL_MODEL_VERSION)
         self.assertEqual(prediction.contract_version, CONTRACT_VERSION)
         self.assertEqual(
             prediction.status,
@@ -216,7 +227,7 @@ class TrainedMarineFNOAPITests(APITestCase):
         )
 
         self.assertEqual(response.data["id"], str(prediction.pk))
-        self.assertEqual(response.data["model_version"], "fno-0.2.0")
+        self.assertEqual(response.data["model_version"], RESIDUAL_MODEL_VERSION)
         self.assertEqual(response.data["contract_version"], CONTRACT_VERSION)
 
         result = prediction.result_data
@@ -231,10 +242,10 @@ class TrainedMarineFNOAPITests(APITestCase):
             self.assertEqual(len(field), 6)
 
             for step in field:
-                self.assertEqual(len(step), request.grid.ny)
+                self.assertEqual(len(step), prediction.grid["ny"])
 
                 for row in step:
-                    self.assertEqual(len(row), request.grid.nx)
+                    self.assertEqual(len(row), prediction.grid["nx"])
                     self.assertTrue(all(math.isfinite(value) for value in row))
 
         detail_response = self.client.get(
@@ -251,7 +262,7 @@ class TrainedMarineFNOAPITests(APITestCase):
         )
         self.assertEqual(
             detail_response.data["model_version"],
-            "fno-0.2.0",
+            RESIDUAL_MODEL_VERSION,
         )
         self.assertEqual(
             detail_response.data["result_data"],
