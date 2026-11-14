@@ -59,7 +59,7 @@ from port_twin_app.services.marine_ai.model import (
     PREDICTION_MODE_RESIDUAL,
     RESIDUAL_MODEL_VERSION,
 )
-from port_twin_app.tasks import execute_simulation_task
+from port_twin_app.tasks import execute_marine_prediction_task, execute_simulation_task
 
 logger = logging.getLogger(__name__)
 
@@ -811,7 +811,7 @@ class MarinePredictionCreateAPIView(APIView):
     @extend_schema(
         request=MarinePredictionPublicRequestSerializer,
         responses={
-            201: MarinePredictionSerializer,
+            202: MarinePredictionSerializer,
             400: APIErrorResponseSerializer,
             503: APIErrorResponseSerializer,
         },
@@ -829,44 +829,59 @@ class MarinePredictionCreateAPIView(APIView):
                 start_time=start_time.isoformat(),
                 domain=domain,
             )
-
-            inference_service = get_configured_marine_inference_service()
-            result = inference_service.predict(prepared_inputs.prediction_request)
-
         except MarineInputUnavailable as exc:
-            logger.warning(
-                "Marine prediction inputs unavailable: %s",
-                exc,
-            )
+            logger.warning("Marine prediction inputs unavailable: %s", exc)
             raise MarinePredictionServiceUnavailable() from exc
-
         except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
             logger.error(
-                "Marine prediction inference failed: %s",
+                "Marine prediction input preparation failed: %s",
                 exc,
             )
             raise MarinePredictionServiceUnavailable() from exc
+
+        prediction_request = prepared_inputs.prediction_request
 
         prediction = MarinePrediction.objects.create(
             grid=prepared_inputs.grid_data,
             forecast=prepared_inputs.forecast_data,
-            input_data=prepared_inputs.input_data,
-            result_data={
-                "water_level_m": result.water_level_m,
-                "current_u_ms": result.current_u_ms,
-                "current_v_ms": result.current_v_ms,
-                "status": result.status,
+            input_data={
+                "domain": domain,
+                "validated_inputs": {
+                    "bathymetry_m": prediction_request.bathymetry_m,
+                    "initial_water_level_m": (prediction_request.initial_water_level_m),
+                    "initial_current_u_ms": (prediction_request.initial_current_u_ms),
+                    "initial_current_v_ms": (prediction_request.initial_current_v_ms),
+                },
             },
-            model_version=result.model_version,
-            contract_version=result.contract_version,
-            status=MarinePrediction.Status.COMPLETED,
+            provenance=prepared_inputs.input_data.get("source_data", {}),
+            model_version=RESIDUAL_MODEL_VERSION,
+            contract_version=CONTRACT_VERSION,
+            prediction_mode=PREDICTION_MODE_RESIDUAL,
+            model_status="experimental",
+            forecast_horizon_hours=6,
+            status=MarinePrediction.Status.PENDING,
         )
 
-        response_serializer = MarinePredictionSerializer(prediction)
+        try:
+            execute_marine_prediction_task.delay(str(prediction.id))
+        except Exception as exc:
+            logger.error(
+                "Could not queue marine prediction: prediction_id=%s exception_type=%s",
+                prediction.id,
+                type(exc).__name__,
+            )
+
+            prediction.status = MarinePrediction.Status.FAILED
+            prediction.error_message = (
+                "Marine prediction could not be queued. Please try again."
+            )
+            prediction.save(update_fields=["status", "error_message"])
+
+            raise MarinePredictionServiceUnavailable() from exc
 
         return Response(
-            response_serializer.data,
-            status=status.HTTP_201_CREATED,
+            MarinePredictionSerializer(prediction).data,
+            status=status.HTTP_202_ACCEPTED,
         )
 
 
