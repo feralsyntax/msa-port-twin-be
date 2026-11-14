@@ -214,7 +214,23 @@ def prepare_marine_prediction_inputs(start_time, domain=DOMAIN):
             marine = normalize_copernicus_dataset(raw_marine.load())
 
         with xr.open_dataset(gebco_path) as raw_bathymetry:
-            bathymetry = normalize_gebco_bathymetry(raw_bathymetry.load())
+            raw_bathymetry = raw_bathymetry.load()
+
+            gebco_renames = {}
+
+            if "lat" in raw_bathymetry.dims or "lat" in raw_bathymetry.coords:
+                gebco_renames["lat"] = "latitude"
+
+            if "lon" in raw_bathymetry.dims or "lon" in raw_bathymetry.coords:
+                gebco_renames["lon"] = "longitude"
+
+            if "elevation" in raw_bathymetry.data_vars:
+                gebco_renames["elevation"] = "elevation_m"
+
+            if gebco_renames:
+                raw_bathymetry = raw_bathymetry.rename(gebco_renames)
+
+            bathymetry = normalize_gebco_bathymetry(raw_bathymetry)
 
         validate_marine_dataset(marine)
         validate_bathymetry_dataset(bathymetry)
