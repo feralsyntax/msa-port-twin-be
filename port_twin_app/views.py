@@ -30,6 +30,7 @@ from port_twin_app.serializers import (
     MarineConditionSerializer,
     MarinePredictionPublicRequestSerializer,
     MarinePredictionSerializer,
+    MarinePredictionStatusSerializer,
     OperationsOverviewSerializer,
     ScenarioCreateUpdateRequestSerializer,
     ScenarioResponseSerializer,
@@ -883,6 +884,13 @@ class MarinePredictionCreateAPIView(APIView):
             MarinePredictionSerializer(prediction).data,
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+class MarinePredictionStatusAPIView(generics.RetrieveAPIView):
+    """Retrieve the current status of a marine prediction."""
+
+    queryset = MarinePrediction.objects.all()
+    serializer_class = MarinePredictionStatusSerializer
 
 
 class MarinePredictionDetailAPIView(generics.RetrieveAPIView):
