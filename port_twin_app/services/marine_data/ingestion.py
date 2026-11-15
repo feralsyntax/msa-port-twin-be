@@ -1,21 +1,16 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import xarray as xr
 
-from .normalization import normalize_copernicus_dataset, normalize_gebco_bathymetry
-from .provenance import MarineDataProvenance
-from .sources.base import MarineDataRequest, MarineDataSource
-from .sources.bathymetry import BathymetryDataSource, BathymetryRequest
-from .validation import validate_bathymetry_dataset, validate_marine_dataset
-from collections.abc import Callable
-
 from .normalization import (
-    normalize_altimetry_dataset,
     normalize_copernicus_dataset,
     normalize_gebco_bathymetry,
 )
+from .provenance import MarineDataProvenance
+from .sources.base import MarineDataRequest, MarineDataSource
+from .sources.bathymetry import BathymetryDataSource, BathymetryRequest
 from .validation import (
-    validate_altimetry_dataset,
     validate_bathymetry_dataset,
     validate_marine_dataset,
 )
