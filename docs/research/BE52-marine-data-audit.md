@@ -358,3 +358,14 @@ The following limitations should remain visible in any future use of these findi
 5. The chart bounds used for the spatial assessment are not a substitute for surveyed channel geometry.
 6. No authoritative geoid-to-Chart-Datum transformation was established.
 7. The historical tide-gauge benchmark relationship should be checked against the applicable current station benchmark documentation before operational conversion.
+
+## 9. References
+
+1. **Copernicus Marine Service** — [QUID for Global Sea Physical Analysis and Forecasting Product](https://documentation.marine.copernicus.eu/QUID/CMEMS-GLO-QUID-001-024.pdf). Documents the distinction between GLO12 dynamic sea-surface height and the tidal contribution, and describes the merged sea-level product.
+2. **Copernicus Marine Service** — [Global Ocean Physics Analysis and Forecast product](https://data.marine.copernicus.eu/product/GLOBAL_ANALYSISFORECAST_PHY_001_024/services). Dataset catalogue and available hourly products.
+3. **GEBCO Bathymetric Compilation Group (2026)** — [The GEBCO_2026 Grid](https://www.gebco.net/data-products-gridded-bathymetry-data/gebco2026-grid). Grid resolution, TID definitions, datum assumptions, source limitations and disclaimer.
+4. **BODC / GLOSS** — [Mombasa Station Information Sheet](https://www.bodc.ac.uk/resources/inventories/gloss_handbook/stations/8/). Tide-gauge benchmark relationships and station details.
+5. **BODC** — [Mombasa Site History](https://www.bodc.ac.uk/data/documents/nodb/57529/). Station reference level and datum relationships.
+6. **UHSLC / IOC** — [Mombasa Station Details](https://www.ioc-sealevelmonitoring.org/ssc/stationdetails.php?id=SSC-momb). Station identifiers and research-quality data coverage.
+7. **Magori et al. (2015), KMFRI** — [Sea Level Monitoring, Data Analysis and Prediction in Kenya](https://gloss-sealevel.org/sites/gloss/files/publications/documents/national-report-kenya-2015.pdf). Published Mombasa tidal constituents.
+8. **EPSG** — [EPSG:5831 — Instantaneous Water Level depth](https://epsg.io/5831). Definition of the vertical CRS found in the GEBCO metadata.
