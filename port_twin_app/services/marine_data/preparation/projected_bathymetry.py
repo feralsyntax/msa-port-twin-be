@@ -7,6 +7,7 @@ import numpy as np
 import xarray as xr
 from pyproj import CRS, Transformer
 from scipy.interpolate import griddata
+from scipy.spatial import cKDTree
 
 from port_twin_app.services.marine_data.domains.mombasa_channel import (
     GEOGRAPHIC_CRS,
@@ -124,11 +125,16 @@ def build_projected_bathymetry_grid(zone_name, source_dataset=None):
 
     source_points = np.column_stack((source_easting.ravel(), source_northing.ravel()))
 
-    valid_elevation = np.isfinite(elevation)
-    valid_tid = np.isfinite(tid.astype(np.float64))
+    # Only underwater source cells may contribute to bathymetry.
+    valid_water = np.isfinite(source["bathymetry_m"].values)
 
-    if valid_elevation.sum() < 3 or valid_tid.sum() < 1:
-        raise ValueError("Insufficient valid source points for grid preparation.")
+    valid_tid = valid_water & np.isfinite(tid.astype(np.float64))
+
+    if valid_water.sum() < 3:
+        raise ValueError("Insufficient underwater source points.")
+
+    if not valid_tid.any():
+        raise ValueError("No valid underwater TID classifications.")
 
     resolution = zone.target_resolution_m
 
@@ -146,20 +152,41 @@ def build_projected_bathymetry_grid(zone_name, source_dataset=None):
     target_xx, target_yy = np.meshgrid(easting, northing)
     target_points = (target_xx, target_yy)
 
-    # Linear interpolation retains continuous elevation values.
-    interpolated_elevation = griddata(
-        source_points[valid_elevation.ravel()],
-        elevation.ravel()[valid_elevation.ravel()],
+    # Interpolate only underwater bathymetry.
+    water_points = source_points[valid_water.ravel()]
+    water_depths = source["bathymetry_m"].values.ravel()[valid_water.ravel()]
+
+    interpolated_bathymetry = griddata(
+        water_points,
+        water_depths,
         target_points,
         method="linear",
     )
 
-    # NaN values identify locations outside the interpolation coverage.
-    source_coverage = np.isfinite(interpolated_elevation)
+    # Classify each target cell using its nearest original source cell.
+    # This prevents interpolation across source cells classified as land.
+    source_tree = cKDTree(source_points)
+    _, nearest_source_indices = source_tree.query(
+        np.column_stack((target_xx.ravel(), target_yy.ravel()))
+    )
 
-    # TID is categorical: nearest-neighbour preserves its original codes.
+    nearest_source_is_water = valid_water.ravel()[nearest_source_indices]
+    nearest_source_is_water = nearest_source_is_water.reshape(target_xx.shape)
+
+    source_coverage = nearest_source_is_water & np.isfinite(interpolated_bathymetry)
+
+    # Never retain interpolated values outside supported underwater coverage.
+    interpolated_bathymetry = np.where(
+        source_coverage,
+        interpolated_bathymetry,
+        np.nan,
+    )
+
+    interpolated_elevation = -interpolated_bathymetry
+
+    # Preserve original categorical TID values using nearest water source cells.
     interpolated_tid = griddata(
-        source_points[valid_tid.ravel()],
+        water_points,
         tid.ravel()[valid_tid.ravel()].astype(np.float64),
         target_points,
         method="nearest",
@@ -171,12 +198,7 @@ def build_projected_bathymetry_grid(zone_name, source_dataset=None):
         np.nan,
     )
 
-    # Derive positive-down bathymetry from the interpolated elevation.
-    bathymetry = np.where(
-        source_coverage & (interpolated_elevation < 0),
-        -interpolated_elevation,
-        np.nan,
-    )
+    bathymetry = interpolated_bathymetry
 
     crs = CRS.from_epsg(32737)
     crs_attributes = {
@@ -227,7 +249,8 @@ def build_projected_bathymetry_grid(zone_name, source_dataset=None):
                 {
                     "long_name": "Within source interpolation coverage",
                     "description": (
-                        "False outside the convex hull of valid source elevations."
+                        "True only where the nearest source grid cell is underwater "
+                        "and linear bathymetry interpolation is supported."
                     ),
                     "grid_mapping": "spatial_ref",
                 },
