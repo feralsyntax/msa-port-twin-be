@@ -16,6 +16,7 @@ from port_twin_app.services.marine_data.ingestion import (
 from port_twin_app.services.marine_data.normalization import (
     normalize_altimetry_dataset,
     normalize_copernicus_dataset,
+    normalize_era5_wind_dataset,
     normalize_gebco_bathymetry,
 )
 from port_twin_app.services.marine_data.provenance import (
@@ -30,9 +31,11 @@ from port_twin_app.services.marine_data.sources.bathymetry import BathymetryRequ
 from port_twin_app.services.marine_data.sources.copernicus import (
     CopernicusMarineSource,
 )
+from port_twin_app.services.marine_data.sources.era5 import ERA5WindSource
 from port_twin_app.services.marine_data.validation import (
     validate_altimetry_dataset,
     validate_bathymetry_dataset,
+    validate_era5_wind_dataset,
     validate_marine_dataset,
 )
 
@@ -155,6 +158,39 @@ def create_test_altimetry_dataset():
             "processing_level": "L4",
             "product_version": "vNov2024",
             "platform": "Sentinel-3A, Sentinel-3B, Sentinel-6A",
+        },
+    )
+
+
+def create_test_era5_dataset():
+    """Create a small ERA5-like single-level wind dataset."""
+
+    shape = (3, 2, 2)
+
+    return xr.Dataset(
+        {
+            "u10": (
+                ("valid_time", "latitude", "longitude"),
+                np.full(shape, 4.5, dtype=np.float32),
+                {"units": "m s**-1", "long_name": "10 metre U wind component"},
+            ),
+            "v10": (
+                ("valid_time", "latitude", "longitude"),
+                np.full(shape, -2.0, dtype=np.float32),
+                {"units": "m s**-1", "long_name": "10 metre V wind component"},
+            ),
+        },
+        coords={
+            "valid_time": np.array(
+                ["2026-10-01", "2026-10-02", "2026-10-03"],
+                dtype="datetime64[ns]",
+            ),
+            # ERA5 commonly stores latitude in descending order.
+            "latitude": [-4.0, -4.5],
+            "longitude": [40.2, 40.7],
+        },
+        attrs={
+            "title": "ERA5 hourly data on single levels",
         },
     )
 
@@ -1068,3 +1104,91 @@ class GriddedAltimetryTests(SimpleTestCase):
             )
             self.assertEqual(dataset.attrs["source_version"], "vNov2024")
             dataset.close()
+
+
+class ERA5WindIngestionTests(SimpleTestCase):
+    def test_normalizes_and_validates_wind_components(self):
+        normalized = normalize_era5_wind_dataset(
+            create_test_era5_dataset().rename({"valid_time": "time"}).sortby("latitude")
+        )
+
+        validate_era5_wind_dataset(normalized)
+
+        self.assertIn("wind_u_10m_ms", normalized.data_vars)
+        self.assertIn("wind_v_10m_ms", normalized.data_vars)
+        self.assertEqual(
+            normalized["wind_u_10m_ms"].attrs["units"],
+            "m s-1",
+        )
+        self.assertEqual(
+            normalized["wind_v_10m_ms"].attrs["units"],
+            "m s-1",
+        )
+        self.assertEqual(normalized.attrs["wind_reference_height"], "10 m")
+
+    def test_rejects_unsupported_wind_units(self):
+        dataset = (
+            create_test_era5_dataset().rename({"valid_time": "time"}).sortby("latitude")
+        )
+        dataset["u10"].attrs["units"] = "km/h"
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "u10 has unsupported units: km/h.",
+        ):
+            normalize_era5_wind_dataset(dataset)
+
+    def test_local_source_normalizes_coordinates_and_crops(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "era5.nc"
+            create_test_era5_dataset().to_netcdf(
+                path,
+                engine="h5netcdf",
+            )
+
+            source = ERA5WindSource(path)
+
+            request = MarineDataRequest(
+                west=40.1,
+                south=-4.6,
+                east=40.8,
+                north=-3.9,
+                start_time=datetime(2026, 10, 1, tzinfo=UTC),
+                end_time=datetime(2026, 10, 2, tzinfo=UTC),
+                variables=("u10", "v10"),
+            )
+
+            dataset = source.fetch(request)
+
+            self.assertEqual(dataset.sizes["time"], 2)
+            self.assertEqual(dataset.sizes["latitude"], 2)
+            self.assertEqual(dataset.sizes["longitude"], 2)
+            self.assertTrue(np.all(np.diff(dataset.latitude.values) > 0))
+            self.assertEqual(
+                dataset.attrs["source_dataset_id"],
+                ERA5WindSource.DEFAULT_DATASET_ID,
+            )
+            self.assertEqual(
+                dataset.attrs["provider"],
+                "Copernicus Climate Data Store",
+            )
+            dataset.close()
+
+    def test_rejects_requests_without_both_wind_components(self):
+        source = ERA5WindSource("unused.nc")
+
+        request = MarineDataRequest(
+            west=40.1,
+            south=-4.6,
+            east=40.8,
+            north=-3.9,
+            start_time=datetime(2026, 10, 1, tzinfo=UTC),
+            end_time=datetime(2026, 10, 2, tzinfo=UTC),
+            variables=("u10",),
+        )
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "ERA5 wind requests must specify variables=('u10', 'v10').",
+        ):
+            source.fetch(request)
