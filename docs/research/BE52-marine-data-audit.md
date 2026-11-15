@@ -331,3 +331,18 @@ No vertical offset should be invented or applied merely to make the datasets ali
 | GEBCO for navigation or safe-draft decisions               | NO-GO          | Not navigation-grade; explicit GEBCO disclaimer                                     |
 | Existing prepared Mombasa training grid for port modelling | NO-GO          | Its spatial extent excludes the port                                                |
 | Combining current Copernicus and GEBCO fields vertically   | NO-GO          | Datum transformations and metadata consistency remain unresolved                    |
+
+## 7. Overall recommendation
+
+The existing marine data should be treated as **regional context and preliminary research inputs**, not as a validated operational representation of Mombasa Port.
+
+The evidence supports the following conclusions:
+
+- Mombasa has a substantial astronomical tidal signal that is not represented by the inspected GLO12 `zos` field.
+- The historical Mombasa tide-gauge record is a credible independent reference for preliminary tidal characterization.
+- Copernicus GLO12 is spatially too coarse for Kilindini Channel modelling.
+- GEBCO provides improved regional spatial detail but does not establish adequate harbour bathymetric accuracy or provenance.
+- The existing prepared Mombasa training grid excludes the port.
+- The vertical datum chain is incomplete, and the GEBCO vertical CRS metadata is inconsistent.
+
+Accordingly, the current datasets should not be presented as sufficient for accurate channel-scale water-level, seabed-depth, under-keel-clearance or navigation predictions.
