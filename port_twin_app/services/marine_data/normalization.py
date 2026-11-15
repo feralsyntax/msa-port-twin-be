@@ -172,3 +172,110 @@ def normalize_gebco_bathymetry(dataset: xr.Dataset) -> xr.Dataset:
     normalized.attrs["bathymetry_units"] = "m"
 
     return normalized
+
+
+def normalize_altimetry_dataset(dataset: xr.Dataset) -> xr.Dataset:
+    """Normalize gridded sea-level anomaly without changing its reference."""
+
+    if "sla" not in dataset.data_vars:
+        raise ValueError("Altimetry dataset is missing the sla variable.")
+
+    sla = dataset["sla"]
+
+    if sla.attrs.get("units") != "m":
+        raise ValueError("Sea-level anomaly must be measured in metres.")
+
+    if sla.dims != ("time", "latitude", "longitude"):
+        raise ValueError(f"sla has unexpected dimensions: {sla.dims}")
+
+    reference = sla.attrs.get("comment", "").strip()
+
+    if not reference:
+        raise ValueError("Sea-level anomaly reference metadata is required.")
+
+    values = sla.values
+
+    if np.isinf(values).any() or not np.isfinite(values).any():
+        raise ValueError(
+            "Sea-level anomaly contains invalid or no finite observations."
+        )
+
+    normalized = dataset[["sla"]].copy().rename({"sla": "sea_level_anomaly_m"})
+
+    normalized["sea_level_anomaly_m"].attrs = {
+        **sla.attrs,
+        "units": "m",
+        "long_name": "Sea-level anomaly relative to mean sea surface",
+        "source_variable": "sla",
+    }
+
+    normalized.attrs = {
+        **dataset.attrs,
+        "normalization_source": "DUACS L4 gridded satellite altimetry",
+        "sla_reference_description": reference,
+        "sla_reference_period": "1993-2012",
+        "sla_is_absolute_sea_level": False,
+    }
+
+    return normalized
+
+
+def normalize_era5_wind_dataset(dataset: xr.Dataset) -> xr.Dataset:
+    """Normalize ERA5 10-metre wind components into standard names."""
+
+    required_variables = {"u10", "v10"}
+    missing_variables = required_variables - set(dataset.data_vars)
+
+    if missing_variables:
+        raise ValueError(
+            f"ERA5 dataset is missing wind variables: {sorted(missing_variables)}"
+        )
+
+    # ERA5 NetCDF files commonly use m s**-1.
+    supported_units = {"m s-1", "m s**-1", "m/s", "m s^-1"}
+
+    for variable in required_variables:
+        units = dataset[variable].attrs.get("units", "").strip()
+
+        if units not in supported_units:
+            raise ValueError(
+                f"{variable} has unsupported units: {units}. "
+                "Expected metres per second."
+            )
+
+        if dataset[variable].dims != ("time", "latitude", "longitude"):
+            raise ValueError(
+                f"{variable} has unexpected dimensions: {dataset[variable].dims}"
+            )
+
+    normalized = (
+        dataset[["u10", "v10"]]
+        .copy()
+        .rename(
+            {
+                "u10": "wind_u_10m_ms",
+                "v10": "wind_v_10m_ms",
+            }
+        )
+    )
+
+    for variable, source_variable, direction in (
+        ("wind_u_10m_ms", "u10", "eastward"),
+        ("wind_v_10m_ms", "v10", "northward"),
+    ):
+        normalized[variable].attrs = {
+            **dataset[source_variable].attrs,
+            "units": "m s-1",
+            "long_name": f"10-metre {direction} wind component",
+            "source_variable": source_variable,
+            "height": "10 m",
+        }
+
+    normalized.attrs = {
+        **dataset.attrs,
+        "normalization_source": "ERA5 single-level reanalysis",
+        "wind_reference_height": "10 m",
+        "wind_component_convention": ("eastward and northward vector components"),
+    }
+
+    return normalized
