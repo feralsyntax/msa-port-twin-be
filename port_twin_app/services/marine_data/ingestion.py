@@ -7,6 +7,18 @@ from .provenance import MarineDataProvenance
 from .sources.base import MarineDataRequest, MarineDataSource
 from .sources.bathymetry import BathymetryDataSource, BathymetryRequest
 from .validation import validate_bathymetry_dataset, validate_marine_dataset
+from collections.abc import Callable
+
+from .normalization import (
+    normalize_altimetry_dataset,
+    normalize_copernicus_dataset,
+    normalize_gebco_bathymetry,
+)
+from .validation import (
+    validate_altimetry_dataset,
+    validate_bathymetry_dataset,
+    validate_marine_dataset,
+)
 
 
 @dataclass
@@ -49,6 +61,8 @@ def ingest_marine_data(
     request: MarineDataRequest,
     *,
     license_name: str,
+    normalizer: Callable[[xr.Dataset], xr.Dataset] = normalize_copernicus_dataset,
+    validator: Callable[[xr.Dataset], None] = validate_marine_dataset,
 ) -> MarineDataImportResult:
     """
     Fetch, normalize, validate and record marine data provenance.
@@ -68,10 +82,10 @@ def ingest_marine_data(
         validate_source_metadata(raw_dataset)
 
         # 3. Normalize provider-specific variables and dimensions.
-        normalized_dataset = normalize_copernicus_dataset(raw_dataset)
+        normalized_dataset = normalizer(raw_dataset)
 
         # 4. Validate the normalized dataset.
-        validate_marine_dataset(normalized_dataset)
+        validator(normalized_dataset)
 
         # 5. Capture source metadata.
         provenance = MarineDataProvenance.create(
