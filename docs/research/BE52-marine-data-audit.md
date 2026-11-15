@@ -346,3 +346,15 @@ The evidence supports the following conclusions:
 - The vertical datum chain is incomplete, and the GEBCO vertical CRS metadata is inconsistent.
 
 Accordingly, the current datasets should not be presented as sufficient for accurate channel-scale water-level, seabed-depth, under-keel-clearance or navigation predictions.
+
+## 8. Evidence limitations
+
+The following limitations should remain visible in any future use of these findings:
+
+1. The Copernicus harmonic analysis uses one month of hourly model data and a simplified fixed-frequency fit.
+2. The gauge harmonic analysis uses a simplified least-squares method without professional tidal-analysis corrections.
+3. Gauge and Copernicus records cover different periods; the comparison is not simultaneous validation.
+4. GEBCO TID classifications describe source types, not cell-level accuracy or uncertainty.
+5. The chart bounds used for the spatial assessment are not a substitute for surveyed channel geometry.
+6. No authoritative geoid-to-Chart-Datum transformation was established.
+7. The historical tide-gauge benchmark relationship should be checked against the applicable current station benchmark documentation before operational conversion.
