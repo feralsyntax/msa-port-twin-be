@@ -18,13 +18,13 @@ class ERA5WindSource(MarineDataSource):
         self.file_path = Path(file_path)
 
     def fetch(self, request: MarineDataRequest) -> xr.Dataset:
-        if not self.file_path.is_file():
-            raise FileNotFoundError(f"ERA5 NetCDF file not found: {self.file_path}")
-
         if set(request.variables) != {"u10", "v10"} or len(request.variables) != 2:
             raise ValueError(
                 "ERA5 wind requests must specify variables=('u10', 'v10')."
             )
+
+        if not self.file_path.is_file():
+            raise FileNotFoundError(f"ERA5 NetCDF file not found: {self.file_path}")
 
         with xr.open_dataset(self.file_path) as source:
             dataset = source
