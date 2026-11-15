@@ -146,3 +146,108 @@ is a candidate for further evaluation because its documented components include 
 It has not been downloaded, tested or validated against the Mombasa gauge in this audit.
 
 **Decision: CONDITIONAL GO for evaluation as a candidate tidal input. No claim of Mombasa suitability is made.**
+
+## 4. Domain and spatial-resolution audit
+
+### 4.1 Port reference window
+
+The spatial assessment used the published bounds associated with Admiralty Chart 666:
+
+| Boundary | Coordinate |
+| -------- | ---------: |
+| West     |  39.5947°E |
+| East     |  39.7187°E |
+| South    |   4.1052°S |
+| North    |   4.0317°S |
+
+These bounds define the chart window used for the audit. They do not describe the exact geometry of the navigable channel.
+
+### 4.2 Copernicus GLO12
+
+The inspected Copernicus grid has:
+
+- Full longitude extent: 39°E–41°E.
+- Full latitude extent: 5°S–3°S.
+- Grid dimensions: 25 × 25.
+- Approximate spacing: 9.3 km.
+
+Within the port chart window, only one grid intersection was available.
+
+This is inadequate for representing channel geometry, harbour circulation, berth approaches or other harbour-scale hydrodynamic features.
+
+**Decision: NO-GO for Kilindini Channel-scale spatial modelling.**
+
+### 4.3 GEBCO 2026
+
+The inspected GEBCO subset has:
+
+- Full longitude extent: approximately 38.99375°E–41.00625°E.
+- Full latitude extent: approximately 5.00625°S–2.99375°S.
+- Nominal grid spacing: 15 arc-seconds.
+- Approximate local spacing: 463 m.
+
+Within the port chart window:
+
+- Grid dimensions: 17 × 29.
+- Total grid cells: 493.
+
+Elevation statistics:
+
+| Statistic          |   Result |
+| ------------------ | -------: |
+| Minimum            |   −151 m |
+| Maximum            |    +70 m |
+| Mean               | +10.63 m |
+| Median             |    +16 m |
+| Standard deviation |  28.51 m |
+
+The positive and negative values show that the chart window includes both land and seabed. Consequently, the overall mean and median are not meaningful summaries of harbour depth.
+
+The grid is substantially finer than Copernicus GLO12, but approximately 463 m spacing is still too coarse to establish detailed channel or berth depths.
+
+### 4.4 GEBCO Type Identifier provenance
+
+The TID grid provides source classifications for the corresponding GEBCO elevation cells.
+
+Observed distribution:
+
+| TID | Classification       | Cells | Share |
+| --: | -------------------- | ----: | ----: |
+|   0 | Land                 |   319 | 64.7% |
+|  10 | Singlebeam           |     2 |  0.4% |
+|  16 | Optical              |    50 | 10.1% |
+|  40 | Predicted altimetry  |    87 | 17.6% |
+|  44 | Bathymetric sounding |    35 |  7.1% |
+
+Of the 174 non-land cells:
+
+- 2 are classified as singlebeam.
+- 50 are classified as optical.
+- 87 are classified as predicted altimetry.
+- 35 are classified as bathymetric sounding.
+
+There are no cells classified as multibeam (TID 11) in the inspected window.
+
+These source classifications do not establish measurement accuracy or uncertainty. In particular, a sounding-related classification should not be interpreted as proof that the entire grid cell represents a recent, high-resolution hydrographic survey.
+
+GEBCO itself warns that the grid should not be used for navigation or safety-at-sea purposes and that its nominal resolution can differ substantially from the resolution of the underlying measurements.
+
+**Decision: CONDITIONAL GO for regional bathymetric context and exploratory visualisation. NO-GO for validated channel depths, safe-draft decisions or navigation-related use.**
+
+### 4.5 Prepared Mombasa training grid
+
+The prepared Mombasa training grid has bounds:
+
+- West: 40.16667°E.
+- East: 40.91667°E.
+- South: 4.91666°S.
+- North: 3.08333°S.
+- Dimensions: 10 × 23.
+
+This grid lies east of the port chart window and does not cover Mombasa Port or Kilindini Channel.
+
+The offshore training dataset also explicitly describes its domain as Mombasa-adjacent offshore water and states that it does not cover the port or harbour.
+
+**Decision: NO-GO for representing the Mombasa Port domain in its current form.**
+
+The existing dataset names and metadata should not be interpreted as evidence of port coverage.
