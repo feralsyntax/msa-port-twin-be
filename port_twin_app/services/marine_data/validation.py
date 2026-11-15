@@ -148,3 +148,73 @@ def validate_bathymetry_dataset(dataset: xr.Dataset) -> None:
 
     if np.any(values[np.isfinite(values)] <= 0):
         raise ValueError("Valid bathymetry depths must be greater than zero.")
+
+
+def validate_altimetry_dataset(dataset: xr.Dataset) -> None:
+    """Validate normalized gridded sea-level anomaly data."""
+
+    required_variables = {"sea_level_anomaly_m"}
+    required_coordinates = {"time", "latitude", "longitude"}
+
+    missing_variables = required_variables - set(dataset.data_vars)
+    missing_coordinates = required_coordinates - set(dataset.coords)
+
+    if missing_variables:
+        raise ValueError(f"Missing required variables: {sorted(missing_variables)}")
+
+    if missing_coordinates:
+        raise ValueError(f"Missing required coordinates: {sorted(missing_coordinates)}")
+
+    if (
+        dataset.sizes["time"] == 0
+        or dataset.sizes["latitude"] < 2
+        or dataset.sizes["longitude"] < 2
+    ):
+        raise ValueError("Altimetry dataset has an insufficient grid.")
+
+    times = dataset.time.values
+
+    if (
+        not np.issubdtype(times.dtype, np.datetime64)
+        or np.isnat(times).any()
+        or np.any(np.diff(times) <= np.timedelta64(0, "ns"))
+    ):
+        raise ValueError(
+            "Altimetry time coordinates must be valid and strictly increasing."
+        )
+
+    for coordinate, lower, upper in (
+        ("latitude", -90, 90),
+        ("longitude", -180, 360),
+    ):
+        values = dataset[coordinate].values
+
+        if (
+            not np.isfinite(values).all()
+            or np.any(np.diff(values) <= 0)
+            or np.any((values < lower) | (values > upper))
+        ):
+            raise ValueError(f"Altimetry coordinate {coordinate} is invalid.")
+
+    sla = dataset["sea_level_anomaly_m"]
+
+    if sla.dims != ("time", "latitude", "longitude"):
+        raise ValueError(f"sea_level_anomaly_m has unexpected dimensions: {sla.dims}")
+
+    if sla.attrs.get("units") != "m":
+        raise ValueError("Sea-level anomaly must be measured in metres.")
+
+    values = sla.values
+
+    if np.isinf(values).any() or not np.isfinite(values).any():
+        raise ValueError(
+            "Sea-level anomaly contains invalid or no finite observations."
+        )
+
+    if not dataset.attrs.get("sla_reference_description"):
+        raise ValueError("Sea-level anomaly reference metadata is missing.")
+
+    if dataset.attrs.get("sla_is_absolute_sea_level") is not False:
+        raise ValueError(
+            "Sea-level anomaly must not be represented as absolute sea level."
+        )
