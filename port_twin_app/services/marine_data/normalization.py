@@ -172,3 +172,49 @@ def normalize_gebco_bathymetry(dataset: xr.Dataset) -> xr.Dataset:
     normalized.attrs["bathymetry_units"] = "m"
 
     return normalized
+
+
+def normalize_altimetry_dataset(dataset: xr.Dataset) -> xr.Dataset:
+    """Normalize gridded sea-level anomaly without changing its reference."""
+
+    if "sla" not in dataset.data_vars:
+        raise ValueError("Altimetry dataset is missing the sla variable.")
+
+    sla = dataset["sla"]
+
+    if sla.attrs.get("units") != "m":
+        raise ValueError("Sea-level anomaly must be measured in metres.")
+
+    if sla.dims != ("time", "latitude", "longitude"):
+        raise ValueError(f"sla has unexpected dimensions: {sla.dims}")
+
+    reference = sla.attrs.get("comment", "").strip()
+
+    if not reference:
+        raise ValueError("Sea-level anomaly reference metadata is required.")
+
+    values = sla.values
+
+    if np.isinf(values).any() or not np.isfinite(values).any():
+        raise ValueError(
+            "Sea-level anomaly contains invalid or no finite observations."
+        )
+
+    normalized = dataset[["sla"]].copy().rename({"sla": "sea_level_anomaly_m"})
+
+    normalized["sea_level_anomaly_m"].attrs = {
+        **sla.attrs,
+        "units": "m",
+        "long_name": "Sea-level anomaly relative to mean sea surface",
+        "source_variable": "sla",
+    }
+
+    normalized.attrs = {
+        **dataset.attrs,
+        "normalization_source": "DUACS L4 gridded satellite altimetry",
+        "sla_reference_description": reference,
+        "sla_reference_period": "1993-2012",
+        "sla_is_absolute_sea_level": False,
+    }
+
+    return normalized
