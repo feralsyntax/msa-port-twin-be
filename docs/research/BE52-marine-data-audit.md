@@ -318,3 +318,16 @@ The documented TGZ-to-Chart-Datum relationship does not solve these other transf
 **Decision: NO-GO for combining the existing Copernicus water levels and GEBCO bathymetry into a vertically consistent operational hydrodynamic model without further datum evidence.**
 
 No vertical offset should be invented or applied merely to make the datasets align.
+
+## 6. Consolidated go/no-go decisions
+
+| Data product or use                                        | Decision       | Reason                                                                              |
+| ---------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------- |
+| Copernicus GLO12 `zos` for astronomical tides              | NO-GO          | Fitted tidal amplitudes are negligible relative to Mombasa gauge constituents       |
+| Copernicus GLO12 for regional ocean state                  | CONDITIONAL GO | Useful regional model fields, but not harbour-scale                                 |
+| Copernicus merged sea-level product                        | CONDITIONAL GO | Tidal components are documented; Mombasa validation remains outstanding             |
+| UHSLC Mombasa gauge record                                 | GO             | Independent historical reference reproduces published Mombasa tidal characteristics |
+| GEBCO 2026 for regional bathymetric context                | CONDITIONAL GO | Useful regional coverage, but mixed provenance and coarse harbour resolution        |
+| GEBCO for navigation or safe-draft decisions               | NO-GO          | Not navigation-grade; explicit GEBCO disclaimer                                     |
+| Existing prepared Mombasa training grid for port modelling | NO-GO          | Its spatial extent excludes the port                                                |
+| Combining current Copernicus and GEBCO fields vertically   | NO-GO          | Datum transformations and metadata consistency remain unresolved                    |
