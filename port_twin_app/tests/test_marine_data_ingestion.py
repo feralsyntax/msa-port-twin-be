@@ -14,12 +14,14 @@ from port_twin_app.services.marine_data.ingestion import (
     ingest_marine_data,
 )
 from port_twin_app.services.marine_data.normalization import (
+    normalize_altimetry_dataset,
     normalize_copernicus_dataset,
     normalize_gebco_bathymetry,
 )
 from port_twin_app.services.marine_data.provenance import (
     MarineDataProvenance,
 )
+from port_twin_app.services.marine_data.sources.altimetry import GriddedAltimetrySource
 from port_twin_app.services.marine_data.sources.base import (
     MarineDataRequest,
     MarineDataSource,
@@ -29,6 +31,7 @@ from port_twin_app.services.marine_data.sources.copernicus import (
     CopernicusMarineSource,
 )
 from port_twin_app.services.marine_data.validation import (
+    validate_altimetry_dataset,
     validate_bathymetry_dataset,
     validate_marine_dataset,
 )
@@ -119,6 +122,39 @@ def create_test_gebco_dataset():
             "vertical_reference": "height_above_mean_sea_level",
             "vertical_crs": "EPSG:5831",
             "elevation_positive": "up",
+        },
+    )
+
+
+def create_test_altimetry_dataset():
+    return xr.Dataset(
+        {
+            "sla": (
+                ("time", "latitude", "longitude"),
+                np.full((3, 2, 2), 0.15, dtype=np.float32),
+                {
+                    "units": "m",
+                    "comment": (
+                        "Sea-level anomaly relative to mean sea surface; "
+                        "referenced to the [1993, 2012] period."
+                    ),
+                    "long_name": "Sea level anomaly",
+                },
+            ),
+        },
+        coords={
+            "time": np.array(
+                ["2026-10-01", "2026-10-02", "2026-10-03"],
+                dtype="datetime64[ns]",
+            ),
+            "latitude": [-4.5, -4.0],
+            "longitude": [40.2, 40.7],
+        },
+        attrs={
+            "title": "NRT merged all satellites Global Ocean Gridded SSALTO/DUACS",
+            "processing_level": "L4",
+            "product_version": "vNov2024",
+            "platform": "Sentinel-3A, Sentinel-3B, Sentinel-6A",
         },
     )
 
@@ -978,3 +1014,57 @@ class BathymetryIngestionTests(SimpleTestCase):
                 self.request,
                 license_name=" ",
             )
+
+
+class GriddedAltimetryTests(SimpleTestCase):
+    def test_normalizes_and_validates_sla(self):
+        normalized = normalize_altimetry_dataset(create_test_altimetry_dataset())
+
+        validate_altimetry_dataset(normalized)
+
+        self.assertIn("sea_level_anomaly_m", normalized.data_vars)
+        self.assertEqual(
+            normalized["sea_level_anomaly_m"].attrs["units"],
+            "m",
+        )
+        self.assertEqual(normalized.attrs["sla_reference_period"], "1993-2012")
+        self.assertIs(normalized.attrs["sla_is_absolute_sea_level"], False)
+
+    def test_rejects_unsupported_sla_units(self):
+        dataset = create_test_altimetry_dataset()
+        dataset["sla"].attrs["units"] = "cm"
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Sea-level anomaly must be measured in metres.",
+        ):
+            normalize_altimetry_dataset(dataset)
+
+    def test_local_source_crops_requested_region_and_time(self):
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "altimetry.nc"
+            create_test_altimetry_dataset().to_netcdf(path)
+
+            source = GriddedAltimetrySource(path)
+
+            request = MarineDataRequest(
+                west=40.1,
+                south=-4.6,
+                east=40.3,
+                north=-3.9,
+                start_time=datetime(2026, 10, 1, tzinfo=UTC),
+                end_time=datetime(2026, 10, 2, tzinfo=UTC),
+                variables=("sla",),
+            )
+
+            dataset = source.fetch(request)
+
+            self.assertEqual(dataset.sizes["time"], 2)
+            self.assertEqual(dataset.sizes["latitude"], 2)
+            self.assertEqual(dataset.sizes["longitude"], 1)
+            self.assertEqual(
+                dataset.attrs["source_dataset_id"],
+                GriddedAltimetrySource.DEFAULT_DATASET_ID,
+            )
+            self.assertEqual(dataset.attrs["source_version"], "vNov2024")
+            dataset.close()
