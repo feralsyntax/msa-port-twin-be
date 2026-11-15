@@ -218,3 +218,64 @@ def normalize_altimetry_dataset(dataset: xr.Dataset) -> xr.Dataset:
     }
 
     return normalized
+
+
+def normalize_era5_wind_dataset(dataset: xr.Dataset) -> xr.Dataset:
+    """Normalize ERA5 10-metre wind components into standard names."""
+
+    required_variables = {"u10", "v10"}
+    missing_variables = required_variables - set(dataset.data_vars)
+
+    if missing_variables:
+        raise ValueError(
+            f"ERA5 dataset is missing wind variables: {sorted(missing_variables)}"
+        )
+
+    # ERA5 NetCDF files commonly use m s**-1.
+    supported_units = {"m s-1", "m s**-1", "m/s", "m s^-1"}
+
+    for variable in required_variables:
+        units = dataset[variable].attrs.get("units", "").strip()
+
+        if units not in supported_units:
+            raise ValueError(
+                f"{variable} has unsupported units: {units}. "
+                "Expected metres per second."
+            )
+
+        if dataset[variable].dims != ("time", "latitude", "longitude"):
+            raise ValueError(
+                f"{variable} has unexpected dimensions: {dataset[variable].dims}"
+            )
+
+    normalized = (
+        dataset[["u10", "v10"]]
+        .copy()
+        .rename(
+            {
+                "u10": "wind_u_10m_ms",
+                "v10": "wind_v_10m_ms",
+            }
+        )
+    )
+
+    for variable, source_variable, direction in (
+        ("wind_u_10m_ms", "u10", "eastward"),
+        ("wind_v_10m_ms", "v10", "northward"),
+    ):
+        normalized[variable].attrs = {
+            **dataset[source_variable].attrs,
+            "units": "m s-1",
+            "long_name": f"10-metre {direction} wind component",
+            "source_variable": source_variable,
+            "height": "10 m",
+        }
+
+    normalized.attrs = {
+        **dataset.attrs,
+        "normalization_source": "ERA5 single-level reanalysis",
+        "wind_reference_height": "10 m",
+        "wind_component_convention": ("eastward and northward vector components"),
+    }
+
+    return normalized
