@@ -21,3 +21,28 @@ The findings identify three significant limitations:
 The Mombasa tide-gauge record provides a useful independent reference. Its fitted M2 and S2 tidal constituents closely match the published KMFRI values.
 
 **Overall decision:** The existing products are useful for regional marine context and preliminary experimentation, but they are not sufficient as a validated, internally consistent source of tide and bathymetry for operational Kilindini Channel modelling.
+
+## 2. Audit scope and evidence
+
+The audit covered:
+
+- Copernicus Marine GLO12 hourly surface fields.
+- GEBCO 2026 bathymetry and its Type Identifier (TID) grid.
+- Prepared Mombasa and offshore training dataset metadata.
+- Historical Mombasa tide-gauge observations from UHSLC.
+- Published Mombasa tidal constituents and tide-gauge benchmark relationships.
+- Spatial coverage and resolution within the published Admiralty Chart 666 bounds used for the port-window assessment.
+
+The inspected Copernicus dataset was:
+
+`cmems_mod_glo_phy_anfc_0.083deg_PT1H-m`
+
+The inspected GEBCO products were:
+
+- `gebco_2026_mombasa_extended.nc`
+- `gebco_2026_mombasa_extended_tid.nc`
+
+The prepared datasets were:
+
+- `mombasa_training_dataset.npz` and its JSON metadata.
+- `offshore_training_dataset.npz` and its JSON metadata.
