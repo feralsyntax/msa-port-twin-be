@@ -1,0 +1,45 @@
+{
+  "provider": "GEBCO",
+  "dataset_id": "GEBCO",
+  "dataset_version": "GEBCO_2026",
+  "domain_name": "port_operations",
+  "domain_source_reference": "BA Chart 666",
+  "requested_bounds": {
+    "west": 39.5947,
+    "south": -4.1052,
+    "east": 39.7187,
+    "north": -4.0317
+  },
+  "actual_data_bounds": {
+    "west": 39.59791666666667,
+    "south": -4.102083333333333,
+    "east": 39.71458333333334,
+    "north": -4.035416666666666
+  },
+  "geographic_crs": "EPSG:4326",
+  "projected_crs": "EPSG:32737",
+  "target_resolution_m": 100,
+  "source_resolution": {
+    "longitude": {
+      "degrees": 0.0041666666666699825,
+      "arc_seconds": 15.000000000011937
+    },
+    "latitude": {
+      "degrees": 0.00416666666666643,
+      "arc_seconds": 14.999999999999147
+    }
+  },
+  "variables": [
+    "elevation_m",
+    "tid",
+    "bathymetry_m"
+  ],
+  "source_elevation_file": "/home/benie/Desktop/msa-port-twin-be/data/raw/gebco/gebco_2026_mombasa_extended.nc",
+  "source_tid_file": "/home/benie/Desktop/msa-port-twin-be/data/raw/gebco/gebco_2026_mombasa_extended_tid.nc",
+  "vertical_reference": "height_above_mean_sea_level",
+  "vertical_datum_correction_applied": false,
+  "vertical_datum_correction_m": null,
+  "bathymetry_positive_direction": "down",
+  "license": "GEBCO public domain subject to its terms and disclaimer",
+  "output_file": "/home/benie/Desktop/msa-port-twin-be/data/processed/marine/bathymetry/port_operations_gebco_2026.nc"
+}
