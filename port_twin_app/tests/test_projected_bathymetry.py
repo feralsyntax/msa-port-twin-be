@@ -117,7 +117,6 @@ class ProjectedBathymetryTests(SimpleTestCase):
         self.assertTrue(np.all(valid_depths > 0))
         self.assertTrue(np.isnan(grid.bathymetry_m.values).any())
 
-    
     def test_source_coverage_masks_extrapolated_values(self):
         zone = next(zone for zone in ZONES if zone.name == "port_operations")
         source = synthetic_source(zone)
@@ -137,7 +136,6 @@ class ProjectedBathymetryTests(SimpleTestCase):
         self.assertTrue(outside.any())
         self.assertTrue(np.isnan(grid.elevation_m.values[outside]).all())
         self.assertTrue(np.isnan(grid.tid.values[outside]).all())
-
 
     def test_nested_grids_share_aligned_coordinates(self):
         zones = {zone.name: zone for zone in ZONES}
@@ -182,3 +180,18 @@ class ProjectedBathymetryTests(SimpleTestCase):
         self.assertFalse(grid.attrs["vertical_datum_correction_applied"])
         self.assertEqual(grid.attrs["vertical_datum_correction_m"], 0.0)
         self.assertFalse(grid.attrs["source_accuracy_claim"])
+
+    def test_land_source_cells_are_excluded_from_marine_coverage(self):
+        zone = next(zone for zone in ZONES if zone.name == "port_operations")
+
+        grid = build_projected_bathymetry_grid(
+            zone.name,
+            source_dataset=synthetic_source(zone),
+        )
+
+        outside = ~grid.source_coverage.values
+
+        self.assertTrue(outside.any())
+        self.assertTrue(np.isnan(grid.bathymetry_m.values[outside]).all())
+        self.assertTrue(np.isnan(grid.elevation_m.values[outside]).all())
+        self.assertTrue(np.isnan(grid.tid.values[outside]).all())
