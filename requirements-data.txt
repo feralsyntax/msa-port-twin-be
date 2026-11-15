@@ -1,3 +1,4 @@
 # Marine and geospatial data acquisition
 copernicusmarine==2.5.0
 scipy==1.18.1
+pyproj==3.8.0
