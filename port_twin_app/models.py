@@ -364,3 +364,85 @@ class MarinePrediction(models.Model):
 
     def __str__(self):
         return f"Marine prediction {self.id} ({self.status})"
+
+
+class BathymetryDataset(models.Model):
+    """Registers a bathymetry dataset and its geographic coverage."""
+
+    class QualityStatus(models.TextChoices):
+        PROVISIONAL = "provisional", "Provisional"
+        AUTHORITATIVE = "authoritative", "Authoritative"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    provider = models.CharField(max_length=50)
+    dataset_id = models.CharField(max_length=100)
+    dataset_version = models.CharField(max_length=50)
+    zone = models.CharField(max_length=50)
+
+    data_file_path = models.CharField(max_length=500)
+    provenance_file_path = models.CharField(max_length=500)
+
+    footprint = gis_models.PolygonField(
+        srid=4326,
+        geography=False,
+        help_text="Actual geographic coverage of the dataset.",
+    )
+
+    geographic_crs = models.CharField(max_length=30)
+    projected_crs = models.CharField(max_length=30)
+    target_resolution_m = models.PositiveIntegerField()
+    source_longitude_spacing_arc_seconds = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+    )
+    source_latitude_spacing_arc_seconds = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+    )
+
+    vertical_reference = models.CharField(max_length=100)
+    vertical_datum_correction_applied = models.BooleanField(default=False)
+    vertical_datum_correction_m = models.DecimalField(
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+    )
+    bathymetry_positive_direction = models.CharField(max_length=20)
+
+    grid_width = models.PositiveIntegerField()
+    grid_height = models.PositiveIntegerField()
+    variables = models.JSONField(default=list)
+    license = models.TextField(blank=True)
+
+    quality_status = models.CharField(
+        max_length=20,
+        choices=QualityStatus.choices,
+        default=QualityStatus.PROVISIONAL,
+    )
+    provenance = models.JSONField(default=dict)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["zone", "provider", "dataset_version"]  # noqa: RUF012
+        constraints = [  # noqa: RUF012
+            models.UniqueConstraint(
+                fields=["provider", "dataset_id", "dataset_version", "zone"],
+                name="unique_bathymetry_dataset_identity",
+            ),
+        ]
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["zone", "quality_status"]),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.provider} {self.dataset_version} "
+            f"({self.zone}, {self.quality_status})"
+        )
