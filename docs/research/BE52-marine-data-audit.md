@@ -251,3 +251,70 @@ The offshore training dataset also explicitly describes its domain as Mombasa-ad
 **Decision: NO-GO for representing the Mombasa Port domain in its current form.**
 
 The existing dataset names and metadata should not be interpreted as evidence of port coverage.
+
+## 5. Vertical datum audit
+
+### 5.1 Copernicus marine water level
+
+The Copernicus `zos` variable is identified as:
+
+`sea_surface_height_above_geoid`
+
+Its vertical reference is documented as geoid-based.
+
+This is not automatically equivalent to local mean sea level or Admiralty Chart Datum.
+
+### 5.2 GEBCO elevation
+
+The inspected GEBCO elevation variable declares:
+
+- `standard_name`: `height_above_mean_sea_level`
+- `long_name`: `Elevation relative to sea level`
+- `units`: metres.
+
+GEBCO documentation states that its global elevation model assumes mean sea level as the vertical reference, while acknowledging that some shallow-water source datasets may use other vertical datums.
+
+A metadata inconsistency was identified:
+
+- The original GEBCO file's global attribute `geospatial_bounds_vertical_crs` declares `EPSG:5831`.
+- The elevation variable declares height above mean sea level.
+- The file's actual `crs` variable describes horizontal WGS84 / EPSG:4326.
+- The prepared Mombasa dataset repeats `bathymetry_vertical_crs: EPSG:5831`.
+
+EPSG:5831 identifies **Instantaneous Water Level depth**, with a downward-positive depth axis. It is not a mean-sea-level height reference.
+
+This means the EPSG:5831 metadata cannot be accepted as a valid vertical CRS declaration for the GEBCO elevation values without further clarification. The global attribute and prepared metadata should be treated as inconsistent with the elevation variable's stated reference.
+
+No correction was made during this audit.
+
+### 5.3 Mombasa tide-gauge zero and Chart Datum
+
+The BODC GLOSS station record documents the Mombasa benchmark relationship:
+
+`TGZ = Admiralty Chart Datum - 0.942 m`
+
+where TGZ is tide-gauge zero.
+
+For gauge observations expressed relative to TGZ, the corresponding height relative to Admiralty Chart Datum is:
+
+`H_ACD = H_TGZ - 0.942 m`
+
+The station record also documents relationships to the East African Railways Datum and Survey of Kenya Datum.
+
+This provides a documented local relationship between the historical tide-gauge reference and Admiralty Chart Datum.
+
+However, the relationship must be confirmed as applicable to the specific gauge record and period being used before operational conversion.
+
+### 5.4 Unresolved datum transformations
+
+The audit has not established a verified transformation connecting:
+
+1. Copernicus geoid-referenced `zos` to local Mombasa mean sea level or Chart Datum.
+2. GEBCO mean-sea-level-referenced elevations to Mombasa Chart Datum.
+3. The GEBCO EPSG:5831 metadata declaration to the actual vertical reference of its elevation values.
+
+The documented TGZ-to-Chart-Datum relationship does not solve these other transformations.
+
+**Decision: NO-GO for combining the existing Copernicus water levels and GEBCO bathymetry into a vertically consistent operational hydrodynamic model without further datum evidence.**
+
+No vertical offset should be invented or applied merely to make the datasets align.
