@@ -117,12 +117,19 @@ class ProjectedBathymetryTests(SimpleTestCase):
         self.assertTrue(np.all(valid_depths > 0))
         self.assertTrue(np.isnan(grid.bathymetry_m.values).any())
 
+    
     def test_source_coverage_masks_extrapolated_values(self):
         zone = next(zone for zone in ZONES if zone.name == "port_operations")
+        source = synthetic_source(zone)
+
+        # Remove source points around one corner to create a predictable
+        # region outside the convex hull of valid elevation observations.
+        source["elevation_m"].values[:2, :2] = np.nan
+        source["bathymetry_m"].values[:2, :2] = np.nan
 
         grid = build_projected_bathymetry_grid(
             zone.name,
-            source_dataset=synthetic_source(zone),
+            source_dataset=source,
         )
 
         outside = ~grid.source_coverage.values
@@ -130,6 +137,7 @@ class ProjectedBathymetryTests(SimpleTestCase):
         self.assertTrue(outside.any())
         self.assertTrue(np.isnan(grid.elevation_m.values[outside]).all())
         self.assertTrue(np.isnan(grid.tid.values[outside]).all())
+
 
     def test_nested_grids_share_aligned_coordinates(self):
         zones = {zone.name: zone for zone in ZONES}
