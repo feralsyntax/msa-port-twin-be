@@ -7,7 +7,7 @@ import xarray as xr
 from scipy.ndimage import label
 
 DEFAULT_BATHYMETRY_PATH = (
-    Path(__file__).resolve().parents[5]
+    Path(__file__).resolve().parents[4]
     / "data"
     / "processed"
     / "marine"
