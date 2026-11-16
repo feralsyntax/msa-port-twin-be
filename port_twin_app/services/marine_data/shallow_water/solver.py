@@ -406,8 +406,8 @@ def run_shallow_water_simulation(
 
     output_times = [0.0]
     water_levels = [eta.copy()]
-    eastward_currents = [np.zeros_like(eta)]
-    northward_currents = [np.zeros_like(eta)]
+    eastward_currents = [np.where(mask, 0.0, np.nan)]
+    northward_currents = [np.where(mask, 0.0, np.nan)]
 
     time_seconds = 0.0
     next_output = min(
