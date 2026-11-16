@@ -283,8 +283,8 @@ def _calculate_rhs(
     )
 
     tendency = -(
-        (flux_x_left[:, 1:] - flux_x_right[:, :-1]) / dx
-        + (flux_y_lower[1:, :] - flux_y_upper[:-1, :]) / dy
+        (flux_x_left[:, :, 1:] - flux_x_right[:, :, :-1]) / dx
+        + (flux_y_lower[:, 1:, :] - flux_y_upper[:, :-1, :]) / dy
     )
 
     deta = tendency[0]
