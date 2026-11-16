@@ -178,7 +178,13 @@ def _calculate_rhs(
     time_seconds,
     config,
 ):
-    """Calculate finite-volume tendencies and physical source terms."""
+    """Calculate finite-volume tendencies and physical source terms.
+
+    Returns:
+        Tuple containing water-level tendency, eastward momentum
+        tendency, northward momentum tendency, and net boundary
+        water inflow rate in cubic metres per second.
+    """
 
     gravity = config.gravity_ms2
 
@@ -282,6 +288,17 @@ def _calculate_rhs(
         "y",
     )
 
+    # Calculate net water entering through the four external boundaries.
+    # Fluxes are in m²/s; multiplying by face length gives m³/s.
+    east_outflow = np.sum(flux_x_left[0, :, -1]) * dy
+    west_outflow = -np.sum(flux_x_right[0, :, 0]) * dy
+    north_outflow = np.sum(flux_y_lower[0, -1, :]) * dx
+    south_outflow = -np.sum(flux_y_upper[0, 0, :]) * dx
+
+    boundary_inflow_rate = -(
+        east_outflow + west_outflow + north_outflow + south_outflow
+    )
+
     tendency = -(
         (flux_x_left[:, :, 1:] - flux_x_right[:, :, :-1]) / dx
         + (flux_y_lower[:, 1:, :] - flux_y_upper[:, :-1, :]) / dy
@@ -325,7 +342,7 @@ def _calculate_rhs(
     dhv = np.where(water_mask, dhv, 0.0)
     deta = np.where(water_mask, deta, 0.0)
 
-    return deta, dhu, dhv
+    return deta, dhu, dhv, boundary_inflow_rate
 
 
 def _stable_timestep(eta, hu, hv, bed, mask, dx, dy, config):
@@ -360,6 +377,18 @@ def _stable_timestep(eta, hu, hv, bed, mask, dx, dy, config):
         return config.output_interval_seconds
 
     return config.cfl_number * min(dx, dy) / maximum_rate
+
+
+def _calculate_water_volume(eta, bed, mask, dx, dy):
+    """Calculate total water volume in the computational domain."""
+
+    depth = np.where(
+        mask,
+        np.maximum(eta + bed, 0.0),
+        0.0,
+    )
+
+    return float(np.sum(depth, dtype=np.float64) * dx * dy)
 
 
 def run_shallow_water_simulation(
@@ -409,6 +438,19 @@ def run_shallow_water_simulation(
     eastward_currents = [np.where(mask, 0.0, np.nan)]
     northward_currents = [np.where(mask, 0.0, np.nan)]
 
+    # Track the water-volume budget from the initial state.
+    initial_volume = _calculate_water_volume(
+        eta_state,
+        bed,
+        mask,
+        dx,
+        dy,
+    )
+
+    water_volumes = [initial_volume]
+    boundary_volume_exchange = 0.0
+    boundary_volume_exchanges = [boundary_volume_exchange]
+
     time_seconds = 0.0
     next_output = min(
         config.output_interval_seconds,
@@ -417,7 +459,16 @@ def run_shallow_water_simulation(
 
     while time_seconds < config.duration_seconds:
         dt = min(
-            _stable_timestep(eta_state, hu, hv, bed, mask, dx, dy, config),
+            _stable_timestep(
+                eta_state,
+                hu,
+                hv,
+                bed,
+                mask,
+                dx,
+                dy,
+                config,
+            ),
             next_output - time_seconds,
             config.duration_seconds - time_seconds,
         )
@@ -426,22 +477,51 @@ def run_shallow_water_simulation(
             raise RuntimeError("Solver produced an invalid timestep.")
 
         # SSP-RK2 first stage.
-        rhs_1 = _calculate_rhs(
-            eta_state, hu, hv, bed, mask, dx, dy, time_seconds, config
+        (
+            deta_1,
+            dhu_1,
+            dhv_1,
+            boundary_rate_1,
+        ) = _calculate_rhs(
+            eta_state,
+            hu,
+            hv,
+            bed,
+            mask,
+            dx,
+            dy,
+            time_seconds,
+            config,
         )
 
-        eta_1 = eta_state + dt * rhs_1[0]
-        hu_1 = hu + dt * rhs_1[1]
-        hv_1 = hv + dt * rhs_1[2]
+        eta_1 = eta_state + dt * deta_1
+        hu_1 = hu + dt * dhu_1
+        hv_1 = hv + dt * dhv_1
 
         # SSP-RK2 second stage.
-        rhs_2 = _calculate_rhs(
-            eta_1, hu_1, hv_1, bed, mask, dx, dy, time_seconds + dt, config
+        (
+            deta_2,
+            dhu_2,
+            dhv_2,
+            boundary_rate_2,
+        ) = _calculate_rhs(
+            eta_1,
+            hu_1,
+            hv_1,
+            bed,
+            mask,
+            dx,
+            dy,
+            time_seconds + dt,
+            config,
         )
 
-        eta_state = 0.5 * (eta_state + eta_1 + dt * rhs_2[0])
-        hu = 0.5 * (hu + hu_1 + dt * rhs_2[1])
-        hv = 0.5 * (hv + hv_1 + dt * rhs_2[2])
+        eta_state = 0.5 * (eta_state + eta_1 + dt * deta_2)
+        hu = 0.5 * (hu + hu_1 + dt * dhu_2)
+        hv = 0.5 * (hv + hv_1 + dt * dhv_2)
+
+        # Integrate boundary exchange with the same RK2 weighting.
+        boundary_volume_exchange += 0.5 * dt * (boundary_rate_1 + boundary_rate_2)
 
         # Enforce the wet/dry threshold and remove land momentum.
         depth = np.maximum(eta_state + bed, 0.0)
@@ -486,6 +566,17 @@ def run_shallow_water_simulation(
             eastward_currents.append(u_snapshot.copy())
             northward_currents.append(v_snapshot.copy())
 
+            water_volumes.append(
+                _calculate_water_volume(
+                    eta_state,
+                    bed,
+                    mask,
+                    dx,
+                    dy,
+                )
+            )
+            boundary_volume_exchanges.append(boundary_volume_exchange)
+
             next_output = min(
                 next_output + config.output_interval_seconds,
                 config.duration_seconds,
@@ -501,12 +592,18 @@ def run_shallow_water_simulation(
             "current_u_ms": (
                 ("time_seconds", "northing", "easting"),
                 np.asarray(eastward_currents, dtype=np.float32),
-                {"units": "m s-1", "long_name": "Eastward depth-averaged current"},
+                {
+                    "units": "m s-1",
+                    "long_name": "Eastward depth-averaged current",
+                },
             ),
             "current_v_ms": (
                 ("time_seconds", "northing", "easting"),
                 np.asarray(northward_currents, dtype=np.float32),
-                {"units": "m s-1", "long_name": "Northward depth-averaged current"},
+                {
+                    "units": "m s-1",
+                    "long_name": "Northward depth-averaged current",
+                },
             ),
             "bathymetry_m": (
                 ("northing", "easting"),
@@ -516,6 +613,25 @@ def run_shallow_water_simulation(
             "water_mask": (
                 ("northing", "easting"),
                 mask,
+            ),
+            "water_volume_m3": (
+                ("time_seconds",),
+                np.asarray(water_volumes, dtype=np.float64),
+                {
+                    "units": "m3",
+                    "long_name": "Total water volume in computational domain",
+                },
+            ),
+            "boundary_volume_exchange_m3": (
+                ("time_seconds",),
+                np.asarray(boundary_volume_exchanges, dtype=np.float64),
+                {
+                    "units": "m3",
+                    "long_name": (
+                        "Cumulative net water entering through domain boundaries"
+                    ),
+                    "positive": "inflow",
+                },
             ),
         },
         coords={
