@@ -23,8 +23,9 @@ class ShallowWaterDomainTests(SimpleTestCase):
         depth[1, 1] = np.nan
 
         # One isolated water cell should be excluded.
-        depth[4, 5] = np.nan
         depth[0, 5] = 10.0
+        depth[0, 4] = np.nan
+        depth[1, 5] = np.nan
 
         xr.Dataset(
             data_vars={
@@ -54,9 +55,9 @@ class ShallowWaterDomainTests(SimpleTestCase):
 
         self.assertEqual(domain.grid_spacing_m, 250)
         self.assertEqual(domain.projected_crs, "EPSG:32737")
-        self.assertEqual(domain.total_water_cells, 27)
+        self.assertEqual(domain.total_water_cells, 25)
         self.assertEqual(domain.excluded_water_cells, 1)
-        self.assertEqual(domain.water_mask.sum(), 26)
+        self.assertEqual(domain.water_mask.sum(), 24)
         self.assertTrue(np.isnan(domain.bathymetry_m[0, 5]))
 
     def test_records_source_checksum_and_vertical_reference(self):
