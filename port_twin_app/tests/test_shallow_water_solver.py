@@ -112,6 +112,8 @@ class ShallowWaterSolverTests(SimpleTestCase):
                 "current_v_ms",
                 "bathymetry_m",
                 "water_mask",
+                "water_volume_m3",
+                "boundary_volume_exchange_m3",
             },
         )
 
@@ -257,3 +259,30 @@ class ShallowWaterSolverTests(SimpleTestCase):
 
         assert np.nanmax(rising_level) > 0
         assert np.nanmin(falling_level) < 0
+
+    def test_water_volume_change_matches_boundary_exchange(self):
+        config = ShallowWaterConfig(
+            duration_seconds=120,
+            output_interval_seconds=30,
+            tide_period_seconds=1200,
+            tide_amplitude_m=0.5,
+            tide_phase_radians=0.0,
+            wind_u_ms=0.0,
+            wind_v_ms=0.0,
+            bottom_drag_coefficient=0.0,
+            coriolis_parameter_s1=0.0,
+        )
+
+        result = run_shallow_water_simulation(synthetic_domain(), config)
+
+        volume_change = (
+            result["water_volume_m3"].values - result["water_volume_m3"].values[0]
+        )
+        boundary_exchange = result["boundary_volume_exchange_m3"].values
+
+        np.testing.assert_allclose(
+            volume_change,
+            boundary_exchange,
+            rtol=1e-9,
+            atol=1e-4,
+        )
