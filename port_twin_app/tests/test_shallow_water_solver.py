@@ -220,3 +220,40 @@ class ShallowWaterSolverTests(SimpleTestCase):
         self.assertTrue(np.isfinite(currents_v).all())
         self.assertLess(np.max(np.abs(currents_u)), 5.0)
         self.assertLess(np.max(np.abs(currents_v)), 5.0)
+
+    def test_tidal_boundary_responds_in_correct_direction(self):
+        domain = synthetic_domain()
+
+        common_config = {
+            "duration_seconds": 120,
+            "output_interval_seconds": 30,
+            "tide_period_seconds": 1200,
+            "tide_amplitude_m": 0.5,
+            "wind_u_ms": 0.0,
+            "wind_v_ms": 0.0,
+            "bottom_drag_coefficient": 0.0,
+            "coriolis_parameter_s1": 0.0,
+        }
+
+        rising = run_shallow_water_simulation(
+            domain,
+            ShallowWaterConfig(
+                **common_config,
+                tide_phase_radians=0.0,
+            ),
+        )
+
+        falling = run_shallow_water_simulation(
+            domain,
+            ShallowWaterConfig(
+                **common_config,
+                tide_phase_radians=np.pi,
+            ),
+        )
+
+        rising_level = rising["water_level_m"].isel(time_seconds=-1).values
+
+        falling_level = falling["water_level_m"].isel(time_seconds=-1).values
+
+        assert np.nanmax(rising_level) > 0
+        assert np.nanmin(falling_level) < 0
