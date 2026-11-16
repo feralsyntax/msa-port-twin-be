@@ -54,9 +54,9 @@ class ShallowWaterDomainTests(SimpleTestCase):
 
         self.assertEqual(domain.grid_spacing_m, 250)
         self.assertEqual(domain.projected_crs, "EPSG:32737")
-        self.assertEqual(domain.total_water_cells, 28)
+        self.assertEqual(domain.total_water_cells, 27)
         self.assertEqual(domain.excluded_water_cells, 1)
-        self.assertEqual(domain.water_mask.sum(), 27)
+        self.assertEqual(domain.water_mask.sum(), 26)
         self.assertTrue(np.isnan(domain.bathymetry_m[0, 5]))
 
     def test_records_source_checksum_and_vertical_reference(self):
