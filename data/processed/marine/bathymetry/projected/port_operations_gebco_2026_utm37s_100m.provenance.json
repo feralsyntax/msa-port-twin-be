@@ -1,0 +1,36 @@
+{
+  "provider": "GEBCO",
+  "dataset_id": "GEBCO",
+  "dataset_version": "GEBCO_2026",
+  "domain_name": "port_operations",
+  "source_file": "/home/benie/Desktop/msa-port-twin-be/data/processed/marine/bathymetry/port_operations_gebco_2026.nc",
+  "output_file": "/home/benie/Desktop/msa-port-twin-be/data/processed/marine/bathymetry/projected/port_operations_gebco_2026_utm37s_100m.nc",
+  "geographic_crs": "EPSG:4326",
+  "projected_crs": "EPSG:32737",
+  "grid_resolution_m": 100,
+  "grid_alignment_origin_m": 0,
+  "grid_width": 130,
+  "grid_height": 74,
+  "source_resolution": {
+    "longitude_arc_seconds": 15.000000000011937,
+    "latitude_arc_seconds": 14.999999999999147
+  },
+  "interpolation": {
+    "elevation": "linear",
+    "tid": "nearest",
+    "extrapolation": false
+  },
+  "source_coverage_cells": 3356,
+  "valid_bathymetry_cells": 3356,
+  "vertical_reference": "height_above_mean_sea_level",
+  "vertical_datum_correction_applied": false,
+  "vertical_datum_correction_m": null,
+  "source_accuracy_claim": false,
+  "output_variables": [
+    "elevation_m",
+    "bathymetry_m",
+    "tid",
+    "source_coverage",
+    "spatial_ref"
+  ]
+}
