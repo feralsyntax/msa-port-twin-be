@@ -10,8 +10,9 @@ class ShallowWaterConfig:
     minimum_water_depth_m: float = 0.05
 
     bottom_drag_coefficient: float = 0.0025
+    coriolis_parameter_s1: float = -1.04e-5
 
-    # Idealized wind forcing. Components are eastward and northward.
+    # Wind components: eastward and northward.
     wind_u_ms: float = 5.0
     wind_v_ms: float = 0.0
     air_density_kgm3: float = 1.225
@@ -24,7 +25,6 @@ class ShallowWaterConfig:
     tide_phase_radians: float = 0.0
     tidal_boundary: str = "east"
 
-    # Simulation and output settings.
     duration_seconds: float = 24 * 3600
     output_interval_seconds: float = 3600
     random_seed: int = 42
