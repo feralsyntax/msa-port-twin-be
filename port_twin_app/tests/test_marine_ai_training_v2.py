@@ -17,6 +17,7 @@ from port_twin_app.services.marine_ai.preparation_v2 import (
 from port_twin_app.services.marine_ai.training_v2 import (
     TrainingV2Config,
     _continuity_loss,
+    _evaluate,
     _fit_input_normalization,
     _fit_target_normalization,
     _masked_supervised_loss,
@@ -199,11 +200,37 @@ class MarineFNOV2TrainingTests(SimpleTestCase):
             self.assertEqual(result.best_epoch, 1)
             self.assertTrue(checkpoint_path.is_file())
 
+            history_fields = (
+                "training_supervised_losses",
+                "training_continuity_losses",
+                "validation_supervised_losses",
+                "validation_continuity_losses",
+            )
+
+            for field in history_fields:
+                history = getattr(result, field)
+
+                self.assertEqual(len(history), result.epochs_completed)
+                self.assertTrue(np.isfinite(history).all())
+                self.assertTrue(all(value >= 0 for value in history))
+
             loaded_model, checkpoint = load_checkpoint(checkpoint_path)
 
             self.assertIsInstance(loaded_model, MarineFNOV2)
             self.assertEqual(checkpoint["epoch"], 1)
             self.assertIn("training", checkpoint)
+
+            for field in history_fields:
+                self.assertIn(field, checkpoint["training"])
+                self.assertEqual(
+                    len(checkpoint["training"][field]),
+                    result.epochs_completed,
+                )
+                self.assertTrue(np.isfinite(checkpoint["training"][field]).all())
+                self.assertTrue(
+                    all(value >= 0 for value in checkpoint["training"][field])
+                )
+
             self.assertIn("input_mean", checkpoint)
             self.assertIn("target_mean", checkpoint)
 
@@ -214,3 +241,36 @@ class MarineFNOV2TrainingTests(SimpleTestCase):
     def test_training_config_rejects_invalid_continuity_scale(self):
         with self.assertRaisesRegex(ValueError, "continuity_residual_scale_ms"):
             TrainingV2Config(continuity_residual_scale_ms=0.0)
+
+    def test_evaluate_returns_separate_loss_components(self):
+        samples = (make_sample("train-one", 0.0),)
+        validation = (make_sample("validation", 0.1),)
+
+        model = MarineFNOV2(
+            width=4,
+            modes_x=2,
+            modes_y=2,
+            layers=1,
+        )
+
+        input_mean, input_std = _fit_input_normalization(samples, "cpu")
+        target_mean, target_std = _fit_target_normalization(samples, "cpu")
+
+        total, supervised, continuity = _evaluate(
+            model,
+            validation,
+            "cpu",
+            input_mean,
+            input_std,
+            target_mean,
+            target_std,
+            TrainingV2Config(epochs=1),
+        )
+
+        self.assertTrue(np.isfinite([total, supervised, continuity]).all())
+        self.assertTrue(all(value >= 0 for value in (total, supervised, continuity)))
+        self.assertAlmostEqual(
+            total,
+            supervised + 0.1 * continuity,
+            places=5,
+        )
