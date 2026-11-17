@@ -28,6 +28,29 @@ DEFAULT_OUTPUT_DIRECTORY = (
 SOLVER_VERSION = "1.0.0"
 
 
+def _prepare_netcdf_dataset(dataset):
+    """Convert boolean variables and attributes to NetCDF-compatible types."""
+
+    dataset = dataset.copy()
+
+    for name in dataset.data_vars:
+        if dataset[name].dtype == bool:
+            dataset[name] = dataset[name].astype("int8")
+            dataset[name].attrs["flag_values"] = [0, 1]
+            dataset[name].attrs["flag_meanings"] = "false true"
+
+    for name, value in dataset.attrs.items():
+        if isinstance(value, bool):
+            dataset.attrs[name] = int(value)
+
+    for name in dataset.data_vars:
+        for attr_name, value in dataset[name].attrs.items():
+            if isinstance(value, bool):
+                dataset[name].attrs[attr_name] = int(value)
+
+    return dataset
+
+
 def _build_provenance(scenario, domain, dataset) -> dict:
     """Build provenance for one simulated shallow-water dataset."""
 
@@ -117,7 +140,11 @@ def generate_shallow_water_datasets(
         )
 
         try:
-            dataset.to_netcdf(netcdf_path, engine="h5netcdf")
+            netcdf_dataset = _prepare_netcdf_dataset(dataset)
+            try:
+                netcdf_dataset.to_netcdf(netcdf_path, engine="h5netcdf")
+            finally:
+                netcdf_dataset.close()
 
             provenance_path.write_text(
                 json.dumps(provenance, indent=2, sort_keys=True) + "\n",
