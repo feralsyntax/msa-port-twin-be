@@ -128,29 +128,51 @@ class MarineFNOV2PreparationTests(SimpleTestCase):
         self.assertEqual(samples[0].target[0, 0, 0, 0], 1.0)
         self.assertEqual(samples[-1].initial_state[0, 0, 0], 6.0)
 
-    def test_window_tidal_phase_advances_with_start_time(synthetic_v2_scenario):
+    def test_window_tidal_phase_advances_with_start_time(self):
+        period = 44712.0
+        original_phase = 0.0
 
-        samples = _extract_windows(synthetic_v2_scenario)
+        scenario = _ScenarioData(
+            name="v2_phase",
+            time_seconds=np.arange(13) * 3600.0,
+            water_level=np.ones((13, 2, 3), dtype=np.float32),
+            current_u=np.ones((13, 2, 3), dtype=np.float32),
+            current_v=np.ones((13, 2, 3), dtype=np.float32),
+            bathymetry=np.full((2, 3), 20.0, dtype=np.float32),
+            water_mask=np.ones((2, 3), dtype=bool),
+            easting=np.array([1.0, 2.0, 3.0]),
+            northing=np.array([4.0, 5.0]),
+            forcing={
+                "wind_u_ms": 0.0,
+                "wind_v_ms": 0.0,
+                "tide_amplitude_m": 0.5,
+                "tide_phase_radians": original_phase,
+                "tide_period_seconds": period,
+                "tidal_boundary": "east",
+            },
+        )
 
-        original_phase = synthetic_v2_scenario.forcing["tide_phase_radians"]
-        period = synthetic_v2_scenario.forcing["tide_period_seconds"]
+        samples = _extract_windows(scenario)
 
-        assert len(samples) == 7
+        self.assertEqual(len(samples), 7)
 
         for sample in samples:
-            expected = (
-                original_phase + 2.0 * np.pi * sample.start_time_seconds / period
+            expected_phase = (
+                original_phase
+                + 2.0 * np.pi * sample.start_time_seconds / period
             ) % (2.0 * np.pi)
 
-            assert np.isclose(
+            self.assertAlmostEqual(
                 sample.forcing["tide_phase_radians"],
-                expected,
+                expected_phase,
             )
 
-        assert samples[0].forcing["tide_phase_radians"] == original_phase
-        assert not np.isclose(
-            samples[0].forcing["tide_phase_radians"],
-            samples[1].forcing["tide_phase_radians"],
+        self.assertEqual(samples[0].start_time_seconds, 0.0)
+        self.assertEqual(samples[1].start_time_seconds, 3600.0)
+
+        self.assertEqual(
+            scenario.forcing["tide_phase_radians"],
+            original_phase,
         )
 
     def test_masks_land_targets(self):
@@ -165,7 +187,14 @@ class MarineFNOV2PreparationTests(SimpleTestCase):
             water_mask=mask,
             easting=np.array([1.0, 2.0]),
             northing=np.array([3.0, 4.0]),
-            forcing={},
+            forcing={
+                "wind_u_ms": 0.0,
+                "wind_v_ms": 0.0,
+                "tide_amplitude_m": 0.5,
+                "tide_phase_radians": 0.0,
+                "tide_period_seconds": 44712.0,
+                "tidal_boundary": "east",
+            },
         )
 
         sample = _extract_windows(scenario)[0]
