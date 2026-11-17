@@ -19,6 +19,7 @@ class MarineFNOV2Sample:
 
     sample_id: str
     scenario_id: str
+    start_time_seconds: float
     initial_state: np.ndarray
     bathymetry_m: np.ndarray
     water_mask: np.ndarray
@@ -251,6 +252,8 @@ def _extract_windows(scenario: _ScenarioData) -> tuple[MarineFNOV2Sample, ...]:
     samples = []
 
     for start in range(EXPECTED_SNAPSHOTS - FORECAST_STEPS):
+        start_time_seconds = float(scenario.time_seconds[start])
+
         initial_state = np.stack(
             (
                 scenario.water_level[start],
@@ -273,17 +276,27 @@ def _extract_windows(scenario: _ScenarioData) -> tuple[MarineFNOV2Sample, ...]:
         target = target.copy()
         target[:, :, ~scenario.water_mask] = np.nan
 
+        # Advance the tidal phase to the beginning of this forecast window.
+        # This follows the solver convention:
+        # tide(t) = amplitude * sin(2*pi*t/period + initial_phase).
+        forcing = dict(scenario.forcing)
+        forcing["tide_phase_radians"] = (
+            forcing["tide_phase_radians"]
+            + 2.0 * np.pi * start_time_seconds / forcing["tide_period_seconds"]
+        ) % (2.0 * np.pi)
+
         samples.append(
             MarineFNOV2Sample(
                 sample_id=f"{scenario.name}_t{start:02d}",
                 scenario_id=scenario.name,
+                start_time_seconds=start_time_seconds,
                 initial_state=initial_state,
                 bathymetry_m=scenario.bathymetry.copy(),
                 water_mask=scenario.water_mask.copy(),
                 easting_m=scenario.easting.copy(),
                 northing_m=scenario.northing.copy(),
                 target=target,
-                forcing=dict(scenario.forcing),
+                forcing=forcing,
             )
         )
 
