@@ -346,37 +346,35 @@ def _calculate_rhs(
 
 
 def _stable_timestep(eta, hu, hv, bed, mask, dx, dy, config):
-    """Return an adaptive CFL-limited timestep."""
+    """Return an adaptive timestep constrained by the 2D CFL condition."""
 
     depth = np.where(mask, np.maximum(eta + bed, 0.0), 0.0)
+    wet = mask & (depth >= config.minimum_water_depth_m)
 
     u = np.divide(
         hu,
         depth,
         out=np.zeros_like(hu),
-        where=depth >= config.minimum_water_depth_m,
+        where=wet,
     )
     v = np.divide(
         hv,
         depth,
         out=np.zeros_like(hv),
-        where=depth >= config.minimum_water_depth_m,
+        where=wet,
     )
 
     wave_speed = np.sqrt(config.gravity_ms2 * depth)
 
-    speed_x = np.abs(u) + wave_speed
-    speed_y = np.abs(v) + wave_speed
+    # Combine propagation rates from both spatial directions.
+    cfl_rate = (np.abs(u) + wave_speed) / dx + (np.abs(v) + wave_speed) / dy
 
-    maximum_rate = max(
-        float(np.max(speed_x)),
-        float(np.max(speed_y)),
-    )
+    maximum_rate = float(np.max(cfl_rate))
 
     if maximum_rate <= 0:
         return config.output_interval_seconds
 
-    return config.cfl_number * min(dx, dy) / maximum_rate
+    return config.cfl_number / maximum_rate
 
 
 def _calculate_water_volume(eta, bed, mask, dx, dy):
