@@ -267,7 +267,7 @@ def _extract_windows(scenario: _ScenarioData) -> tuple[MarineFNOV2Sample, ...]:
                 scenario.current_v[start + 1 : start + 1 + FORECAST_STEPS],
             ),
             axis=1,
-        )
+        ).astype(np.float32, copy=False)
 
         # Land and disconnected cells are excluded from supervised targets.
         target = target.copy()
