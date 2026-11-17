@@ -8,6 +8,7 @@ from port_twin_app.services.marine_data.shallow_water import (
 )
 from port_twin_app.services.marine_data.shallow_water.solver import (
     _face_flux,
+    _stable_timestep,
     run_shallow_water_simulation,
 )
 
@@ -286,3 +287,32 @@ class ShallowWaterSolverTests(SimpleTestCase):
             rtol=1e-9,
             atol=1e-4,
         )
+        
+    
+    def test_timestep_obeys_combined_two_dimensional_cfl_condition(self):
+        config = ShallowWaterConfig(
+            cfl_number=0.4,
+            output_interval_seconds=100,
+        )
+
+        eta = np.zeros((2, 2), dtype=np.float64)
+        bed = np.full((2, 2), 20.0, dtype=np.float64)
+        mask = np.ones((2, 2), dtype=bool)
+
+        hu = np.full((2, 2), 20.0, dtype=np.float64)
+        hv = np.full((2, 2), 40.0, dtype=np.float64)
+
+        dx = dy = 250.0
+
+        actual = _stable_timestep(
+            eta, hu, hv, bed, mask, dx, dy, config
+        )
+
+        wave_speed = np.sqrt(config.gravity_ms2 * 20.0)
+
+        expected = config.cfl_number / (
+            (1.0 + wave_speed) / dx
+            + (2.0 + wave_speed) / dy
+        )
+
+        self.assertAlmostEqual(actual, expected)
