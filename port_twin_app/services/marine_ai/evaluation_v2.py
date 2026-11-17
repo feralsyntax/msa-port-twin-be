@@ -262,15 +262,10 @@ def evaluate_model_v2(
     persistence_metrics = _metrics(persistence_predictions, targets, masks)
     harmonic_metrics = _metrics(harmonic_predictions, targets, masks)
 
-    fno_beats_persistence = (
-        fno_metrics["water_level_m"].mae
-        + fno_metrics["current_u_ms"].mae
-        + fno_metrics["current_v_ms"].mae
-    ) / 3.0 < (
-        persistence_metrics["water_level_m"].mae
-        + persistence_metrics["current_u_ms"].mae
-        + persistence_metrics["current_v_ms"].mae
-    ) / 3.0
+    fno_beats_persistence = all(
+        fno_metrics[field].mae < persistence_metrics[field].mae
+        for field in OUTPUT_FIELDS
+    )
 
     return EvaluationV2Result(
         model_version=MODEL_VERSION,
