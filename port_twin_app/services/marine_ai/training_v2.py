@@ -84,6 +84,10 @@ class TrainingV2Result:
     epochs_completed: int
     training_losses: tuple[float, ...]
     validation_losses: tuple[float, ...]
+    training_supervised_losses: tuple[float, ...]
+    training_continuity_losses: tuple[float, ...]
+    validation_supervised_losses: tuple[float, ...]
+    validation_continuity_losses: tuple[float, ...]
     best_validation_loss: float
     best_epoch: int
     checkpoint_path: str
@@ -511,18 +515,20 @@ def _evaluate(
     target_mean: torch.Tensor,
     target_std: torch.Tensor,
     config: TrainingV2Config,
-) -> float:
+) -> tuple[float, float, float]:
     """Calculate mean combined validation loss without updating weights."""
 
     if not samples:
         raise ValueError("Validation samples cannot be empty.")
 
     model.eval()
-    losses = []
+    total_losses = []
+    supervised_losses = []
+    continuity_losses = []
 
     with torch.no_grad():
         for sample in samples:
-            total, _, _ = _sample_loss(
+            total, supervised, continuity = _sample_loss(
                 model,
                 sample,
                 device,
@@ -534,14 +540,22 @@ def _evaluate(
                 config.continuity_residual_scale_ms,
             )
 
-            if not torch.isfinite(total):
+            if not all(
+                torch.isfinite(loss) for loss in (total, supervised, continuity)
+            ):
                 raise ValueError(
                     f"Non-finite validation loss for {sample.sample_id!r}."
                 )
 
-            losses.append(total.item())
+            total_losses.append(total.item())
+            supervised_losses.append(supervised.item())
+            continuity_losses.append(continuity.item())
 
-    return sum(losses) / len(losses)
+    return (
+        sum(total_losses) / len(total_losses),
+        sum(supervised_losses) / len(supervised_losses),
+        sum(continuity_losses) / len(continuity_losses),
+    )
 
 
 def train_model_v2(
@@ -588,6 +602,10 @@ def train_model_v2(
 
     training_losses = []
     validation_losses = []
+    training_supervised_losses = []
+    training_continuity_losses = []
+    validation_supervised_losses = []
+    validation_continuity_losses = []
     best_validation_loss = float("inf")
     best_epoch = 0
     checkpoint_path = Path(config.checkpoint_path)
@@ -595,11 +613,13 @@ def train_model_v2(
     for epoch in range(1, config.epochs + 1):
         model.train()
         epoch_losses = []
+        epoch_supervised_losses = []
+        epoch_continuity_losses = []
 
         for sample in dataset.train:
             optimizer.zero_grad(set_to_none=True)
 
-            total_loss, _, _ = _sample_loss(
+            total_loss, supervised_loss, continuity_loss = _sample_loss(
                 model,
                 sample,
                 str(device),
@@ -617,10 +637,22 @@ def train_model_v2(
             total_loss.backward()
             optimizer.step()
             epoch_losses.append(total_loss.item())
+            epoch_supervised_losses.append(supervised_loss.item())
+            epoch_continuity_losses.append(continuity_loss.item())
 
         training_loss = sum(epoch_losses) / len(epoch_losses)
+        training_supervised_loss = (
+            sum(epoch_supervised_losses) / len(epoch_supervised_losses)
+        )
+        training_continuity_loss = (
+            sum(epoch_continuity_losses) / len(epoch_continuity_losses)
+        )
 
-        validation_loss = _evaluate(
+        (
+            validation_loss,
+            validation_supervised_loss,
+            validation_continuity_loss,
+        ) = _evaluate(
             model,
             dataset.validation,
             str(device),
@@ -633,6 +665,10 @@ def train_model_v2(
 
         training_losses.append(training_loss)
         validation_losses.append(validation_loss)
+        training_supervised_losses.append(training_supervised_loss)
+        training_continuity_losses.append(training_continuity_loss)
+        validation_supervised_losses.append(validation_supervised_loss)
+        validation_continuity_losses.append(validation_continuity_loss)
 
         if validation_loss < best_validation_loss:
             best_validation_loss = validation_loss
@@ -659,6 +695,10 @@ def train_model_v2(
                 "epochs_completed": epoch,
                 "training_losses": list(training_losses),
                 "validation_losses": list(validation_losses),
+                "training_supervised_losses": list(training_supervised_losses),
+                "training_continuity_losses": list(training_continuity_losses),
+                "validation_supervised_losses": list(validation_supervised_losses),
+                "validation_continuity_losses": list(validation_continuity_losses),
                 "best_validation_loss": best_validation_loss,
                 "best_epoch": best_epoch,
                 "learning_rate": config.learning_rate,
@@ -675,6 +715,10 @@ def train_model_v2(
         epochs_completed=config.epochs,
         training_losses=tuple(training_losses),
         validation_losses=tuple(validation_losses),
+        training_supervised_losses=tuple(training_supervised_losses),
+        training_continuity_losses=tuple(training_continuity_losses),
+        validation_supervised_losses=tuple(validation_supervised_losses),
+        validation_continuity_losses=tuple(validation_continuity_losses),
         best_validation_loss=best_validation_loss,
         best_epoch=best_epoch,
         checkpoint_path=str(checkpoint_path),
