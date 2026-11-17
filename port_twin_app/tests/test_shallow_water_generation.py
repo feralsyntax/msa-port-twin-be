@@ -11,6 +11,7 @@ from port_twin_app.services.marine_data.generation import (
     generate_shallow_water_datasets,
     get_shallow_water_scenarios,
 )
+from port_twin_app.services.marine_data.generation.scenarios import get_fno_v2_scenarios
 
 
 class ShallowWaterScenarioTests(SimpleTestCase):
@@ -69,6 +70,49 @@ class ShallowWaterScenarioTests(SimpleTestCase):
             scenarios["stronger_tide"].config.tide_amplitude_m,
             0.8,
         )
+
+    def test_fno_v2_has_eighteen_scenarios(self):
+        self.assertEqual(len(get_fno_v2_scenarios()), 18)
+
+    def test_fno_v2_scenario_names_are_unique(self):
+        scenarios = get_fno_v2_scenarios()
+        names = [scenario.name for scenario in scenarios]
+
+        self.assertEqual(len(names), len(set(names)))
+
+    def test_fno_v2_scenarios_have_expected_duration_and_version(self):
+        for scenario in get_fno_v2_scenarios():
+            with self.subTest(scenario=scenario.name):
+                self.assertEqual(scenario.dataset_version, "v2")
+                self.assertEqual(
+                    scenario.config.duration_seconds,
+                    12 * 3600,
+                )
+
+    def test_fno_v2_covers_wind_directions_and_tidal_profiles(self):
+        scenarios = get_fno_v2_scenarios()
+
+        wind_profiles = {(s.config.wind_u_ms, s.config.wind_v_ms) for s in scenarios}
+        tidal_profiles = {
+            (s.config.tide_amplitude_m, s.config.tide_phase_radians) for s in scenarios
+        }
+
+        self.assertEqual(len(wind_profiles), 6)
+        self.assertEqual(len(tidal_profiles), 3)
+
+    def test_fno_v2_scenarios_can_be_selected(self):
+        selected = get_fno_v2_scenarios(
+            ("v2_calm_low_tide", "v2_eastward_3ms_high_tide")
+        )
+
+        self.assertEqual(
+            [scenario.name for scenario in selected],
+            ["v2_calm_low_tide", "v2_eastward_3ms_high_tide"],
+        )
+
+    def test_unknown_fno_v2_scenario_is_rejected(self):
+        with self.assertRaises(ValueError):
+            get_fno_v2_scenarios(("unknown_scenario",))
 
 
 class ShallowWaterDatasetGenerationTests(SimpleTestCase):
@@ -210,5 +254,46 @@ class ShallowWaterDatasetGenerationTests(SimpleTestCase):
                 generate_shallow_water_datasets(
                     scenario_names=(),
                     output_directory=temporary_directory,
+                    domain=self.domain,
+                )
+
+    @patch(
+        "port_twin_app.services.marine_data.generation.dataset."
+        "run_shallow_water_simulation"
+    )
+    def test_v2_generation_records_dataset_version(
+        self,
+        mock_solver,
+    ):
+        mock_solver.return_value = self.dataset
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            generated = generate_shallow_water_datasets(
+                scenario_names=("v2_calm_low_tide",),
+                output_directory=temporary_directory,
+                dataset_version="v2",
+                domain=self.domain,
+                duration_seconds=600,
+            )
+
+            netcdf_path = Path(generated["v2_calm_low_tide"])
+            provenance_path = netcdf_path.with_name("v2_calm_low_tide.provenance.json")
+            provenance = json.loads(provenance_path.read_text())
+
+            self.assertEqual(provenance["dataset_version"], "v2")
+            self.assertEqual(
+                provenance["configuration"]["duration_seconds"],
+                600,
+            )
+
+            with xr.open_dataset(netcdf_path, engine="h5netcdf") as exported:
+                self.assertEqual(exported.attrs["dataset_version"], "v2")
+
+    def test_rejects_unknown_dataset_version(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:  # noqa: SIM117
+            with self.assertRaises(ValueError):
+                generate_shallow_water_datasets(
+                    output_directory=temporary_directory,
+                    dataset_version="v3",
                     domain=self.domain,
                 )
