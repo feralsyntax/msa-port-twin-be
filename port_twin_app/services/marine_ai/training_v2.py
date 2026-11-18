@@ -368,8 +368,8 @@ def _continuity_loss(
 ) -> torch.Tensor:
     """Penalize the shallow-water continuity residual in interior wet cells.
 
-    The east boundary is open. Outer boundary cells are excluded from the
-    finite-difference residual rather than being treated as closed walls.
+    Land-cell values are sanitized before arithmetic because bathymetry and
+    initial-state arrays may contain NaNs outside the water mask.
     """
 
     if physical_predictions.ndim != 5:
@@ -384,7 +384,6 @@ def _continuity_loss(
     if dx <= 0 or dy <= 0:
         raise ValueError("Grid spacing must be positive.")
 
-    # Require the centre and its four finite-difference neighbours to be wet.
     valid = (
         mask[1:-1, 1:-1]
         & mask[1:-1, :-2]
@@ -396,7 +395,20 @@ def _continuity_loss(
     if not valid.any():
         return physical_predictions.sum() * 0.0
 
-    previous_eta = initial_state[0]
+    # Sanitize land cells BEFORE arithmetic to prevent NaN propagation
+    # through multiplication and its backward gradients.
+    safe_bathymetry = torch.where(
+        mask,
+        bathymetry,
+        torch.zeros_like(bathymetry),
+    )
+
+    previous_eta = torch.where(
+        mask,
+        initial_state[0],
+        torch.zeros_like(initial_state[0]),
+    )
+
     losses = []
 
     for step in range(FORECAST_STEPS):
@@ -404,23 +416,28 @@ def _continuity_loss(
         current_u = physical_predictions[0, step, 1]
         current_v = physical_predictions[0, step, 2]
 
-        depth = torch.clamp_min(bathymetry + eta, 0.0)
+        # Predictions on land are irrelevant to the continuity equation.
+        safe_eta = torch.where(mask, eta, torch.zeros_like(eta))
+        safe_current_u = torch.where(mask, current_u, torch.zeros_like(current_u))
+        safe_current_v = torch.where(mask, current_v, torch.zeros_like(current_v))
 
-        flux_x = depth * current_u
-        flux_y = depth * current_v
+        depth = torch.clamp_min(safe_bathymetry + safe_eta, 0.0)
+
+        flux_x = depth * safe_current_u
+        flux_y = depth * safe_current_v
 
         divergence_x = (flux_x[1:-1, 2:] - flux_x[1:-1, :-2]) / (2.0 * dx)
 
         divergence_y = (flux_y[2:, 1:-1] - flux_y[:-2, 1:-1]) / (2.0 * dy)
 
-        time_derivative = (eta[1:-1, 1:-1] - previous_eta[1:-1, 1:-1]) / 3600.0
+        time_derivative = (safe_eta[1:-1, 1:-1] - previous_eta[1:-1, 1:-1]) / 3600.0
 
         residual = time_derivative + divergence_x + divergence_y
 
         normalized_residual = residual[valid] / residual_scale_ms
         losses.append(normalized_residual.square().mean())
 
-        previous_eta = eta
+        previous_eta = safe_eta
 
     return torch.stack(losses).mean()
 
@@ -610,23 +627,17 @@ def train_model_v2(
     best_epoch = 0
     checkpoint_path = Path(config.checkpoint_path)
 
+    # Temporary: capture forward operations responsible for invalid gradients.
+    torch.autograd.set_detect_anomaly(True)
+
     for epoch in range(1, config.epochs + 1):
         model.train()
         epoch_losses = []
         epoch_supervised_losses = []
         epoch_continuity_losses = []
 
-        for sample_index, sample in enumerate(dataset.train, start=1):
+        for sample in dataset.train:
             optimizer.zero_grad(set_to_none=True)
-
-            parameter_values = [parameter.detach() for parameter in model.parameters()]
-
-            if not all(torch.isfinite(p).all() for p in parameter_values):
-                raise ValueError(
-                    f"Non-finite model parameters before sample {sample.sample_id!r}."
-                )
-
-            parameter_max = max(p.abs().max().item() for p in parameter_values)
 
             total_loss, supervised_loss, continuity_loss = _sample_loss(
                 model,
@@ -640,47 +651,19 @@ def train_model_v2(
                 config.continuity_residual_scale_ms,
             )
 
-            print(
-                f"Sample {sample_index}: {sample.sample_id} | "
-                f"total={total_loss.item():.6f} | "
-                f"supervised={supervised_loss.item():.6f} | "
-                f"continuity={continuity_loss.item():.6f} | "
-                f"parameter_max_before={parameter_max:.6f}",
-                flush=True,
-            )
-
             if not torch.isfinite(total_loss):
                 raise ValueError(f"Non-finite training loss for {sample.sample_id!r}.")
 
             total_loss.backward()
 
-            gradients = [
-                parameter.grad.detach()
+            if not all(
+                parameter.grad is None or torch.isfinite(parameter.grad).all()
                 for parameter in model.parameters()
-                if parameter.grad is not None
-            ]
-
-            if not all(torch.isfinite(g).all() for g in gradients):
+            ):
                 raise ValueError(f"Non-finite gradients for {sample.sample_id!r}.")
-
-            gradient_norm = torch.linalg.vector_norm(
-                torch.stack([torch.linalg.vector_norm(g) for g in gradients])
-            ).item()
-
-            print(
-                f"  Gradient norm: {gradient_norm:.6f}",
-                flush=True,
-            )
 
             optimizer.step()
 
-            if not all(
-                torch.isfinite(parameter).all() for parameter in model.parameters()
-            ):
-                raise ValueError(
-                    f"Optimizer produced non-finite parameters after "
-                    f"{sample.sample_id!r}."
-                )
             epoch_losses.append(total_loss.item())
             epoch_supervised_losses.append(supervised_loss.item())
             epoch_continuity_losses.append(continuity_loss.item())
