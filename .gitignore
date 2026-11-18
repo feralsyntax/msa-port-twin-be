@@ -220,3 +220,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 .vscode
+
+# Generated FNO v2 simulation datasets
+data/processed/marine/shallow_water/v2_*.nc

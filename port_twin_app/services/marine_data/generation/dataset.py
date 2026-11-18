@@ -11,7 +11,7 @@ from port_twin_app.services.marine_data.shallow_water.solver import (
     run_shallow_water_simulation,
 )
 
-from .scenarios import get_shallow_water_scenarios
+from .scenarios import get_fno_v2_scenarios, get_shallow_water_scenarios
 
 if TYPE_CHECKING:
     from port_twin_app.services.marine_data.shallow_water.domain import (
@@ -56,6 +56,7 @@ def _build_provenance(scenario, domain, dataset) -> dict:
 
     return {
         "data_classification": "simulated",
+        "dataset_version": scenario.dataset_version,
         "is_observed": False,
         "is_ground_truth": False,
         "scenario": {
@@ -93,6 +94,7 @@ def generate_shallow_water_datasets(
     output_directory: str | Path = DEFAULT_OUTPUT_DIRECTORY,
     duration_seconds: float | None = None,
     domain: "ShallowWaterDomain | None" = None,
+    dataset_version: str = "v1",
 ) -> dict[str, Path]:
     """Generate and export selected simulated shallow-water scenarios.
 
@@ -102,7 +104,13 @@ def generate_shallow_water_datasets(
     if duration_seconds is not None and duration_seconds <= 0:
         raise ValueError("Duration must be positive.")
 
-    scenarios = get_shallow_water_scenarios(scenario_names)
+    if dataset_version == "v1":
+        scenarios = get_shallow_water_scenarios(scenario_names)
+    elif dataset_version == "v2":
+        scenarios = get_fno_v2_scenarios(scenario_names)
+    else:
+        raise ValueError(f"Unsupported dataset version: {dataset_version!r}")
+
     if not scenarios:
         raise ValueError("At least one scenario must be selected.")
 
@@ -127,6 +135,7 @@ def generate_shallow_water_datasets(
             {
                 "scenario_name": scenario.name,
                 "scenario_description": scenario.description,
+                "dataset_version": scenario.dataset_version,
                 "data_classification": "simulated",
                 "is_observed": False,
                 "is_ground_truth": False,

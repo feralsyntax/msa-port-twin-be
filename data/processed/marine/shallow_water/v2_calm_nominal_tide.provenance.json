@@ -1,0 +1,63 @@
+{
+  "bathymetry": {
+    "excluded_water_cells": 32,
+    "grid_spacing_m": 250.0,
+    "projected_crs": "EPSG:32737",
+    "source_dataset_version": "GEBCO_2026",
+    "source_file": "/home/benie/Desktop/msa-port-twin-be/data/processed/marine/bathymetry/projected/approaches_gebco_2026_utm37s_250m.nc",
+    "source_sha256": "0bcdb18b67ad9c3380693a34052f2f131e71bad0740a949009a4f1ad68203cda",
+    "source_vertical_reference": "height_above_mean_sea_level",
+    "total_water_cells": 15562
+  },
+  "configuration": {
+    "air_density_kgm3": 1.225,
+    "bottom_drag_coefficient": 0.0025,
+    "cfl_number": 0.4,
+    "coriolis_parameter_s1": -1.04e-05,
+    "duration_seconds": 43200,
+    "gravity_ms2": 9.81,
+    "minimum_water_depth_m": 0.05,
+    "output_interval_seconds": 3600,
+    "random_seed": 42,
+    "tidal_boundary": "east",
+    "tide_amplitude_m": 0.5,
+    "tide_period_seconds": 44712.0,
+    "tide_phase_radians": 1.0471975511965976,
+    "water_density_kgm3": 1025.0,
+    "wind_drag_coefficient": 0.0013,
+    "wind_u_ms": 0.0,
+    "wind_v_ms": 0.0
+  },
+  "data_classification": "simulated",
+  "dataset_version": "v2",
+  "generated_at": "2026-11-17T12:47:21.396118+00:00",
+  "is_ground_truth": false,
+  "is_observed": false,
+  "output": {
+    "dimensions": {
+      "easting": 131,
+      "northing": 199,
+      "time_seconds": 13
+    },
+    "engine": "h5netcdf",
+    "format": "NetCDF",
+    "variables": [
+      "water_level_m",
+      "current_u_ms",
+      "current_v_ms",
+      "bathymetry_m",
+      "water_mask",
+      "water_volume_m3",
+      "boundary_volume_exchange_m3"
+    ]
+  },
+  "scenario": {
+    "description": "FNO v2 scenario with calm wind and nominal tide forcing.",
+    "name": "v2_calm_nominal_tide"
+  },
+  "solver": {
+    "name": "2D shallow-water solver",
+    "numerical_scheme": null,
+    "version": "1.0.0"
+  }
+}

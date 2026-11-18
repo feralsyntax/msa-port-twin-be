@@ -1,0 +1,75 @@
+{
+  "model_version": "fno-0.5.0",
+  "candidate_checkpoint": "artifacts/marine_fno_v2.pt",
+  "dataset": "data/processed/marine/shallow_water",
+  "dataset_version": "v2",
+  "domain": "Synthetic Mombasa shallow-water scenarios",
+  "grid": {
+    "crs": "EPSG:32737",
+    "nx": 131,
+    "ny": 199
+  },
+  "training": {
+    "epochs": 20,
+    "best_epoch": 18,
+    "best_validation_loss": 0.1356758,
+    "learning_rate": 0.001,
+    "seed": 42,
+    "physics_loss_weight": 0.1,
+    "device": "cpu"
+  },
+  "evaluation": {
+    "samples": 21,
+    "test_scenarios": [
+      "v2_calm_low_tide",
+      "v2_eastward_5ms_nominal_tide",
+      "v2_southward_3ms_low_tide"
+    ],
+    "note": "Evaluation uses simulated v2 held-out scenarios only. The harmonic-tide baseline is spatially uniform and keeps currents persistent. Results do not establish real-world accuracy.",
+    "fno_beats_persistence": true,
+    "promotion_eligible": true,
+    "out_of_domain_models": ["fno-0.4.0"],
+    "fno": {
+      "water_level_m": {
+        "mae": 0.02834629826247692,
+        "rmse": 0.04056365415453911
+      },
+      "current_u_ms": {
+        "mae": 0.0015422392170876265,
+        "rmse": 0.00447797542437911
+      },
+      "current_v_ms": {
+        "mae": 0.0010247352765873075,
+        "rmse": 0.003155005630105734
+      }
+    },
+    "persistence": {
+      "water_level_m": {
+        "mae": 0.3337915539741516,
+        "rmse": 0.40129953622817993
+      },
+      "current_u_ms": {
+        "mae": 0.004331780597567558,
+        "rmse": 0.013634747825562954
+      },
+      "current_v_ms": {
+        "mae": 0.0020619460847228765,
+        "rmse": 0.009219039231538773
+      }
+    },
+    "harmonic_tide": {
+      "water_level_m": {
+        "mae": 0.3098381459712982,
+        "rmse": 0.39997830986976624
+      },
+      "current_u_ms": {
+        "mae": 0.004331780597567558,
+        "rmse": 0.013634747825562954
+      },
+      "current_v_ms": {
+        "mae": 0.0020619460847228765,
+        "rmse": 0.009219039231538773
+      }
+    }
+  }
+}
