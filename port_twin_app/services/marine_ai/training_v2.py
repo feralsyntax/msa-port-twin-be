@@ -616,8 +616,17 @@ def train_model_v2(
         epoch_supervised_losses = []
         epoch_continuity_losses = []
 
-        for sample in dataset.train:
+        for sample_index, sample in enumerate(dataset.train, start=1):
             optimizer.zero_grad(set_to_none=True)
+
+            parameter_values = [parameter.detach() for parameter in model.parameters()]
+
+            if not all(torch.isfinite(p).all() for p in parameter_values):
+                raise ValueError(
+                    f"Non-finite model parameters before sample {sample.sample_id!r}."
+                )
+
+            parameter_max = max(p.abs().max().item() for p in parameter_values)
 
             total_loss, supervised_loss, continuity_loss = _sample_loss(
                 model,
@@ -631,21 +640,57 @@ def train_model_v2(
                 config.continuity_residual_scale_ms,
             )
 
+            print(
+                f"Sample {sample_index}: {sample.sample_id} | "
+                f"total={total_loss.item():.6f} | "
+                f"supervised={supervised_loss.item():.6f} | "
+                f"continuity={continuity_loss.item():.6f} | "
+                f"parameter_max_before={parameter_max:.6f}",
+                flush=True,
+            )
+
             if not torch.isfinite(total_loss):
                 raise ValueError(f"Non-finite training loss for {sample.sample_id!r}.")
 
             total_loss.backward()
+
+            gradients = [
+                parameter.grad.detach()
+                for parameter in model.parameters()
+                if parameter.grad is not None
+            ]
+
+            if not all(torch.isfinite(g).all() for g in gradients):
+                raise ValueError(f"Non-finite gradients for {sample.sample_id!r}.")
+
+            gradient_norm = torch.linalg.vector_norm(
+                torch.stack([torch.linalg.vector_norm(g) for g in gradients])
+            ).item()
+
+            print(
+                f"  Gradient norm: {gradient_norm:.6f}",
+                flush=True,
+            )
+
             optimizer.step()
+
+            if not all(
+                torch.isfinite(parameter).all() for parameter in model.parameters()
+            ):
+                raise ValueError(
+                    f"Optimizer produced non-finite parameters after "
+                    f"{sample.sample_id!r}."
+                )
             epoch_losses.append(total_loss.item())
             epoch_supervised_losses.append(supervised_loss.item())
             epoch_continuity_losses.append(continuity_loss.item())
 
         training_loss = sum(epoch_losses) / len(epoch_losses)
-        training_supervised_loss = (
-            sum(epoch_supervised_losses) / len(epoch_supervised_losses)
+        training_supervised_loss = sum(epoch_supervised_losses) / len(
+            epoch_supervised_losses
         )
-        training_continuity_loss = (
-            sum(epoch_continuity_losses) / len(epoch_continuity_losses)
+        training_continuity_loss = sum(epoch_continuity_losses) / len(
+            epoch_continuity_losses
         )
 
         (
