@@ -202,3 +202,104 @@ The model implementation, checkpoint, inference compatibility and evaluation are
 Further work on data quality, vertical-datum reconciliation, training strategies, evaluation and independent validation can continue separately without blocking application integration.
 
 Any future model improvements should be evaluated against this frozen baseline and the persistence benchmark before replacing it.
+
+## 9. Forcing-conditioned FNO v2
+
+### Overview
+
+FNO v2 (`fno-0.5.0`) is a forcing-conditioned experimental marine model trained on synthetic shallow-water simulation scenarios.
+
+Unlike the earlier six-channel FNO, v2 uses 13 input channels incorporating bathymetry, initial marine conditions, spatial coordinates, wind forcing, tidal forcing, water mask and an east-boundary indicator.
+
+The model predicts six hourly forecast steps for:
+
+- `water_level_m`
+- `current_u_ms`
+- `current_v_ms`
+
+The training contract is `marine-fno-v2-1.0`.
+
+### Training configuration
+
+| Setting              | Value                        |
+| -------------------- | ---------------------------- |
+| Model version        | `fno-0.5.0`                  |
+| Dataset              | Synthetic shallow-water v2   |
+| Training samples     | 84                           |
+| Validation samples   | 21                           |
+| Test samples         | 21                           |
+| Training scenarios   | 12                           |
+| Validation scenarios | 3                            |
+| Test scenarios       | 3                            |
+| Epochs               | 20                           |
+| Best epoch           | 18                           |
+| Best validation loss | 0.13567580                   |
+| Learning rate        | 0.001                        |
+| Physics loss weight  | 0.1                          |
+| Device               | CPU                          |
+| Seed                 | 42                           |
+| Checkpoint           | `artifacts/marine_fno_v2.pt` |
+
+The dataset was divided by scenario to reduce leakage between training, validation and test partitions. The test partition was not used for training or model selection.
+
+### Held-out test evaluation
+
+The checkpoint was evaluated against 21 held-out samples from:
+
+- `v2_calm_low_tide`
+- `v2_eastward_5ms_nominal_tide`
+- `v2_southward_3ms_low_tide`
+
+Evaluation compared FNO v2 against persistence and a simplified harmonic-tide baseline.
+
+| Variable        | FNO v2 MAE | Persistence MAE | Harmonic-tide MAE |
+| --------------- | ---------: | --------------: | ----------------: |
+| Water level (m) |   0.028346 |        0.333792 |          0.309838 |
+| Current U (m/s) |   0.001542 |        0.004332 |          0.004332 |
+| Current V (m/s) |   0.001025 |        0.002062 |          0.002062 |
+
+FNO v2 achieved lower MAE than persistence for all three output variables.
+
+**Benchmark decision:** The model passed the defined persistence-based promotion gate and is eligible for promotion within the synthetic v2 experiment.
+
+The harmonic-tide baseline is spatially uniform and retains persistent current predictions. It should therefore be treated as a simplified reference rather than a comprehensive physical forecasting baseline.
+
+The complete evaluation results are stored in:
+
+`artifacts/marine_fno_v2_evaluation.json`
+
+### Scientific limitations
+
+The positive evaluation results must be interpreted within the limits of the dataset and experimental design:
+
+- Training and evaluation use synthetic shallow-water solver outputs, not independent observations of actual Mombasa marine conditions.
+- Passing the persistence-based promotion gate demonstrates improvement on the selected synthetic scenarios, not real-world forecasting accuracy.
+- The test set contains only three held-out scenarios and does not establish generalization to all possible marine conditions.
+- The harmonic-tide baseline is simplified and does not represent a comprehensive harmonic prediction system.
+- The continuity loss is an approximate physics-informed regularization term, not a complete solution of the shallow-water momentum and continuity equations.
+- Independent validation against real marine observations has not been performed.
+
+### Intended use
+
+FNO v2 may support:
+
+- Experimental marine prediction visualizations.
+- Synthetic hydrodynamic scenario demonstrations.
+- Development and testing of the marine inference pipeline.
+- Further model research and evaluation.
+
+It must not be presented as a validated operational forecasting system or used as the sole basis for vessel navigation, safe-draft decisions or actual port scheduling.
+
+Any application or demonstration presenting FNO v2 predictions should disclose:
+
+- Model version: `fno-0.5.0`.
+- Forecast horizon: six hours.
+- Model status: experimental.
+- Data basis: synthetic shallow-water simulations.
+- Validation status: synthetic held-out evaluation only; no independent real-world validation.
+
+### Model status
+
+FNO v2 is promotion-eligible based on its synthetic benchmark evaluation. This is a model-development milestone, not evidence of operational readiness.
+
+The checkpoint and evaluation report are retained as reproducible research artifacts. Integration into the application must preserve the distinction between experimental model predictions and verified marine observations.
