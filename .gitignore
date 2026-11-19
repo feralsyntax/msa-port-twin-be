@@ -223,3 +223,9 @@ __marimo__/
 
 # Generated FNO v2 simulation datasets
 data/processed/marine/shallow_water/v2_*.nc
+
+# Historical marine hindcast source downloads
+data/raw/copernicus/mombasa_glorys_hindcast_test_20221001_20221003.nc
+data/raw/copernicus/mombasa_merged_sea_level_test_20221001_20221003.nc
+data/raw/copernicus/mombasa_ocean_tide_202210.nc
+data/raw/era5/mombasa_era5_wind_20221001_20221003.nc
