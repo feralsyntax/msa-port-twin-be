@@ -4,7 +4,6 @@
 coverage==7.17.0
 
 # Local FNO model development and inference
-numpy==2.5.4
 torch==2.14.1
 triton==3.8.0
 

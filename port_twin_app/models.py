@@ -73,9 +73,19 @@ class VesselPosition(models.Model):
     Connects vessels to their geographical positions using PostGIS
     """
 
+    class Source(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        AIS = "ais", "AIS"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     vessel = models.ForeignKey(
         "Vessel", on_delete=models.CASCADE, related_name="position_history"
+    )
+    source = models.CharField(
+        max_length=10,
+        choices=Source.choices,
+        default=Source.MANUAL,
+        db_index=True,
     )
     position = gis_models.PointField(geography=True, srid=4326)
     speed_over_ground = models.DecimalField(
@@ -103,6 +113,34 @@ class VesselPosition(models.Model):
 
     def __str__(self):
         return f"{self.vessel.name} at {self.recorded_at}"
+
+
+class AISMessageReceipt(models.Model):
+    """Tracks processed AIS messages to prevent duplicate ingestion."""
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    source = models.CharField(max_length=50)
+    fingerprint = models.CharField(max_length=64)
+    received_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [  # noqa: RUF012
+            models.UniqueConstraint(
+                fields=["source", "fingerprint"],
+                name="unique_ais_message_receipt",
+            ),
+        ]
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["received_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.source}: {self.fingerprint}"
 
 
 class Berth(models.Model):
