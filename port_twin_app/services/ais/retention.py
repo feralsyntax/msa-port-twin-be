@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 
 from port_twin_app.models import AISMessageReceipt, VesselPosition
@@ -25,14 +26,15 @@ class AISRetentionService:
         """Delete expired AIS records and return deletion counts."""
         cutoff = (now or timezone.now()) - timedelta(days=self.retention_days)
 
-        deleted_positions, _ = VesselPosition.objects.filter(
-            source=VesselPosition.Source.AIS,
-            recorded_at__lt=cutoff,
-        ).delete()
+        with transaction.atomic():
+            deleted_positions, _ = VesselPosition.objects.filter(
+                source=VesselPosition.Source.AIS,
+                recorded_at__lt=cutoff,
+            ).delete()
 
-        deleted_receipts, _ = AISMessageReceipt.objects.filter(
-            received_at__lt=cutoff,
-        ).delete()
+            deleted_receipts, _ = AISMessageReceipt.objects.filter(
+                received_at__lt=cutoff,
+            ).delete()
 
         return {
             "cutoff": cutoff,
