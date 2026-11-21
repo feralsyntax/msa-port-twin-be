@@ -144,7 +144,9 @@ class AISDecoder:
         if part_number == 0:
             parts["name"] = self._normalise_name(getattr(message, "shipname", None))
         else:
-            parts.update(self._static_fields(message))
+            static_fields = self._static_fields(message)
+            static_fields.pop("name", None)
+            parts.update(static_fields)
 
         if "name" not in parts or "vessel_type" not in parts:
             return None
