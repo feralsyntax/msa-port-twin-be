@@ -73,9 +73,19 @@ class VesselPosition(models.Model):
     Connects vessels to their geographical positions using PostGIS
     """
 
+    class Source(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        AIS = "ais", "AIS"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     vessel = models.ForeignKey(
         "Vessel", on_delete=models.CASCADE, related_name="position_history"
+    )
+    source = models.CharField(
+        max_length=10,
+        choices=Source.choices,
+        default=Source.MANUAL,
+        db_index=True,
     )
     position = gis_models.PointField(geography=True, srid=4326)
     speed_over_ground = models.DecimalField(
