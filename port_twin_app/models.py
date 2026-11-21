@@ -115,6 +115,34 @@ class VesselPosition(models.Model):
         return f"{self.vessel.name} at {self.recorded_at}"
 
 
+class AISMessageReceipt(models.Model):
+    """Tracks processed AIS messages to prevent duplicate ingestion."""
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    source = models.CharField(max_length=50)
+    fingerprint = models.CharField(max_length=64)
+    received_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [  # noqa: RUF012
+            models.UniqueConstraint(
+                fields=["source", "fingerprint"],
+                name="unique_ais_message_receipt",
+            ),
+        ]
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["received_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.source}: {self.fingerprint}"
+
+
 class Berth(models.Model):
     """
     Stores port berths and their operational characteristics.
