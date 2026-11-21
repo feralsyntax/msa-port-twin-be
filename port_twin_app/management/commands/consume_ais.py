@@ -4,6 +4,7 @@ import logging
 import time
 
 from django.conf import settings
+from django.core.checks import Tags
 from django.core.management.base import BaseCommand, CommandError
 
 from port_twin_app.services.ais.adapters.replay import ReplayAISAdapter
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     help = "Consume AIS messages from the configured source."
+    requires_system_checks = [Tags.models, Tags.database]  # noqa: RUF012
 
     def add_arguments(self, parser):
         parser.add_argument(
