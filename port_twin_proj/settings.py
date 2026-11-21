@@ -31,6 +31,24 @@ CSRF_TRUSTED_ORIGINS = config("CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
 
 REDIS_URL = config("REDIS_URL", default="")
 
+# AIS ingestion configuration
+AIS_SOURCE = config("AIS_SOURCE", default="replay").strip().lower()
+AIS_STALE_AFTER_SECONDS = config(
+    "AIS_STALE_AFTER_SECONDS",
+    default=300,
+    cast=int,
+)
+AIS_POSITION_RETENTION_DAYS = config(
+    "AIS_POSITION_RETENTION_DAYS",
+    default=30,
+    cast=int,
+)
+AIS_DEDUP_WINDOW_SECONDS = config(
+    "AIS_DEDUP_WINDOW_SECONDS",
+    default=10,
+    cast=int,
+)
+
 # Celery configuration
 CELERY_BROKER_URL = config(
     "CELERY_BROKER_URL",
