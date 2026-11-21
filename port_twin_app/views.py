@@ -690,6 +690,22 @@ class DataStatusAPIView(APIView):
         latest_position = vessel_positions.order_by("-recorded_at").first()
         latest_position_ingestion = vessel_positions.order_by("-created_at").first()
 
+        latest_ais_position = (
+            VesselPosition.objects.filter(source=VesselPosition.Source.AIS)
+            .order_by("-created_at")
+            .first()
+        )
+
+        stale_after_seconds = settings.AIS_STALE_AFTER_SECONDS
+
+        if latest_ais_position is None:
+            ais_status = "no_data"
+        else:
+            age_seconds = (
+                timezone.now() - latest_ais_position.created_at
+            ).total_seconds()
+            ais_status = "fresh" if age_seconds <= stale_after_seconds else "stale"
+
         source_counts = list(
             marine_conditions.values("source")
             .annotate(count=Count("id"))
@@ -791,6 +807,14 @@ class DataStatusAPIView(APIView):
                 "latest_prediction_at": (
                     latest_prediction.created_at if latest_prediction else None
                 ),
+            },
+            "ais": {
+                "source": settings.AIS_SOURCE,
+                "status": ais_status,
+                "latest_position_received_at": (
+                    latest_ais_position.created_at if latest_ais_position else None
+                ),
+                "stale_after_seconds": stale_after_seconds,
             },
         }
 
