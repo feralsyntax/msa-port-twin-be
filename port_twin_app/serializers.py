@@ -652,6 +652,15 @@ class VesselPositionDataStatusSerializer(serializers.Serializer):
     latest_ingested_at = serializers.DateTimeField(allow_null=True)
 
 
+class AISDataStatusSerializer(serializers.Serializer):
+    source = serializers.CharField()
+    status = serializers.ChoiceField(
+        choices=["no_data", "fresh", "stale"],
+    )
+    latest_position_received_at = serializers.DateTimeField(allow_null=True)
+    stale_after_seconds = serializers.IntegerField()
+
+
 class AIModelStatusSerializer(serializers.Serializer):
     backend = serializers.CharField()
     configured = serializers.BooleanField()
@@ -668,3 +677,4 @@ class DataStatusSerializer(serializers.Serializer):
     marine_conditions = MarineDataProvenanceSerializer()
     vessel_positions = VesselPositionDataStatusSerializer()
     ai = AIModelStatusSerializer()
+    ais = AISDataStatusSerializer()
