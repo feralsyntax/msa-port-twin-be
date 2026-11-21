@@ -1,0 +1,25 @@
+FROM python:3.14-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Django GIS and PostGIS runtime dependencies.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        gdal-bin \
+        libgdal-dev \
+        libgeos-dev \
+        libproj-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY manage.py .
+COPY port_twin_app/ port_twin_app/
+COPY port_twin_proj/ port_twin_proj/
+
+ENTRYPOINT ["python", "manage.py", "consume_ais"]
+CMD ["--file", "/data/ais/replay.nmea", "--loop"]
