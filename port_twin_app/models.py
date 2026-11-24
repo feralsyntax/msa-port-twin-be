@@ -404,6 +404,62 @@ class MarinePrediction(models.Model):
         return f"Marine prediction {self.id} ({self.status})"
 
 
+class TransitAssessment(models.Model):
+    """
+    Tracks an experimental advisory transit-window assessment.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    class Domain(models.TextChoices):
+        APPROACHES = "approaches", "Approaches"
+        PORT_OPERATIONS = "port_operations", "Port Operations"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    scenario_name = models.CharField(max_length=100)
+    domain_name = models.CharField(
+        max_length=30,
+        choices=Domain.choices,
+        default=Domain.APPROACHES,
+    )
+    configuration = models.JSONField(
+        default=dict,
+        help_text="Snapshot of the assessment configuration used.",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    result_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Completed experimental transit assessment results.",
+    )
+    error_message = models.TextField(blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]  # noqa: RUF012
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Transit assessment {self.id} ({self.status})"
+
+
 class BathymetryDataset(models.Model):
     """Registers a bathymetry dataset and its geographic coverage."""
 
