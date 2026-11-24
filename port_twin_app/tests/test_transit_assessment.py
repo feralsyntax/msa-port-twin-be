@@ -389,7 +389,16 @@ class TransitAssessmentIntegrationTests(SimpleTestCase):
         )
 
         mock_get_scenarios.return_value = (scenario,)
-        mock_load_domain.return_value = SimpleNamespace()
+        mock_load_domain.return_value = SimpleNamespace(
+            projected_crs="EPSG:32737",
+            grid_spacing_m=250.0,
+            source_vertical_reference="height_above_mean_sea_level",
+            source_dataset_version="GEBCO_2026",
+            source_file="synthetic_bathymetry.nc",
+            source_sha256="test-checksum",
+            total_water_cells=3,
+            excluded_water_cells=0,
+        )
         mock_solver.return_value = synthetic_dataset()
 
         config = TransitAssessmentConfig(
