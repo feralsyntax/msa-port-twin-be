@@ -42,13 +42,16 @@ class AISDecoderTests(SimpleTestCase):
         )
         self.assertIsNone(result)
 
-    def test_rejects_position_outside_approaches(self):
+    def test_retains_valid_position_outside_approaches(self):
         result = self.decoder.decode_message(
             self.message(lon=40.0, lat=-4.05),
             self.received_at,
         )
+
         self.assertIsNotNone(result)
-        self.assertFalse(result.has_position)
+        self.assertTrue(result.has_position)
+        self.assertEqual(result.longitude, 40.0)
+        self.assertEqual(result.latitude, -4.05)
 
     def test_rejects_invalid_coordinates(self):
         result = self.decoder.decode_message(

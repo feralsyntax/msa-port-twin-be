@@ -8,8 +8,6 @@ from math import isfinite
 
 from pyais.stream import IterMessages
 
-from port_twin_app.services.marine_data.domains.mombasa_channel import APPROACHES
-
 logger = logging.getLogger(__name__)
 
 POSITION_MESSAGE_TYPES = {1, 2, 3, 18, 19}
@@ -110,7 +108,7 @@ class AISDecoder:
             longitude = self._number(getattr(message, "lon", None))
             latitude = self._number(getattr(message, "lat", None))
 
-            if not self._inside_approaches(longitude, latitude):
+            if not self._valid_coordinates(longitude, latitude):
                 longitude = latitude = None
 
             speed = self._valid_speed(getattr(message, "speed", None))
@@ -250,15 +248,11 @@ class AISDecoder:
         return course if course is not None and 0 <= course < 360 else None
 
     @staticmethod
-    def _inside_approaches(longitude, latitude):
+    def _valid_coordinates(longitude, latitude):
         if longitude is None or latitude is None:
             return False
 
-        bounds = APPROACHES.bounds
-        return (
-            bounds.west <= longitude <= bounds.east
-            and bounds.south <= latitude <= bounds.north
-        )
+        return -180 <= longitude <= 180 and -90 <= latitude <= 90
 
     @staticmethod
     def _map_vessel_type(ship_type):

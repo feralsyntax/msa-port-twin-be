@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -30,6 +31,15 @@ class ScenarioSimulationRunnerTests(TestCase):
             max_vessel_draft=15,
             status=Berth.OperationalStatus.ACTIVE,
         )
+
+    def run_ais_scenario(self):
+        self.scenario.parameters = {
+            "simulation_hours": 24,
+            "average_service_time_hours": 8,
+            "arrival_source": "ais",
+        }
+        self.scenario.save()
+        return run_scenario_simulation(self.scenario)
 
     @patch("port_twin_app.services.simulation_runner.run_simulation")
     def test_builds_simulation_inputs_from_database_records(self, mock_run):
@@ -231,3 +241,100 @@ class ScenarioSimulationRunnerTests(TestCase):
 
         _, berths, _ = mock_run.call_args.args
         self.assertEqual(berths, [])
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
+    def test_uses_ais_eta_and_real_vessel_ids(self, mock_eta, mock_run):
+        second_vessel = Vessel.objects.create(
+            name="Second Vessel",
+            length_overall=180,
+            draft=9,
+        )
+
+        mock_eta.side_effect = lambda vessel, now: SimpleNamespace(
+            eta_hours=(3.5 if vessel.pk == self.vessel.pk else 1.5)
+        )
+
+        self.run_ais_scenario()
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertEqual(len(vessels), 2)
+
+        # Arrivals should be ordered by ETA.
+        self.assertEqual(vessels[0].vessel_id, str(second_vessel.pk))
+        self.assertEqual(vessels[0].arrival_hour, 1.5)
+
+        self.assertEqual(vessels[1].vessel_id, str(self.vessel.pk))
+        self.assertEqual(vessels[1].arrival_hour, 3.5)
+
+        self.assertEqual(config.expected_arrivals, 2)
+        self.assertIsNone(config.arrival_interval_hours)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
+    def test_excludes_vessels_without_reliable_eta(self, mock_eta, mock_run):
+        second_vessel = Vessel.objects.create(
+            name="Unreliable Vessel",
+            length_overall=180,
+            draft=9,
+        )
+
+        mock_eta.side_effect = lambda vessel, now: (
+            SimpleNamespace(eta_hours=4) if vessel.pk == self.vessel.pk else None
+        )
+
+        self.run_ais_scenario()
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertEqual(len(vessels), 1)
+        self.assertEqual(vessels[0].vessel_id, str(self.vessel.pk))
+        self.assertNotEqual(vessels[0].vessel_id, str(second_vessel.pk))
+        self.assertEqual(config.expected_arrivals, 1)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
+    def test_excludes_vessels_already_in_port_operations(
+        self,
+        mock_eta,
+        mock_run,
+    ):
+        mock_eta.return_value = None
+
+        self.run_ais_scenario()
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertEqual(vessels, [])
+        self.assertEqual(config.expected_arrivals, 0)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
+    def test_excludes_etas_outside_simulation_window(
+        self,
+        mock_eta,
+        mock_run,
+    ):
+        mock_eta.return_value = SimpleNamespace(eta_hours=24)
+
+        self.run_ais_scenario()
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertEqual(vessels, [])
+        self.assertEqual(config.expected_arrivals, 0)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
+    def test_handles_no_eligible_ais_vessels(self, mock_eta, mock_run):
+        mock_eta.return_value = None
+
+        self.run_ais_scenario()
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertEqual(vessels, [])
+        self.assertEqual(config.expected_arrivals, 0)
+        self.assertIsNone(config.arrival_interval_hours)
+        self.assertEqual(mock_eta.call_count, 1)
