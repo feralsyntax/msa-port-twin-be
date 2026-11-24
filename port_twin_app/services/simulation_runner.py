@@ -2,18 +2,16 @@ import math
 from decimal import Decimal
 from numbers import Real
 
+from django.utils import timezone
+
 from port_twin_app.models import Berth, Scenario, Vessel
+from port_twin_app.services.ais.eta import estimate_vessel_eta
 from port_twin_app.services.simulation import (
     SimulationBerth,
     SimulationConfig,
     SimulationVessel,
     run_simulation,
 )
-from django.utils import timezone
-
-from port_twin_app.services.ais.eta import estimate_vessel_eta
-
-
 
 
 def _is_valid_dimension(value):
@@ -56,10 +54,12 @@ def run_scenario_simulation(scenario: Scenario):
     }
 
     if arrival_source == "fixed":
-        required_parameters.update({
-            "expected_vessel_arrivals",
-            "arrival_interval_hours",
-        })
+        required_parameters.update(
+            {
+                "expected_vessel_arrivals",
+                "arrival_interval_hours",
+            }
+        )
 
     for parameter in required_parameters:
         if parameter not in parameters:
