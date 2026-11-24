@@ -955,7 +955,7 @@ class TransitAssessmentCreateAPIView(APIView):
 
         try:
             execute_transit_assessment_task.delay(str(assessment.id))
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.error(
                 "Failed to queue transit assessment: assessment_id=%s "
                 "exception_type=%s",
