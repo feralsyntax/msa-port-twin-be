@@ -9,13 +9,11 @@ from port_twin_app.services.simulation import (
     SimulationVessel,
     run_simulation,
 )
+from django.utils import timezone
 
-REQUIRED_PARAMETERS = (
-    "simulation_hours",
-    "expected_vessel_arrivals",
-    "arrival_interval_hours",
-    "average_service_time_hours",
-)
+from port_twin_app.services.ais.eta import estimate_vessel_eta
+
+
 
 
 def _is_valid_dimension(value):
@@ -47,55 +45,119 @@ def run_scenario_simulation(scenario: Scenario):
     if not isinstance(parameters, dict):
         raise ValueError("Scenario parameters must be a dictionary.")  # noqa: TRY004
 
-    for parameter in REQUIRED_PARAMETERS:
+    arrival_source = parameters.get("arrival_source", "fixed")
+
+    if arrival_source not in ("fixed", "ais"):
+        raise ValueError("Arrival source must be 'fixed' or 'ais'.")
+
+    required_parameters = {
+        "simulation_hours",
+        "average_service_time_hours",
+    }
+
+    if arrival_source == "fixed":
+        required_parameters.update({
+            "expected_vessel_arrivals",
+            "arrival_interval_hours",
+        })
+
+    for parameter in required_parameters:
         if parameter not in parameters:
             raise ValueError(f"Missing required scenario parameter: {parameter}.")
 
+    simulation_started_at = timezone.now()
+
+    if arrival_source == "fixed":
+        expected_arrivals = parameters["expected_vessel_arrivals"]
+        arrival_interval = parameters["arrival_interval_hours"]
+    else:
+        expected_arrivals = 0
+        arrival_interval = None
+
     config = SimulationConfig(
         duration_hours=parameters["simulation_hours"],
-        expected_arrivals=parameters["expected_vessel_arrivals"],
-        arrival_interval_hours=parameters["arrival_interval_hours"],
+        expected_arrivals=expected_arrivals,
+        arrival_interval_hours=arrival_interval,
         service_time_hours=parameters["average_service_time_hours"],
     )
 
-    _validate_non_negative_integer(
-        config.expected_arrivals,
-        "Expected arrivals",
-    )
+    _validate_non_negative_integer(config.expected_arrivals, "Expected arrivals")
 
     available_berths = parameters.get("available_berths", 2)
     _validate_non_negative_integer(available_berths, "Available berths")
 
-    # Load valid vessel profiles to use as templates for simulated arrivals.
-    vessel_profiles = []
+    if arrival_source == "fixed":
+        # Load valid vessel profiles to use as templates for simulated arrivals.
+        vessel_profiles = []
 
-    if config.expected_arrivals > 0:
-        for profile in Vessel.objects.all().order_by("id").iterator():
-            if _is_valid_dimension(profile.length_overall) and _is_valid_dimension(
-                profile.draft
+        if config.expected_arrivals > 0:
+            for profile in Vessel.objects.all().order_by("id").iterator():
+                if _is_valid_dimension(profile.length_overall) and _is_valid_dimension(
+                    profile.draft
+                ):
+                    vessel_profiles.append(profile)
+
+                    if len(vessel_profiles) >= config.expected_arrivals:
+                        break
+
+            if not vessel_profiles:
+                raise ValueError(
+                    "At least one vessel profile with valid length and draft "
+                    "is required to generate arrivals."
+                )
+
+        # Generate a distinct simulation vessel for each expected arrival.
+        # Reuse valid profile dimensions when fewer profiles than arrivals exist.
+        vessels = [
+            SimulationVessel(
+                vessel_id=f"{profile.id}-arrival-{index + 1}",
+                length=profile.length_overall,
+                draft=profile.draft,
+            )
+            for index in range(config.expected_arrivals)
+            for profile in [vessel_profiles[index % len(vessel_profiles)]]
+        ]
+
+    else:
+        vessels_with_etas = []
+
+        for vessel in Vessel.objects.all().order_by("id").iterator():
+            if not (
+                _is_valid_dimension(vessel.length_overall)
+                and _is_valid_dimension(vessel.draft)
             ):
-                vessel_profiles.append(profile)
+                continue
 
-                if len(vessel_profiles) >= config.expected_arrivals:
-                    break
-
-        if not vessel_profiles:
-            raise ValueError(
-                "At least one vessel profile with valid length and draft "
-                "is required to generate arrivals."
+            eta = estimate_vessel_eta(
+                vessel,
+                now=simulation_started_at,
             )
 
-    # Generate a distinct simulation vessel for each expected arrival.
-    # Reuse valid profile dimensions when fewer profiles than arrivals exist.
-    vessels = [
-        SimulationVessel(
-            vessel_id=f"{profile.id}-arrival-{index + 1}",
-            length=profile.length_overall,
-            draft=profile.draft,
+            if eta is None or eta.eta_hours >= config.duration_hours:
+                continue
+
+            vessels_with_etas.append(
+                (
+                    eta.eta_hours,
+                    SimulationVessel(
+                        vessel_id=str(vessel.pk),
+                        length=vessel.length_overall,
+                        draft=vessel.draft,
+                        arrival_hour=eta.eta_hours,
+                    ),
+                )
+            )
+
+        vessels_with_etas.sort(key=lambda item: (item[0], item[1].vessel_id))
+
+        vessels = [item[1] for item in vessels_with_etas]
+
+        config = SimulationConfig(
+            duration_hours=config.duration_hours,
+            expected_arrivals=len(vessels),
+            arrival_interval_hours=None,
+            service_time_hours=config.service_time_hours,
         )
-        for index in range(config.expected_arrivals)
-        for profile in [vessel_profiles[index % len(vessel_profiles)]]
-    ]
 
     berth_records = list(
         Berth.objects.filter(status=Berth.OperationalStatus.ACTIVE).order_by("id")[
