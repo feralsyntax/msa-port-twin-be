@@ -169,3 +169,28 @@ class VesselETATests(TestCase):
         eta = estimate_vessel_eta(self.vessel, now=self.now)
 
         self.assertIsNone(eta)
+
+    def test_estimates_eta_for_northbound_vessel_from_south(self):
+        self.create_reliable_track(
+            longitude=39.65,
+            latitude=-4.15,
+            speed=10,
+            course=0,
+        )
+
+        eta = estimate_vessel_eta(self.vessel, now=self.now)
+
+        self.assertIsNotNone(eta)
+        self.assertGreater(eta.eta_hours, 0)
+
+    def test_returns_no_eta_when_projected_path_misses_port_boundary(self):
+        self.create_reliable_track(
+            longitude=39.80,
+            latitude=-4.15,
+            speed=10,
+            course=0,
+        )
+
+        eta = estimate_vessel_eta(self.vessel, now=self.now)
+
+        self.assertIsNone(eta)
