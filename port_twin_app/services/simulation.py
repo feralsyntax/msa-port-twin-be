@@ -11,6 +11,7 @@ class SimulationVessel:
     vessel_id: str
     length: float
     draft: float
+    arrival_hour: float | None = None
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ class SimulationConfig:
 
     duration_hours: float
     expected_arrivals: int
-    arrival_interval_hours: float
+    arrival_interval_hours: float | None
     service_time_hours: float
 
 
@@ -102,10 +103,26 @@ def run_simulation(
             raise ValueError(f"{name} must be a finite number greater than zero.")
 
     interval = config.arrival_interval_hours
-    if not _is_finite_number(interval) or interval < 0:
+
+    if interval is not None and (not _is_finite_number(interval) or interval < 0):
         raise ValueError(
             "Arrival interval must be a finite number greater than or equal to zero."
         )
+
+    if interval is None and any(vessel.arrival_hour is None for vessel in vessels):
+        raise ValueError(
+            "Every vessel must have an explicit arrival hour when no arrival "
+            "interval is configured."
+        )
+
+    for vessel in vessels:
+        if vessel.arrival_hour is not None and (
+            not _is_finite_number(vessel.arrival_hour) or vessel.arrival_hour < 0
+        ):
+            raise ValueError(
+                "Vessel arrival hours must be finite numbers greater than "
+                "or equal to zero."
+            )
 
     if isinstance(config.expected_arrivals, bool) or not isinstance(
         config.expected_arrivals, int
@@ -173,7 +190,11 @@ def run_simulation(
 
     # Each supplied simulation vessel represents one arrival event.
     for index, vessel in enumerate(vessels[: config.expected_arrivals]):
-        arrival_hour = index * config.arrival_interval_hours
+        arrival_hour = (
+            vessel.arrival_hour
+            if vessel.arrival_hour is not None
+            else index * config.arrival_interval_hours
+        )
 
         # Only arrivals within the simulation horizon are included.
         if arrival_hour >= config.duration_hours:
