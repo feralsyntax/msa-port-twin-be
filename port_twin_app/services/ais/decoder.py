@@ -8,7 +8,6 @@ from math import isfinite
 
 from pyais.stream import IterMessages
 
-
 logger = logging.getLogger(__name__)
 
 POSITION_MESSAGE_TYPES = {1, 2, 3, 18, 19}
@@ -253,10 +252,7 @@ class AISDecoder:
         if longitude is None or latitude is None:
             return False
 
-        return (
-            -180 <= longitude <= 180
-            and -90 <= latitude <= 90
-        )
+        return -180 <= longitude <= 180 and -90 <= latitude <= 90
 
     @staticmethod
     def _map_vessel_type(ship_type):
