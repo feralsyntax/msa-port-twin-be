@@ -63,61 +63,37 @@ class TrackAssessment:
     is_reliable: bool
     reason: str | None = None
 
-    def assess_vessel_track(vessel, now=None):
-        """Retrieve and assess the two most recent AIS observations."""
-        now = now or timezone.now()
 
-        min_observations = settings.AIS_TRACK_MIN_OBSERVATIONS
-        max_age = settings.AIS_TRACK_MAX_AGE_SECONDS
-        min_interval = settings.AIS_TRACK_MIN_INTERVAL_SECONDS
-        max_interval = settings.AIS_TRACK_MAX_INTERVAL_SECONDS
+def assess_vessel_track(vessel, now=None):
+    """Retrieve and assess the two most recent AIS observations."""
+    now = now or timezone.now()
 
-        positions = tuple(
-            VesselPosition.objects.filter(
-                vessel=vessel,
-                source=VesselPosition.Source.AIS,
-            ).order_by("-recorded_at", "-pk")[:min_observations]
+    min_observations = settings.AIS_TRACK_MIN_OBSERVATIONS
+    max_age = settings.AIS_TRACK_MAX_AGE_SECONDS
+    min_interval = settings.AIS_TRACK_MIN_INTERVAL_SECONDS
+    max_interval = settings.AIS_TRACK_MAX_INTERVAL_SECONDS
+
+    positions = tuple(
+        VesselPosition.objects.filter(
+            vessel=vessel,
+            source=VesselPosition.Source.AIS,
+        ).order_by("-recorded_at", "-pk")[:min_observations]
+    )
+
+    if len(positions) < min_observations:
+        return TrackAssessment(
+            vessel_id=str(vessel.pk),
+            zone=VesselZone.UNKNOWN,
+            positions=positions,
+            is_reliable=False,
+            reason="insufficient_observations",
         )
 
-        if len(positions) < min_observations:
-            return TrackAssessment(
-                vessel_id=str(vessel.pk),
-                zone=VesselZone.UNKNOWN,
-                positions=positions,
-                is_reliable=False,
-                reason="insufficient_observations",
-            )
+    latest, previous = positions[0], positions[1]
 
-        latest, previous = positions[0], positions[1]
+    age = (now - latest.recorded_at).total_seconds()
 
-        age = (now - latest.recorded_at).total_seconds()
-
-        if age < 0 or age > max_age:
-            return TrackAssessment(
-                vessel_id=str(vessel.pk),
-                zone=classify_position(
-                    latest.position.x,
-                    latest.position.y,
-                ),
-                positions=positions,
-                is_reliable=False,
-                reason="stale_observation",
-            )
-
-        interval = (latest.recorded_at - previous.recorded_at).total_seconds()
-
-        if not min_interval <= interval <= max_interval:
-            return TrackAssessment(
-                vessel_id=str(vessel.pk),
-                zone=classify_position(
-                    latest.position.x,
-                    latest.position.y,
-                ),
-                positions=positions,
-                is_reliable=False,
-                reason="invalid_observation_interval",
-            )
-
+    if age < 0 or age > max_age:
         return TrackAssessment(
             vessel_id=str(vessel.pk),
             zone=classify_position(
@@ -125,5 +101,30 @@ class TrackAssessment:
                 latest.position.y,
             ),
             positions=positions,
-            is_reliable=True,
+            is_reliable=False,
+            reason="stale_observation",
         )
+
+    interval = (latest.recorded_at - previous.recorded_at).total_seconds()
+
+    if not min_interval <= interval <= max_interval:
+        return TrackAssessment(
+            vessel_id=str(vessel.pk),
+            zone=classify_position(
+                latest.position.x,
+                latest.position.y,
+            ),
+            positions=positions,
+            is_reliable=False,
+            reason="invalid_observation_interval",
+        )
+
+    return TrackAssessment(
+        vessel_id=str(vessel.pk),
+        zone=classify_position(
+            latest.position.x,
+            latest.position.y,
+        ),
+        positions=positions,
+        is_reliable=True,
+    )
