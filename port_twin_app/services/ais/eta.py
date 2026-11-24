@@ -131,8 +131,15 @@ def estimate_vessel_eta(vessel, now=None):
     if eta_hours is None:
         return None
 
+    observation_age_hours = (now - latest.recorded_at).total_seconds() / 3600
+
+    remaining_eta_hours = eta_hours - observation_age_hours
+
+    if remaining_eta_hours <= 0:
+        return None
+
     return VesselETA(
         vessel_id=str(vessel.pk),
-        eta_hours=eta_hours,
-        eta_at=now + timedelta(hours=eta_hours),
+        eta_hours=remaining_eta_hours,
+        eta_at=now + timedelta(hours=remaining_eta_hours),
     )
