@@ -254,5 +254,5 @@ def run_transit_assessment(
             "vertical_datum_correction_applied": False,
         },
         "draft_classes": draft_results,
-        "limitations": ASSESSMENT_LIMITATIONS,
+        "limitations": list(ASSESSMENT_LIMITATIONS),
     }
