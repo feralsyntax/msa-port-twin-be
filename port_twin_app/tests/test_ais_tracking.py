@@ -194,3 +194,21 @@ class VesselETATests(TestCase):
         eta = estimate_vessel_eta(self.vessel, now=self.now)
 
         self.assertIsNone(eta)
+
+    def test_eta_accounts_for_age_of_latest_observation(self):
+        self.create_reliable_track(longitude=39.55)
+
+        eta_now = estimate_vessel_eta(self.vessel, now=self.now)
+        eta_two_minutes_later = estimate_vessel_eta(
+            self.vessel,
+            now=self.now + timedelta(minutes=2),
+        )
+
+        self.assertIsNotNone(eta_now)
+        self.assertIsNotNone(eta_two_minutes_later)
+
+        self.assertAlmostEqual(
+            eta_now.eta_hours - eta_two_minutes_later.eta_hours,
+            2 / 60,
+            places=5,
+        )
