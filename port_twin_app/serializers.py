@@ -301,9 +301,10 @@ class ScenarioParametersSerializer(serializers.Serializer):
 
     expected_vessel_arrivals = NonNegativeIntegerField(
         min_value=0,
+        required=False,
     )
 
-    arrival_interval_hours = PositiveFiniteFloatField()
+    arrival_interval_hours = PositiveFiniteFloatField(required=False)
 
     average_service_time_hours = PositiveFiniteFloatField()
 
@@ -311,6 +312,12 @@ class ScenarioParametersSerializer(serializers.Serializer):
         min_value=0,
         required=False,
         default=2,
+    )
+
+    arrival_source = serializers.ChoiceField(
+        choices=("fixed", "ais"),
+        required=False,
+        default="fixed",
     )
 
     def to_internal_value(self, data):
@@ -325,12 +332,18 @@ class ScenarioParametersSerializer(serializers.Serializer):
                     {field: ["Unknown parameter."] for field in sorted(unknown_fields)}
                 )
 
+            arrival_source = data.get("arrival_source", "fixed")
+
             required_fields = {
                 "simulation_hours",
-                "expected_vessel_arrivals",
-                "arrival_interval_hours",
                 "average_service_time_hours",
             }
+
+            if arrival_source == "fixed":
+                required_fields.update({
+                    "expected_vessel_arrivals",
+                    "arrival_interval_hours",
+                })
 
             missing_fields = required_fields - supplied_fields
 
