@@ -420,3 +420,67 @@ class TransitAssessmentIntegrationTests(SimpleTestCase):
             )
         )
         self.assertEqual(result["draft_classes"][0]["windows"], [])
+
+    @patch(
+        "port_twin_app.services.marine_data.transit.assessment."
+        "run_shallow_water_simulation"
+    )
+    @patch("port_twin_app.services.marine_data.transit.assessment._load_domain")
+    @patch(
+        "port_twin_app.services.marine_data.transit.assessment."
+        "get_shallow_water_scenarios"
+    )
+    def test_current_above_limit_fails_every_sample(
+        self,
+        mock_get_scenarios,
+        mock_load_domain,
+        mock_solver,
+    ):
+        scenario = SimpleNamespace(
+            name="strong_current",
+            description="Current threshold test.",
+            config=ShallowWaterConfig(
+                wind_u_ms=0.0,
+                wind_v_ms=0.0,
+            ),
+            dataset_version="test",
+        )
+
+        domain = SimpleNamespace(
+            projected_crs="EPSG:32737",
+            grid_spacing_m=250.0,
+            source_vertical_reference="height_above_mean_sea_level",
+            source_dataset_version="GEBCO_2026",
+            source_file="synthetic_bathymetry.nc",
+            source_sha256="test-checksum",
+            total_water_cells=3,
+            excluded_water_cells=0,
+        )
+
+        dataset = synthetic_dataset()
+        dataset["current_u_ms"].values[:, :2, :] = 0.9
+
+        mock_get_scenarios.return_value = (scenario,)
+        mock_load_domain.return_value = domain
+        mock_solver.return_value = dataset
+
+        config = TransitAssessmentConfig(
+            draft_classes=(DraftClass("small", 5.0, 1.0),),
+            maximum_current_speed_ms=0.75,
+            maximum_wind_speed_ms=10.0,
+        )
+
+        result = run_transit_assessment(
+            "strong_current",
+            assessment_config=config,
+        )
+
+        samples = result["draft_classes"][0]["samples"]
+
+        self.assertTrue(
+            all(
+                "current_above_threshold" in sample["failure_reasons"]
+                for sample in samples
+            )
+        )
+        self.assertEqual(result["draft_classes"][0]["windows"], [])
