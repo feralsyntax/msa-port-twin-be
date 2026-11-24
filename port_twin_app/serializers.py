@@ -317,7 +317,6 @@ class ScenarioParametersSerializer(serializers.Serializer):
     arrival_source = serializers.ChoiceField(
         choices=("fixed", "ais"),
         required=False,
-        default="fixed",
     )
 
     def to_internal_value(self, data):
