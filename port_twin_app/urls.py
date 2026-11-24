@@ -92,4 +92,14 @@ urlpatterns = [
         views.MarinePredictionDetailAPIView.as_view(),
         name="marine-prediction-detail",
     ),
+    path(
+        "transit-assessments/",
+        views.TransitAssessmentCreateAPIView.as_view(),
+        name="transit-assessment-create",
+    ),
+    path(
+        "transit-assessments/<uuid:pk>/",
+        views.TransitAssessmentDetailAPIView.as_view(),
+        name="transit-assessment-detail",
+    ),
 ]

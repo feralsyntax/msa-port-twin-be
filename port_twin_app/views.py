@@ -18,6 +18,7 @@ from port_twin_app.models import (
     MarinePrediction,
     Scenario,
     SimulationRun,
+    TransitAssessment,
     Vessel,
     VesselPosition,
 )
@@ -41,6 +42,8 @@ from port_twin_app.serializers import (
     SimulationErrorResponseSerializer,
     SimulationHistoryItemSerializer,
     SimulationSummarySerializer,
+    TransitAssessmentCreateRequestSerializer,
+    TransitAssessmentSerializer,
     VesselCreateRequestSerializer,
     VesselListQuerySerializer,
     VesselPositionQuerySerializer,
@@ -60,7 +63,11 @@ from port_twin_app.services.marine_ai.model import (
     PREDICTION_MODE_RESIDUAL,
     RESIDUAL_MODEL_VERSION,
 )
-from port_twin_app.tasks import execute_marine_prediction_task, execute_simulation_task
+from port_twin_app.tasks import (
+    execute_marine_prediction_task,
+    execute_simulation_task,
+    execute_transit_assessment_task,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -929,3 +936,60 @@ class MarinePredictionListAPIView(generics.ListAPIView):
 
     queryset = MarinePrediction.objects.all()
     serializer_class = MarinePredictionSerializer
+
+
+class TransitAssessmentCreateAPIView(APIView):
+    """Create and queue an experimental channel transit assessment."""
+
+    def post(self, request):
+        request_serializer = TransitAssessmentCreateRequestSerializer(data=request.data)
+        request_serializer.is_valid(raise_exception=True)
+
+        validated_data = request_serializer.validated_data
+
+        assessment = TransitAssessment.objects.create(
+            scenario_name=validated_data["scenario_name"],
+            domain_name=validated_data["domain_name"],
+            configuration=validated_data["configuration"],
+        )
+
+        try:
+            execute_transit_assessment_task.delay(str(assessment.id))
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "Failed to queue transit assessment: assessment_id=%s "
+                "exception_type=%s",
+                assessment.id,
+                type(exc).__name__,
+            )
+
+            assessment.status = TransitAssessment.Status.FAILED
+            assessment.completed_at = timezone.now()
+            assessment.error_message = (
+                "Transit assessment could not be queued. Please try again."
+            )
+            assessment.save(
+                update_fields=[
+                    "status",
+                    "completed_at",
+                    "error_message",
+                    "updated_at",
+                ]
+            )
+
+            return Response(
+                {"detail": assessment.error_message},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            TransitAssessmentSerializer(assessment).data,
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class TransitAssessmentDetailAPIView(generics.RetrieveAPIView):
+    """Retrieve a transit assessment and its current execution result."""
+
+    queryset = TransitAssessment.objects.all()
+    serializer_class = TransitAssessmentSerializer

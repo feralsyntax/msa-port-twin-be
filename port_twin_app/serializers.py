@@ -11,6 +11,7 @@ from port_twin_app.models import (
     MarinePrediction,
     Scenario,
     SimulationRun,
+    TransitAssessment,
     Vessel,
     VesselPosition,
 )
@@ -18,6 +19,13 @@ from port_twin_app.services.marine_ai.contracts import (
     MarineForecastConfig,
     MarineGrid,
     MarinePredictionRequest,
+)
+from port_twin_app.services.marine_data.generation.scenarios import (
+    get_shallow_water_scenarios,
+)
+from port_twin_app.services.marine_data.transit.config import (
+    DraftClass,
+    TransitAssessmentConfig,
 )
 
 SAFE_SIMULATION_ERROR_MESSAGE = (
@@ -339,10 +347,12 @@ class ScenarioParametersSerializer(serializers.Serializer):
             }
 
             if arrival_source == "fixed":
-                required_fields.update({
-                    "expected_vessel_arrivals",
-                    "arrival_interval_hours",
-                })
+                required_fields.update(
+                    {
+                        "expected_vessel_arrivals",
+                        "arrival_interval_hours",
+                    }
+                )
 
             missing_fields = required_fields - supplied_fields
 
@@ -641,6 +651,95 @@ class MarinePredictionStatusSerializer(serializers.ModelSerializer):
             "model_status",
             "prediction_mode",
             "forecast_horizon_hours",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class TransitDraftClassRequestSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=50)
+    representative_draft_m = serializers.FloatField(min_value=0.000001)
+    minimum_ukc_m = serializers.FloatField(min_value=0.000001)
+
+
+class TransitAssessmentCreateRequestSerializer(serializers.Serializer):
+    scenario_name = serializers.CharField(max_length=100)
+
+    domain_name = serializers.ChoiceField(
+        choices=TransitAssessment.Domain.choices,
+        default=TransitAssessment.Domain.APPROACHES,
+    )
+
+    draft_classes = TransitDraftClassRequestSerializer(
+        many=True,
+        required=False,
+        allow_empty=False,
+        max_length=10,
+    )
+
+    maximum_current_speed_ms = serializers.FloatField(
+        min_value=0,
+        required=False,
+    )
+
+    maximum_wind_speed_ms = serializers.FloatField(
+        min_value=0,
+        required=False,
+    )
+
+    def validate_scenario_name(self, value):
+        try:
+            get_shallow_water_scenarios((value,))
+        except ValueError as exc:
+            raise serializers.ValidationError(
+                "Unknown shallow-water scenario."
+            ) from exc
+
+        return value
+
+    def validate(self, attrs):
+        draft_classes = attrs.get("draft_classes")
+
+        if draft_classes is None:
+            draft_classes = TransitAssessmentConfig().draft_classes
+        else:
+            draft_classes = tuple(
+                DraftClass(**draft_class) for draft_class in draft_classes
+            )
+
+        try:
+            config = TransitAssessmentConfig(
+                draft_classes=draft_classes,
+                maximum_current_speed_ms=attrs.get(
+                    "maximum_current_speed_ms",
+                    0.75,
+                ),
+                maximum_wind_speed_ms=attrs.get(
+                    "maximum_wind_speed_ms",
+                    10.0,
+                ),
+            )
+        except (TypeError, ValueError) as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+        attrs["configuration"] = config.to_dict()
+
+        return attrs
+
+
+class TransitAssessmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransitAssessment
+        fields = [  # noqa: RUF012
+            "id",
+            "scenario_name",
+            "domain_name",
+            "configuration",
+            "status",
+            "result_data",
+            "error_message",
+            "started_at",
+            "completed_at",
             "created_at",
         ]
         read_only_fields = fields
