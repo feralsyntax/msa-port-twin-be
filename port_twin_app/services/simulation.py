@@ -95,6 +95,128 @@ def _validate_identifier(value: object, entity: str) -> None:
         raise ValueError(f"{entity} identifiers must be non-empty strings.")
 
 
+def _validate_simulation_inputs(
+    vessels: list[SimulationVessel],
+    berths: list[SimulationBerth],
+    config: SimulationConfig,
+) -> None:
+    """Validate shared simulation inputs."""
+
+    positive_config_values = {
+        "Simulation duration": config.duration_hours,
+        "Service time": config.service_time_hours,
+    }
+
+    for name, value in positive_config_values.items():
+        if not _is_finite_number(value) or value <= 0:
+            raise ValueError(f"{name} must be a finite number greater than zero.")
+
+    interval = config.arrival_interval_hours
+
+    if interval is not None and (not _is_finite_number(interval) or interval < 0):
+        raise ValueError(
+            "Arrival interval must be a finite number greater than or equal to zero."
+        )
+
+    if interval is None and any(vessel.arrival_hour is None for vessel in vessels):
+        raise ValueError(
+            "Every vessel must have an explicit arrival hour when no arrival "
+            "interval is configured."
+        )
+
+    for vessel in vessels:
+        if vessel.arrival_hour is not None and (
+            not _is_finite_number(vessel.arrival_hour) or vessel.arrival_hour < 0
+        ):
+            raise ValueError(
+                "Vessel arrival hours must be finite numbers greater than "
+                "or equal to zero."
+            )
+
+    if isinstance(config.expected_arrivals, bool) or not isinstance(
+        config.expected_arrivals, int
+    ):
+        raise ValueError("Expected arrivals must be an integer.")  # noqa: TRY004
+
+    if config.expected_arrivals < 0:
+        raise ValueError("Expected arrivals cannot be negative.")
+
+    if config.expected_arrivals > len(vessels):
+        raise ValueError(
+            "The number of expected arrivals cannot exceed the supplied vessels."
+        )
+
+    # Validate vessel dimensions, identifiers, types, and service times.
+    vessel_ids = [vessel.vessel_id for vessel in vessels]
+
+    for vessel_id in vessel_ids:
+        _validate_identifier(vessel_id, "Vessel")
+
+    if len(vessel_ids) != len(set(vessel_ids)):
+        raise ValueError("Vessel identifiers must be unique.")
+
+    for vessel in vessels:
+        if (
+            not _is_finite_number(vessel.length)
+            or not _is_finite_number(vessel.draft)
+            or vessel.length <= 0
+            or vessel.draft <= 0
+        ):
+            raise ValueError(
+                "Vessel length and draft must be finite numbers greater than zero."
+            )
+
+        if not isinstance(vessel.vessel_type, str) or not vessel.vessel_type.strip():
+            raise ValueError("Vessel types must be non-empty strings.")
+
+        if vessel.service_time_hours is not None and (
+            not _is_finite_number(vessel.service_time_hours)
+            or vessel.service_time_hours <= 0
+        ):
+            raise ValueError(
+                "Vessel service times must be finite numbers greater than zero."
+            )
+
+    priorities = config.vessel_type_priorities
+
+    if priorities is not None:
+        if not isinstance(priorities, dict):
+            raise ValueError("Vessel type priorities must be a dictionary.")
+
+        for vessel_type, priority in priorities.items():
+            if not isinstance(vessel_type, str) or not vessel_type.strip():
+                raise ValueError("Priority vessel types must be non-empty strings.")
+
+            if (
+                isinstance(priority, bool)
+                or not isinstance(priority, int)
+                or priority < 0
+            ):
+                raise ValueError(
+                    "Vessel type priorities must be non-negative integers."
+                )
+
+    # Validate berth capacity limits and identifiers.
+    berth_ids = [berth.berth_id for berth in berths]
+
+    for berth_id in berth_ids:
+        _validate_identifier(berth_id, "Berth")
+
+    if len(berth_ids) != len(set(berth_ids)):
+        raise ValueError("Berth identifiers must be unique.")
+
+    for berth in berths:
+        if (
+            not _is_finite_number(berth.max_vessel_length)
+            or not _is_finite_number(berth.max_vessel_draft)
+            or berth.max_vessel_length <= 0
+            or berth.max_vessel_draft <= 0
+        ):
+            raise ValueError(
+                "Berth capacity limits must be finite numbers greater than zero."
+            )
+
+
 def run_crane_aware_simulation(
     vessels: list[SimulationVessel],
     berths: list[SimulationBerth],
@@ -106,8 +228,7 @@ def run_crane_aware_simulation(
     if policy not in {"baseline", "optimised"}:
         raise ValueError("Policy must be 'baseline' or 'optimised'.")
 
-    # Reuse the existing engine's input validation.
-    run_simulation(vessels, berths, config)
+    _validate_simulation_inputs(vessels, berths, config)
 
     for name, value in (
         ("Available cranes", config.available_cranes),
@@ -119,16 +240,22 @@ def run_crane_aware_simulation(
     if config.max_cranes_per_vessel > config.available_cranes:
         raise ValueError("Maximum cranes per vessel cannot exceed available cranes.")
 
+    # The baseline must preserve the original berth-allocation policy.
+    if policy == "baseline":
+        return run_simulation(vessels, berths, config)
+
     berth_available_at = {berth.berth_id: 0.0 for berth in berths}
     crane_available_at = {crane_id: 0.0 for crane_id in range(config.available_cranes)}
 
     arrivals = []
+
     for index, vessel in enumerate(vessels[: config.expected_arrivals]):
         arrival_hour = (
             vessel.arrival_hour
             if vessel.arrival_hour is not None
             else index * config.arrival_interval_hours
         )
+
         if arrival_hour < config.duration_hours:
             arrivals.append((arrival_hour, index, vessel))
 
@@ -161,8 +288,10 @@ def run_crane_aware_simulation(
 
         if not length_fits:
             return "Vessel length exceeds all berth limits."
+
         if not draft_fits:
             return "Vessel draft exceeds all berth limits."
+
         return "No single berth can accommodate both the vessel's length and draft."
 
     priorities = config.vessel_type_priorities or {}
@@ -224,45 +353,34 @@ def run_crane_aware_simulation(
                 else config.service_time_hours
             )
 
-            crane_counts = (
-                [1]
-                if policy == "baseline"
-                else range(1, config.max_cranes_per_vessel + 1)
-            )
-
             allocation_candidates = []
 
-            for crane_count in crane_counts:
+            for crane_count in range(1, config.max_cranes_per_vessel + 1):
                 available_cranes = sorted(
                     crane_available_at.items(),
                     key=lambda item: (item[1], item[0]),
                 )[:crane_count]
 
                 crane_start = available_cranes[-1][1]
+
                 service_start = max(
                     current_time,
                     arrival_hour,
                     berth_available_at[berth.berth_id],
                     crane_start,
                 )
+
                 service_time = one_crane_service_time / crane_count
                 departure = service_start + service_time
 
                 if service_start >= config.duration_hours:
                     continue
 
-                if policy == "baseline":
-                    selection_key = (
-                        service_start,
-                        departure,
-                        crane_count,
-                    )
-                else:
-                    selection_key = (
-                        departure,
-                        service_start,
-                        crane_count,
-                    )
+                selection_key = (
+                    departure,
+                    service_start,
+                    crane_count,
+                )
 
                 allocation_candidates.append(
                     (
@@ -293,13 +411,11 @@ def run_crane_aware_simulation(
             waiting.remove((arrival_hour, index, vessel))
 
             berth_available_at[berth.berth_id] = departure
+
             for crane_id, _ in allocated_cranes:
                 crane_available_at[crane_id] = departure
 
             vessel_waiting = service_start - arrival_hour
-
-            if service_start >= config.duration_hours:
-                vessel_waiting = config.duration_hours - arrival_hour
 
             occupied_hours += max(
                 0.0,
@@ -320,6 +436,7 @@ def run_crane_aware_simulation(
                 status = "waiting"
 
             service_order += 1
+
             results[index] = VesselSimulationResult(
                 vessel_id=vessel.vessel_id,
                 arrival_hour=arrival_hour,
@@ -348,8 +465,8 @@ def run_crane_aware_simulation(
                     next_events.append(berth_available_at[berth.berth_id])
 
             if any(
-                crane_available_at[crane_id] > current_time
-                for crane_id in crane_available_at
+                available_at > current_time
+                for available_at in crane_available_at.values()
             ):
                 next_events.extend(
                     available_at
@@ -453,7 +570,10 @@ def _run_priority_simulation(
     berth_available_at = {berth.berth_id: 0.0 for berth in berths}
     service_order = 0
 
-    def compatible(vessel: SimulationVessel, berth: SimulationBerth) -> bool:
+    def compatible(
+        vessel: SimulationVessel,
+        berth: SimulationBerth,
+    ) -> bool:
         return (
             vessel.length <= berth.max_vessel_length
             and vessel.draft <= berth.max_vessel_draft
@@ -468,8 +588,10 @@ def _run_priority_simulation(
 
         if not length_fits:
             return "Vessel length exceeds all berth limits."
+
         if not draft_fits:
             return "Vessel draft exceeds all berth limits."
+
         return "No single berth can accommodate both the vessel's length and draft."
 
     total_waiting = 0.0
@@ -528,6 +650,7 @@ def _run_priority_simulation(
                     item[1],
                 ),
             )
+
             waiting.remove((arrival_hour, index, vessel))
 
             service_time = (
@@ -535,6 +658,7 @@ def _run_priority_simulation(
                 if vessel.service_time_hours is not None
                 else config.service_time_hours
             )
+
             service_start = max(current_time, arrival_hour)
             departure = service_start + service_time
             vessel_waiting = service_start - arrival_hour
@@ -635,124 +759,7 @@ def run_simulation(
 ) -> SimulationOutput:
     """Simulate vessel arrivals and allocation to compatible berths."""
 
-    # Validate simulation configuration.
-    positive_config_values = {
-        "Simulation duration": config.duration_hours,
-        "Service time": config.service_time_hours,
-    }
-
-    for name, value in positive_config_values.items():
-        if not _is_finite_number(value) or value <= 0:
-            raise ValueError(f"{name} must be a finite number greater than zero.")
-
-    interval = config.arrival_interval_hours
-
-    if interval is not None and (not _is_finite_number(interval) or interval < 0):
-        raise ValueError(
-            "Arrival interval must be a finite number greater than or equal to zero."
-        )
-
-    if interval is None and any(vessel.arrival_hour is None for vessel in vessels):
-        raise ValueError(
-            "Every vessel must have an explicit arrival hour when no arrival "
-            "interval is configured."
-        )
-
-    for vessel in vessels:
-        if vessel.arrival_hour is not None and (
-            not _is_finite_number(vessel.arrival_hour) or vessel.arrival_hour < 0
-        ):
-            raise ValueError(
-                "Vessel arrival hours must be finite numbers greater than "
-                "or equal to zero."
-            )
-
-    if isinstance(config.expected_arrivals, bool) or not isinstance(
-        config.expected_arrivals, int
-    ):
-        raise ValueError("Expected arrivals must be an integer.")  # noqa: TRY004
-
-    if config.expected_arrivals < 0:
-        raise ValueError("Expected arrivals cannot be negative.")
-
-    if config.expected_arrivals > len(vessels):
-        raise ValueError(
-            "The number of expected arrivals cannot exceed the supplied vessels."
-        )
-
-    # Validate vessel dimensions and identifiers.
-    vessel_ids = [vessel.vessel_id for vessel in vessels]
-
-    for vessel_id in vessel_ids:
-        _validate_identifier(vessel_id, "Vessel")
-
-    if len(vessel_ids) != len(set(vessel_ids)):
-        raise ValueError("Vessel identifiers must be unique.")
-
-    for vessel in vessels:
-        if (
-            not _is_finite_number(vessel.length)
-            or not _is_finite_number(vessel.draft)
-            or vessel.length <= 0
-            or vessel.draft <= 0
-        ):
-            raise ValueError(
-                "Vessel length and draft must be finite numbers greater than zero."
-            )
-
-        for vessel in vessels:
-            if (
-                not isinstance(vessel.vessel_type, str)
-                or not vessel.vessel_type.strip()
-            ):
-                raise ValueError("Vessel types must be non-empty strings.")
-
-            if vessel.service_time_hours is not None and (
-                not _is_finite_number(vessel.service_time_hours)
-                or vessel.service_time_hours <= 0
-            ):
-                raise ValueError(
-                    "Vessel service times must be finite numbers greater than zero."
-                )
-
-        priorities = config.vessel_type_priorities
-
-        if priorities is not None:
-            if not isinstance(priorities, dict):
-                raise ValueError("Vessel type priorities must be a dictionary.")
-
-            for vessel_type, priority in priorities.items():
-                if not isinstance(vessel_type, str) or not vessel_type.strip():
-                    raise ValueError("Priority vessel types must be non-empty strings.")
-
-                if (
-                    isinstance(priority, bool)
-                    or not isinstance(priority, int)
-                    or priority < 0
-                ):
-                    raise ValueError(
-                        "Vessel type priorities must be non-negative integers."
-                    )
-
-    # Validate berth capacity limits and identifiers.
-    berth_ids = [berth.berth_id for berth in berths]
-
-    for berth_id in berth_ids:
-        _validate_identifier(berth_id, "Berth")
-
-    if len(berth_ids) != len(set(berth_ids)):
-        raise ValueError("Berth identifiers must be unique.")
-
-    for berth in berths:
-        if (
-            not _is_finite_number(berth.max_vessel_length)
-            or not _is_finite_number(berth.max_vessel_draft)
-            or berth.max_vessel_length <= 0
-            or berth.max_vessel_draft <= 0
-        ):
-            raise ValueError(
-                "Berth capacity limits must be finite numbers greater than zero."
-            )
+    _validate_simulation_inputs(vessels, berths, config)
 
     if config.vessel_type_priorities:
         return _run_priority_simulation(vessels, berths, config)
@@ -846,6 +853,7 @@ def run_simulation(
             berth_available_at[berth.berth_id],
             arrival_hour,
         )
+
         service_time = (
             vessel.service_time_hours
             if vessel.service_time_hours is not None
@@ -858,7 +866,6 @@ def run_simulation(
             )
 
         departure = service_start + service_time
-
         waiting = service_start - arrival_hour
 
         if service_start >= config.duration_hours:
