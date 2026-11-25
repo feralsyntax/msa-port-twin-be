@@ -3,8 +3,14 @@ from unittest.mock import patch
 
 from django.db import connections
 from django.test import TestCase, TransactionTestCase
+from django.utils import timezone
 
-from port_twin_app.models import Scenario, SimulationResult, SimulationRun
+from port_twin_app.models import (
+    MarinePrediction,
+    Scenario,
+    SimulationResult,
+    SimulationRun,
+)
 from port_twin_app.services.simulation_execution import (
     execute_simulation_run,
 )
@@ -31,6 +37,31 @@ class SimulationExecutionTests(TestCase):
     def setUp(self):
         self.simulation_run = SimulationRun.objects.create(
             scenario=self.scenario,
+        )
+
+    def create_completed_prediction(self):
+        start_time = timezone.now()
+
+        return MarinePrediction.objects.create(
+            grid={
+                "nx": 2,
+                "ny": 2,
+            },
+            forecast={
+                "start_time": start_time.isoformat(),
+                "steps": 6,
+                "step_seconds": 3600,
+            },
+            input_data={},
+            result_data={
+                "water_level_m": [[[0.1, 0.2], [0.3, 0.4]] for _ in range(6)],
+                "current_u_ms": [[[0.5, 0.5], [0.5, 0.5]] for _ in range(6)],
+                "current_v_ms": [[[0.0, 0.0], [0.0, 0.0]] for _ in range(6)],
+                "status": "completed",
+            },
+            model_version="test-model",
+            contract_version="2.0",
+            status=MarinePrediction.Status.COMPLETED,
         )
 
     def test_successful_run_persists_results(self):
@@ -117,6 +148,109 @@ class SimulationExecutionTests(TestCase):
                     }
                 ]
             },
+        )
+
+    def test_successful_run_persists_marine_conditions(self):
+        from port_twin_app.services.simulation import (
+            SimulationOutput,
+            SimulationSummary,
+        )
+
+        prediction = self.create_completed_prediction()
+
+        self.scenario.parameters["marine_prediction_id"] = str(prediction.id)
+        self.scenario.save(update_fields=["parameters"])
+
+        output = SimulationOutput(
+            vessel_results=(),
+            summary=SimulationSummary(
+                total_arrivals=0,
+                vessels_served=0,
+                vessels_waiting=0,
+                vessels_in_service=0,
+                average_waiting_hours=0,
+                average_turnaround_hours=0,
+                berth_utilization_percent=0,
+            ),
+        )
+
+        with patch(
+            "port_twin_app.services.simulation_execution.run_scenario_simulation",
+            return_value=output,
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        self.simulation_run.refresh_from_db()
+
+        self.assertEqual(
+            self.simulation_run.status,
+            SimulationRun.Status.COMPLETED,
+        )
+
+        self.assertEqual(
+            SimulationResult.objects.filter(
+                simulation_run=self.simulation_run,
+            ).count(),
+            3,
+        )
+
+        marine_result = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="marine_conditions",
+        )
+
+        self.assertEqual(
+            marine_result.data["prediction_id"],
+            str(prediction.id),
+        )
+        self.assertEqual(marine_result.data["scope"], "grid_level")
+        self.assertEqual(len(marine_result.data["hourly_conditions"]), 6)
+
+    def test_run_fails_when_pinned_prediction_is_missing(self):
+        from port_twin_app.services.simulation import (
+            SimulationOutput,
+            SimulationSummary,
+        )
+
+        prediction = self.create_completed_prediction()
+
+        self.scenario.parameters["marine_prediction_id"] = str(prediction.id)
+        self.scenario.save(update_fields=["parameters"])
+
+        prediction.delete()
+
+        output = SimulationOutput(
+            vessel_results=(),
+            summary=SimulationSummary(
+                total_arrivals=0,
+                vessels_served=0,
+                vessels_waiting=0,
+                vessels_in_service=0,
+                average_waiting_hours=0,
+                average_turnaround_hours=0,
+                berth_utilization_percent=0,
+            ),
+        )
+
+        with (
+            patch(
+                "port_twin_app.services.simulation_execution.run_scenario_simulation",
+                return_value=output,
+            ),
+            self.assertRaises(MarinePrediction.DoesNotExist),
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        self.simulation_run.refresh_from_db()
+
+        self.assertEqual(
+            self.simulation_run.status,
+            SimulationRun.Status.FAILED,
+        )
+        self.assertFalse(
+            SimulationResult.objects.filter(
+                simulation_run=self.simulation_run,
+            ).exists()
         )
 
     def test_failed_run_records_error(self):
