@@ -166,6 +166,9 @@ def run_crane_aware_simulation(
     priorities = config.vessel_type_priorities or {}
 
     while arrival_position < len(arrivals) or waiting:
+        if current_time >= config.duration_hours:
+            break
+
         # Add every vessel that has arrived by the current event time.
         while (
             arrival_position < len(arrivals)
@@ -242,6 +245,9 @@ def run_crane_aware_simulation(
                 )
                 service_time = one_crane_service_time / crane_count
                 departure = service_start + service_time
+                
+                if service_start >= config.duration_hours:
+                    continue
 
                 if policy == "baseline":
                     selection_key = (
@@ -349,6 +355,9 @@ def run_crane_aware_simulation(
             break
 
         current_time = min(next_events)
+        
+        if current_time >= config.duration_hours:
+            break
 
     # Record vessels that never started service before the horizon.
     for arrival_hour, index, vessel in waiting:
