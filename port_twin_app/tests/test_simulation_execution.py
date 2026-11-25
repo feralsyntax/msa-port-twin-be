@@ -145,6 +145,8 @@ class SimulationExecutionTests(TestCase):
                         "waiting_hours": 0,
                         "status": "completed",
                         "reason": None,
+                        "allocated_cranes": 0,
+                        "allocated_crane_ids": [],
                     }
                 ]
             },
