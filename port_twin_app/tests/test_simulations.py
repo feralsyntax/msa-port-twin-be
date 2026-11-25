@@ -741,3 +741,30 @@ class CraneAwareSimulationTests(SimpleTestCase):
         self.assertEqual(first.service_start_hour, 0)
         self.assertEqual(second.service_start_hour, 0)
         self.assertNotEqual(first.berth_id, second.berth_id)
+
+    def test_vessel_waiting_beyond_horizon_does_not_reserve_cranes(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+        ]
+        config = SimulationConfig(
+            duration_hours=5,
+            expected_arrivals=2,
+            arrival_interval_hours=0,
+            service_time_hours=8,
+            available_cranes=1,
+            max_cranes_per_vessel=1,
+        )
+
+        output = run_crane_aware_simulation(
+            vessels, self.berths, config, policy="baseline"
+        )
+
+        first, second = output.vessel_results
+
+        self.assertEqual(first.status, "in_service")
+        self.assertEqual(first.service_start_hour, 0)
+
+        self.assertEqual(second.status, "waiting")
+        self.assertIsNone(second.service_start_hour)
+        self.assertEqual(second.allocated_cranes, 0)
