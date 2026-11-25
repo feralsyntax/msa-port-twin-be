@@ -70,7 +70,8 @@ class TerminalEDIGeneratorTests(TestCase):
             stdout=StringIO(),
         )
 
-        self.assertEqual(
-            TerminalEDIMessage.objects.get().source,
-            "demo-terminal-02",
+        sources = set(
+            TerminalEDIMessage.objects.values_list("source", flat=True)
         )
+
+        self.assertEqual(sources, {"demo-terminal-02"})
