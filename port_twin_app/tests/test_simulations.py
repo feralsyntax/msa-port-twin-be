@@ -403,3 +403,142 @@ class SimulationEngineTests(SimpleTestCase):
         self.assertEqual(output.summary.average_waiting_hours, 0)
         self.assertEqual(output.summary.average_turnaround_hours, 0)
         self.assertEqual(output.summary.berth_utilization_percent, 0)
+
+
+class VesselPrioritySchedulingTests(SimpleTestCase):
+    def setUp(self):
+        self.berths = [
+            SimulationBerth("B1", 300, 20),
+        ]
+
+    def test_higher_priority_waiting_vessel_is_served_first(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10, 0, "container"),
+            SimulationVessel("V2", 200, 10, 1, "container"),
+            SimulationVessel("V3", 200, 10, 2, "tanker"),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=3,
+            arrival_interval_hours=None,
+            service_time_hours=4,
+            vessel_type_priorities={
+                "container": 1,
+                "tanker": 0,
+            },
+        )
+
+        output = run_simulation(vessels, self.berths, config)
+        first, second, third = output.vessel_results
+
+        # Results remain in arrival order.
+        self.assertEqual(
+            [result.vessel_id for result in output.vessel_results],
+            ["V1", "V2", "V3"],
+        )
+
+        # But the higher-priority tanker is served before V2.
+        self.assertEqual(first.service_start_hour, 0)
+        self.assertEqual(third.service_start_hour, 4)
+        self.assertEqual(second.service_start_hour, 8)
+
+        self.assertEqual(first.service_order, 1)
+        self.assertEqual(third.service_order, 2)
+        self.assertEqual(second.service_order, 3)
+
+    def test_future_arrival_cannot_jump_ahead_of_waiting_vessel(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10, 0, "container"),
+            SimulationVessel("V2", 200, 10, 1, "tanker"),
+            SimulationVessel("V3", 200, 10, 5, "passenger"),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=3,
+            arrival_interval_hours=None,
+            service_time_hours=4,
+            vessel_type_priorities={
+                "container": 2,
+                "tanker": 1,
+                "passenger": 0,
+            },
+        )
+
+        output = run_simulation(vessels, self.berths, config)
+        first, second, third = output.vessel_results
+
+        self.assertEqual(first.service_start_hour, 0)
+        self.assertEqual(second.service_start_hour, 4)
+        self.assertEqual(third.service_start_hour, 8)
+
+    def test_equal_priorities_preserve_arrival_order(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10, 0, "container"),
+            SimulationVessel("V2", 200, 10, 1, "tanker"),
+            SimulationVessel("V3", 200, 10, 2, "passenger"),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=3,
+            arrival_interval_hours=None,
+            service_time_hours=4,
+            vessel_type_priorities={
+                "container": 1,
+                "tanker": 1,
+                "passenger": 1,
+            },
+        )
+
+        output = run_simulation(vessels, self.berths, config)
+
+        self.assertEqual(
+            [result.service_start_hour for result in output.vessel_results],
+            [0, 4, 8],
+        )
+        self.assertEqual(
+            [result.service_order for result in output.vessel_results],
+            [1, 2, 3],
+        )
+
+    def test_unconfigured_vessel_types_receive_default_priority(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10, 0, "container"),
+            SimulationVessel("V2", 200, 10, 1, "unknown"),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=2,
+            arrival_interval_hours=None,
+            service_time_hours=4,
+            vessel_type_priorities={"container": 0},
+        )
+
+        output = run_simulation(vessels, self.berths, config)
+
+        # Unconfigured types receive priority 0, so arrival order breaks the tie.
+        self.assertEqual(
+            [result.service_start_hour for result in output.vessel_results],
+            [0, 4],
+        )
+
+    def test_rejects_invalid_priority_values(self):
+        invalid_priorities = [
+            {"container": -1},
+            {"container": 1.5},
+            {"container": True},
+            {"": 1},
+        ]
+
+        vessel = SimulationVessel("V1", 200, 10, 0, "container")
+
+        for priorities in invalid_priorities:
+            config = SimulationConfig(
+                duration_hours=24,
+                expected_arrivals=1,
+                arrival_interval_hours=None,
+                service_time_hours=4,
+                vessel_type_priorities=priorities,
+            )
+
+            with self.subTest(priorities=priorities), self.assertRaises(ValueError):
+                run_simulation([vessel], self.berths, config)

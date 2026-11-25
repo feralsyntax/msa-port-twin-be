@@ -516,6 +516,62 @@ paths:
               schema:
                 $ref: '#/components/schemas/APIErrorResponse'
           description: ''
+  /api/v1/transit-assessments/:
+    post:
+      operationId: transit_assessments_create
+      description: Create and queue an experimental channel transit assessment.
+      tags:
+      - transit-assessments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitAssessmentCreateRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TransitAssessmentCreateRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TransitAssessmentCreateRequest'
+        required: true
+      security:
+      - {}
+      responses:
+        '202':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransitAssessment'
+          description: ''
+        '503':
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: The assessment could not be queued.
+  /api/v1/transit-assessments/{id}/:
+    get:
+      operationId: transit_assessments_retrieve
+      description: Retrieve a transit assessment and its current execution result.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - transit-assessments
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransitAssessment'
+          description: ''
   /api/v1/vessel-positions/:
     get:
       operationId: vessel_positions_list
@@ -682,6 +738,34 @@ components:
       - latest_prediction_model_version
       - latest_prediction_status
       - readiness
+    AISDataStatus:
+      type: object
+      properties:
+        source:
+          type: string
+        status:
+          $ref: '#/components/schemas/AISDataStatusStatusEnum'
+        latest_position_received_at:
+          type: string
+          format: date-time
+          nullable: true
+        stale_after_seconds:
+          type: integer
+      required:
+      - latest_position_received_at
+      - source
+      - stale_after_seconds
+      - status
+    AISDataStatusStatusEnum:
+      enum:
+      - no_data
+      - fresh
+      - stale
+      type: string
+      description: |-
+        * `no_data` - no_data
+        * `fresh` - fresh
+        * `stale` - stale
     APIErrorDetail:
       type: object
       properties:
@@ -701,6 +785,16 @@ components:
           $ref: '#/components/schemas/APIErrorDetail'
       required:
       - error
+    ArrivalSourceEnum:
+      enum:
+      - fixed
+      - ais
+      - stochastic
+      type: string
+      description: |-
+        * `fixed` - fixed
+        * `ais` - ais
+        * `stochastic` - stochastic
     AssignedVessel:
       type: object
       properties:
@@ -859,8 +953,11 @@ components:
           $ref: '#/components/schemas/VesselPositionDataStatus'
         ai:
           $ref: '#/components/schemas/AIModelStatus'
+        ais:
+          $ref: '#/components/schemas/AISDataStatus'
       required:
       - ai
+      - ais
       - generated_at
       - marine_conditions
       - vessel_positions
@@ -869,6 +966,14 @@ components:
       - mombasa_offshore
       type: string
       description: '* `mombasa_offshore` - Mombasa offshore'
+    DomainNameEnum:
+      enum:
+      - approaches
+      - port_operations
+      type: string
+      description: |-
+        * `approaches` - Approaches
+        * `port_operations` - Port Operations
     MarineCondition:
       type: object
       properties:
@@ -1093,6 +1198,23 @@ components:
       - model_version
       - prediction_mode
       - status
+    NominalPilotingSpeedPeriod:
+      type: object
+      properties:
+        start_hour:
+          type: number
+          format: double
+        end_hour:
+          type: number
+          format: double
+        speed_knots:
+          type: number
+          format: double
+          minimum: 0
+      required:
+      - end_hour
+      - speed_knots
+      - start_hour
     OperationsBerthOverview:
       type: object
       properties:
@@ -1397,10 +1519,35 @@ components:
           type: integer
           minimum: 0
           default: 2
+        arrival_source:
+          $ref: '#/components/schemas/ArrivalSourceEnum'
+        random_seed:
+          type: integer
+          minimum: 0
+        service_time_distribution:
+          $ref: '#/components/schemas/ServiceTimeDistributionEnum'
+        minimum_service_time_hours:
+          type: number
+          format: double
+          minimum: 0
+        maximum_service_time_hours:
+          type: number
+          format: double
+          minimum: 0
+        vessel_type_priorities:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        marine_prediction_id:
+          type: string
+          format: uuid
+        nominal_piloting_speed_schedule:
+          type: array
+          items:
+            $ref: '#/components/schemas/NominalPilotingSpeedPeriod'
       required:
-      - arrival_interval_hours
       - average_service_time_hours
-      - expected_vessel_arrivals
       - simulation_hours
     ScenarioResponse:
       type: object
@@ -1476,6 +1623,14 @@ components:
       description: |-
         * `draft` - Draft
         * `ready` - Ready
+    ServiceTimeDistributionEnum:
+      enum:
+      - fixed
+      - uniform
+      type: string
+      description: |-
+        * `fixed` - fixed
+        * `uniform` - uniform
     SimulationComparisonResponse:
       type: object
       properties:
@@ -1542,11 +1697,17 @@ components:
           items:
             $ref: '#/components/schemas/QueueTimelinePoint'
           nullable: true
+        marine_conditions:
+          nullable: true
+        nominal_piloting_speed_schedule:
+          nullable: true
       required:
       - completed_at
       - created_at
       - error_message
       - id
+      - marine_conditions
+      - nominal_piloting_speed_schedule
       - queue_timeline
       - scenario_id
       - scenario_name
@@ -1655,6 +1816,101 @@ components:
       - vessels_in_service
       - vessels_served
       - vessels_waiting
+    TransitAssessment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        scenario_name:
+          type: string
+          readOnly: true
+        domain_name:
+          allOf:
+          - $ref: '#/components/schemas/DomainNameEnum'
+          readOnly: true
+        configuration:
+          readOnly: true
+          description: Snapshot of the assessment configuration used.
+        status:
+          allOf:
+          - $ref: '#/components/schemas/SimulationRunStatusEnum'
+          readOnly: true
+        result_data:
+          readOnly: true
+          nullable: true
+          description: Completed experimental transit assessment results.
+        error_message:
+          type: string
+          readOnly: true
+        started_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - completed_at
+      - configuration
+      - created_at
+      - domain_name
+      - error_message
+      - id
+      - result_data
+      - scenario_name
+      - started_at
+      - status
+    TransitAssessmentCreateRequest:
+      type: object
+      properties:
+        scenario_name:
+          type: string
+          maxLength: 100
+        domain_name:
+          allOf:
+          - $ref: '#/components/schemas/DomainNameEnum'
+          default: approaches
+        draft_classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransitDraftClassRequest'
+        maximum_current_speed_ms:
+          type: number
+          format: double
+          minimum: 0
+        maximum_wind_speed_ms:
+          type: number
+          format: double
+          minimum: 0
+      required:
+      - scenario_name
+    TransitDraftClassRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 50
+        representative_draft_m:
+          type: number
+          format: double
+          minimum: 1.0e-06
+        minimum_ukc_m:
+          type: number
+          format: double
+          minimum: 1.0e-06
+      required:
+      - minimum_ukc_m
+      - name
+      - representative_draft_m
     VesselCreateRequest:
       type: object
       properties:
@@ -1843,6 +2099,13 @@ components:
         service_start_hour:
           type: number
           format: double
+          nullable: true
+        service_time_hours:
+          type: number
+          format: double
+          nullable: true
+        service_order:
+          type: integer
           nullable: true
         departure_hour:
           type: number

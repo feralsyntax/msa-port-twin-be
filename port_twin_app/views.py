@@ -5,7 +5,8 @@ from django.conf import settings
 from django.db.models import Count, Max
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics, status
 from rest_framework.exceptions import APIException
 from rest_framework.generics import GenericAPIView
@@ -509,6 +510,10 @@ class SimulationDetailView(APIView):
                     if results.get("vessel_results") is not None
                     else None
                 ),
+                "marine_conditions": results.get("marine_conditions"),
+                "nominal_piloting_speed_schedule": results.get(
+                    "nominal_piloting_speed_schedule"
+                ),
             },
             status=status.HTTP_200_OK,
         )
@@ -941,6 +946,16 @@ class MarinePredictionListAPIView(generics.ListAPIView):
 class TransitAssessmentCreateAPIView(APIView):
     """Create and queue an experimental channel transit assessment."""
 
+    @extend_schema(
+        request=TransitAssessmentCreateRequestSerializer,
+        responses={
+            202: TransitAssessmentSerializer,
+            503: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="The assessment could not be queued.",
+            ),
+        },
+    )
     def post(self, request):
         request_serializer = TransitAssessmentCreateRequestSerializer(data=request.data)
         request_serializer.is_valid(raise_exception=True)

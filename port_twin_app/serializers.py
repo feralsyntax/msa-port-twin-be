@@ -304,6 +304,46 @@ class NonNegativeIntegerField(serializers.IntegerField):
         return super().to_internal_value(data)
 
 
+class NonNegativeFiniteFloatField(serializers.FloatField):
+    def to_internal_value(self, data):
+        if isinstance(data, bool):
+            raise serializers.ValidationError("A numeric value is required.")
+
+        value = super().to_internal_value(data)
+
+        if not math.isfinite(value) or value < 0:
+            raise serializers.ValidationError(
+                "Ensure this value is finite and non-negative."
+            )
+
+        return value
+
+
+class NominalPilotingSpeedPeriodSerializer(serializers.Serializer):
+    start_hour = NonNegativeFiniteFloatField()
+    end_hour = NonNegativeFiniteFloatField()
+    speed_knots = PositiveFiniteFloatField()
+
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            unknown_fields = set(data.keys()) - set(self.fields.keys())
+
+            if unknown_fields:
+                raise serializers.ValidationError(
+                    {field: ["Unknown field."] for field in sorted(unknown_fields)}
+                )
+
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        if attrs["end_hour"] <= attrs["start_hour"]:
+            raise serializers.ValidationError(
+                "End hour must be greater than start hour."
+            )
+
+        return attrs
+
+
 class ScenarioParametersSerializer(serializers.Serializer):
     simulation_hours = PositiveFiniteFloatField()
 
@@ -323,8 +363,35 @@ class ScenarioParametersSerializer(serializers.Serializer):
     )
 
     arrival_source = serializers.ChoiceField(
-        choices=("fixed", "ais"),
+        choices=("fixed", "ais", "stochastic"),
         required=False,
+    )
+
+    random_seed = NonNegativeIntegerField(
+        min_value=0,
+        required=False,
+    )
+
+    service_time_distribution = serializers.ChoiceField(
+        choices=("fixed", "uniform"),
+        required=False,
+    )
+
+    minimum_service_time_hours = PositiveFiniteFloatField(required=False)
+
+    maximum_service_time_hours = PositiveFiniteFloatField(required=False)
+
+    vessel_type_priorities = serializers.DictField(
+        child=NonNegativeIntegerField(min_value=0),
+        required=False,
+    )
+
+    marine_prediction_id = serializers.UUIDField(required=False)
+
+    nominal_piloting_speed_schedule = NominalPilotingSpeedPeriodSerializer(
+        many=True,
+        required=False,
+        allow_empty=False,
     )
 
     def to_internal_value(self, data):
@@ -340,17 +407,24 @@ class ScenarioParametersSerializer(serializers.Serializer):
                 )
 
             arrival_source = data.get("arrival_source", "fixed")
+            service_distribution = data.get("service_time_distribution", "fixed")
 
             required_fields = {
                 "simulation_hours",
                 "average_service_time_hours",
             }
 
+            if arrival_source in ("fixed", "stochastic"):
+                required_fields.add("expected_vessel_arrivals")
+
             if arrival_source == "fixed":
+                required_fields.add("arrival_interval_hours")
+
+            if service_distribution == "uniform":
                 required_fields.update(
                     {
-                        "expected_vessel_arrivals",
-                        "arrival_interval_hours",
+                        "minimum_service_time_hours",
+                        "maximum_service_time_hours",
                     }
                 )
 
@@ -365,6 +439,100 @@ class ScenarioParametersSerializer(serializers.Serializer):
                 )
 
         return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        service_distribution = attrs.get("service_time_distribution", "fixed")
+
+        minimum = attrs.get("minimum_service_time_hours")
+        maximum = attrs.get("maximum_service_time_hours")
+
+        if service_distribution == "uniform":
+            if minimum is not None and maximum is not None and maximum < minimum:
+                raise serializers.ValidationError(
+                    {
+                        "maximum_service_time_hours": [
+                            (
+                                "Maximum service time must be greater than or equal "
+                                "to minimum service time."
+                            )
+                        ]
+                    }
+                )
+        elif minimum is not None or maximum is not None:
+            raise serializers.ValidationError(
+                "Minimum and maximum service times can only be supplied "
+                "for the uniform distribution."
+            )
+
+        priorities = attrs.get("vessel_type_priorities", {})
+
+        for vessel_type in priorities:
+            if not isinstance(vessel_type, str) or not vessel_type.strip():
+                raise serializers.ValidationError(
+                    {
+                        "vessel_type_priorities": [
+                            "Vessel type keys must be non-empty strings."
+                        ]
+                    }
+                )
+
+        speed_schedule = attrs.get("nominal_piloting_speed_schedule")
+
+        if speed_schedule is not None:
+            simulation_hours = attrs["simulation_hours"]
+
+            ordered_periods = sorted(
+                speed_schedule,
+                key=lambda period: period["start_hour"],
+            )
+
+            previous_end_hour = None
+
+            for period in ordered_periods:
+                if period["end_hour"] > simulation_hours:
+                    raise serializers.ValidationError(
+                        {
+                            "nominal_piloting_speed_schedule": [
+                                "Schedule periods cannot extend beyond "  # noqa: ISC004
+                                "the simulation duration."
+                            ]
+                        }
+                    )
+
+                if (
+                    previous_end_hour is not None
+                    and period["start_hour"] < previous_end_hour
+                ):
+                    raise serializers.ValidationError(
+                        {
+                            "nominal_piloting_speed_schedule": [
+                                "Schedule periods cannot overlap."
+                            ]
+                        }
+                    )
+
+                previous_end_hour = period["end_hour"]
+
+        prediction_id = attrs.get("marine_prediction_id")
+
+        if prediction_id is not None:
+            prediction_exists = MarinePrediction.objects.filter(
+                id=prediction_id,
+                status=MarinePrediction.Status.COMPLETED,
+            ).exists()
+
+            if not prediction_exists:
+                raise serializers.ValidationError(
+                    {
+                        "marine_prediction_id": [
+                            "A completed marine prediction with this ID does not exist."
+                        ]
+                    }
+                )
+
+            attrs["marine_prediction_id"] = str(prediction_id)
+
+        return attrs
 
 
 class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
@@ -410,6 +578,14 @@ class VesselSimulationResultSerializer(serializers.Serializer):
     arrival_hour = serializers.FloatField()
     berth_id = serializers.CharField(allow_null=True)
     service_start_hour = serializers.FloatField(allow_null=True)
+    service_time_hours = serializers.FloatField(
+        allow_null=True,
+        required=False,
+    )
+    service_order = serializers.IntegerField(
+        allow_null=True,
+        required=False,
+    )
     departure_hour = serializers.FloatField(allow_null=True)
     waiting_hours = serializers.FloatField(allow_null=True)
     status = serializers.CharField()
@@ -452,6 +628,8 @@ class SimulationDetailResponseSerializer(serializers.Serializer):
         many=True,
         allow_null=True,
     )
+    marine_conditions = serializers.JSONField(allow_null=True)
+    nominal_piloting_speed_schedule = serializers.JSONField(allow_null=True)
 
 
 class SimulationErrorResponseSerializer(serializers.Serializer):

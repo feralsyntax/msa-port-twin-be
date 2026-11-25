@@ -338,3 +338,112 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertEqual(config.expected_arrivals, 0)
         self.assertIsNone(config.arrival_interval_hours)
         self.assertEqual(mock_eta.call_count, 1)
+
+    def set_stochastic_scenario(self, **overrides):
+        parameters = {
+            "simulation_hours": 24,
+            "expected_vessel_arrivals": 12,
+            "average_service_time_hours": 8,
+            "arrival_source": "stochastic",
+            "random_seed": 42,
+        }
+        parameters.update(overrides)
+
+        self.scenario.parameters = parameters
+        self.scenario.save()
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    def test_generates_stochastic_arrivals_within_simulation_horizon(self, mock_run):
+        self.set_stochastic_scenario()
+
+        run_scenario_simulation(self.scenario)
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertGreater(len(vessels), 0)
+        self.assertTrue(
+            all(0 < vessel.arrival_hour < config.duration_hours for vessel in vessels)
+        )
+        self.assertEqual(config.expected_arrivals, len(vessels))
+        self.assertIsNone(config.arrival_interval_hours)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    def test_stochastic_arrivals_are_reproducible(self, mock_run):
+        self.set_stochastic_scenario()
+
+        run_scenario_simulation(self.scenario)
+        first_vessels = mock_run.call_args.args[0]
+
+        run_scenario_simulation(self.scenario)
+        second_vessels = mock_run.call_args.args[0]
+
+        first_results = [
+            (
+                vessel.vessel_id,
+                vessel.arrival_hour,
+                vessel.service_time_hours,
+            )
+            for vessel in first_vessels
+        ]
+        second_results = [
+            (
+                vessel.vessel_id,
+                vessel.arrival_hour,
+                vessel.service_time_hours,
+            )
+            for vessel in second_vessels
+        ]
+
+        self.assertEqual(first_results, second_results)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    def test_assigns_uniform_service_times_within_configured_bounds(self, mock_run):
+        self.set_stochastic_scenario(
+            service_time_distribution="uniform",
+            minimum_service_time_hours=4,
+            maximum_service_time_hours=10,
+        )
+
+        run_scenario_simulation(self.scenario)
+
+        vessels, _, _ = mock_run.call_args.args
+
+        self.assertGreater(len(vessels), 0)
+
+        for vessel in vessels:
+            self.assertGreaterEqual(vessel.service_time_hours, 4)
+            self.assertLessEqual(vessel.service_time_hours, 10)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    def test_passes_vessel_types_and_priorities_to_simulation(self, mock_run):
+        self.vessel.vessel_type = Vessel.VesselType.TANKER
+        self.vessel.save()
+
+        priorities = {
+            "tanker": 0,
+            "container": 1,
+            "bulk_carrier": 2,
+        }
+
+        self.set_stochastic_scenario(vessel_type_priorities=priorities)
+
+        run_scenario_simulation(self.scenario)
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertTrue(all(v.vessel_type == "tanker" for v in vessels))
+        self.assertEqual(config.vessel_type_priorities, priorities)
+
+    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    def test_allows_zero_stochastic_arrivals(self, mock_run):
+        self.set_stochastic_scenario(
+            expected_vessel_arrivals=1,
+            random_seed=42,
+        )
+
+        run_scenario_simulation(self.scenario)
+
+        vessels, _, config = mock_run.call_args.args
+
+        self.assertEqual(vessels, [])
+        self.assertEqual(config.expected_arrivals, 0)

@@ -12,6 +12,8 @@ class SimulationVessel:
     length: float
     draft: float
     arrival_hour: float | None = None
+    vessel_type: str = "unknown"
+    service_time_hours: float | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,7 @@ class SimulationConfig:
     expected_arrivals: int
     arrival_interval_hours: float | None
     service_time_hours: float
+    vessel_type_priorities: dict[str, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,8 @@ class VesselSimulationResult:
     waiting_hours: float | None
     status: str
     reason: str | None = None
+    service_time_hours: float | None = None
+    service_order: int | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +88,208 @@ def _validate_identifier(value: object, entity: str) -> None:
 
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{entity} identifiers must be non-empty strings.")
+
+
+def _run_priority_simulation(
+    vessels: list[SimulationVessel],
+    berths: list[SimulationBerth],
+    config: SimulationConfig,
+) -> SimulationOutput:
+    """Run the simulation using vessel-type priorities."""
+
+    priorities = config.vessel_type_priorities or {}
+    arrivals = []
+
+    for index, vessel in enumerate(vessels[: config.expected_arrivals]):
+        arrival_hour = (
+            vessel.arrival_hour
+            if vessel.arrival_hour is not None
+            else index * config.arrival_interval_hours
+        )
+
+        if arrival_hour < config.duration_hours:
+            arrivals.append((arrival_hour, index, vessel))
+
+    arrivals.sort(key=lambda item: (item[0], item[1]))
+
+    results: dict[int, VesselSimulationResult] = {}
+    waiting: list[tuple[float, int, SimulationVessel]] = []
+    berth_available_at = {berth.berth_id: 0.0 for berth in berths}
+    service_order = 0
+
+    def compatible(vessel: SimulationVessel, berth: SimulationBerth) -> bool:
+        return (
+            vessel.length <= berth.max_vessel_length
+            and vessel.draft <= berth.max_vessel_draft
+        )
+
+    def incompatibility_reason(vessel: SimulationVessel) -> str:
+        if not berths:
+            return "No berths are configured."
+
+        length_fits = any(vessel.length <= berth.max_vessel_length for berth in berths)
+        draft_fits = any(vessel.draft <= berth.max_vessel_draft for berth in berths)
+
+        if not length_fits:
+            return "Vessel length exceeds all berth limits."
+        if not draft_fits:
+            return "Vessel draft exceeds all berth limits."
+        return "No single berth can accommodate both the vessel's length and draft."
+
+    total_waiting = 0.0
+    waiting_count = 0
+    total_turnaround = 0.0
+    completed_count = 0
+    occupied_hours = 0.0
+
+    current_time = 0.0
+    arrival_position = 0
+
+    while arrival_position < len(arrivals) or waiting:
+        # Add all vessels that have arrived by the current event time.
+        while (
+            arrival_position < len(arrivals)
+            and arrivals[arrival_position][0] <= current_time
+        ):
+            arrival_hour, index, vessel = arrivals[arrival_position]
+            arrival_position += 1
+
+            if not any(compatible(vessel, berth) for berth in berths):
+                results[index] = VesselSimulationResult(
+                    vessel_id=vessel.vessel_id,
+                    arrival_hour=arrival_hour,
+                    berth_id=None,
+                    service_start_hour=None,
+                    departure_hour=None,
+                    waiting_hours=None,
+                    status="incompatible_berth",
+                    reason=incompatibility_reason(vessel),
+                )
+            else:
+                waiting.append((arrival_hour, index, vessel))
+
+        # Assign free berths to the highest-priority compatible vessels.
+        free_berths = sorted(
+            (
+                berth
+                for berth in berths
+                if berth_available_at[berth.berth_id] <= current_time
+            ),
+            key=lambda berth: berth.berth_id,
+        )
+
+        for berth in free_berths:
+            candidates = [item for item in waiting if compatible(item[2], berth)]
+
+            if not candidates:
+                continue
+
+            arrival_hour, index, vessel = min(
+                candidates,
+                key=lambda item: (
+                    priorities.get(item[2].vessel_type, 0),
+                    item[0],
+                    item[1],
+                ),
+            )
+            waiting.remove((arrival_hour, index, vessel))
+
+            service_time = (
+                vessel.service_time_hours
+                if vessel.service_time_hours is not None
+                else config.service_time_hours
+            )
+            service_start = max(current_time, arrival_hour)
+            departure = service_start + service_time
+            vessel_waiting = service_start - arrival_hour
+
+            service_order += 1
+            berth_available_at[berth.berth_id] = departure
+
+            occupied_hours += max(
+                0.0,
+                min(departure, config.duration_hours) - max(service_start, 0.0),
+            )
+
+            if service_start < config.duration_hours:
+                total_waiting += vessel_waiting
+                waiting_count += 1
+
+            if departure <= config.duration_hours:
+                status = "completed"
+                total_turnaround += departure - arrival_hour
+                completed_count += 1
+            elif service_start < config.duration_hours:
+                status = "in_service"
+            else:
+                status = "waiting"
+                vessel_waiting = config.duration_hours - arrival_hour
+
+            results[index] = VesselSimulationResult(
+                vessel_id=vessel.vessel_id,
+                arrival_hour=arrival_hour,
+                berth_id=berth.berth_id,
+                service_start_hour=service_start,
+                departure_hour=departure,
+                waiting_hours=vessel_waiting,
+                status=status,
+                service_time_hours=service_time,
+                service_order=service_order,
+            )
+
+        # Advance to the next arrival or relevant berth completion.
+        next_events = []
+
+        if arrival_position < len(arrivals):
+            next_events.append(arrivals[arrival_position][0])
+
+        if waiting:
+            for berth in berths:
+                if berth_available_at[berth.berth_id] > current_time and any(
+                    compatible(item[2], berth) for item in waiting
+                ):
+                    next_events.append(berth_available_at[berth.berth_id])
+
+        if not next_events:
+            break
+
+        current_time = min(next_events)
+
+    # Vessels still waiting when the horizon ends have not started service.
+    for arrival_hour, index, vessel in waiting:
+        results[index] = VesselSimulationResult(
+            vessel_id=vessel.vessel_id,
+            arrival_hour=arrival_hour,
+            berth_id=None,
+            service_start_hour=None,
+            departure_hour=None,
+            waiting_hours=config.duration_hours - arrival_hour,
+            status="waiting",
+        )
+
+    ordered_results = tuple(results[index] for index in sorted(results))
+    total_berth_hours = config.duration_hours * len(berths)
+
+    summary = SimulationSummary(
+        total_arrivals=len(ordered_results),
+        vessels_served=completed_count,
+        vessels_waiting=sum(result.status == "waiting" for result in ordered_results),
+        vessels_in_service=sum(
+            result.status == "in_service" for result in ordered_results
+        ),
+        average_waiting_hours=(total_waiting / waiting_count if waiting_count else 0.0),
+        average_turnaround_hours=(
+            total_turnaround / completed_count if completed_count else 0.0
+        ),
+        berth_utilization_percent=(
+            occupied_hours / total_berth_hours * 100 if total_berth_hours else 0.0
+        ),
+    )
+
+    return SimulationOutput(
+        vessel_results=ordered_results,
+        summary=summary,
+    )
 
 
 def run_simulation(
@@ -157,6 +364,40 @@ def run_simulation(
                 "Vessel length and draft must be finite numbers greater than zero."
             )
 
+        for vessel in vessels:
+            if (
+                not isinstance(vessel.vessel_type, str)
+                or not vessel.vessel_type.strip()
+            ):
+                raise ValueError("Vessel types must be non-empty strings.")
+
+            if vessel.service_time_hours is not None and (
+                not _is_finite_number(vessel.service_time_hours)
+                or vessel.service_time_hours <= 0
+            ):
+                raise ValueError(
+                    "Vessel service times must be finite numbers greater than zero."
+                )
+
+        priorities = config.vessel_type_priorities
+
+        if priorities is not None:
+            if not isinstance(priorities, dict):
+                raise ValueError("Vessel type priorities must be a dictionary.")
+
+            for vessel_type, priority in priorities.items():
+                if not isinstance(vessel_type, str) or not vessel_type.strip():
+                    raise ValueError("Priority vessel types must be non-empty strings.")
+
+                if (
+                    isinstance(priority, bool)
+                    or not isinstance(priority, int)
+                    or priority < 0
+                ):
+                    raise ValueError(
+                        "Vessel type priorities must be non-negative integers."
+                    )
+
     # Validate berth capacity limits and identifiers.
     berth_ids = [berth.berth_id for berth in berths]
 
@@ -176,6 +417,9 @@ def run_simulation(
             raise ValueError(
                 "Berth capacity limits must be finite numbers greater than zero."
             )
+
+    if config.vessel_type_priorities:
+        return _run_priority_simulation(vessels, berths, config)
 
     # Track the next available hour for each berth.
     berth_available_at = {berth.berth_id: 0.0 for berth in berths}
@@ -266,7 +510,19 @@ def run_simulation(
             berth_available_at[berth.berth_id],
             arrival_hour,
         )
-        departure = service_start + config.service_time_hours
+        service_time = (
+            vessel.service_time_hours
+            if vessel.service_time_hours is not None
+            else config.service_time_hours
+        )
+
+        if not _is_finite_number(service_time) or service_time <= 0:
+            raise ValueError(
+                "Vessel service times must be finite numbers greater than zero."
+            )
+
+        departure = service_start + service_time
+
         waiting = service_start - arrival_hour
 
         if service_start >= config.duration_hours:
@@ -302,6 +558,8 @@ def run_simulation(
                 departure_hour=departure,
                 waiting_hours=waiting,
                 status=status,
+                service_time_hours=service_time,
+                service_order=index + 1,
             )
         )
 

@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from port_twin_app.models import Scenario
+from port_twin_app.models import MarinePrediction, Scenario
 
 
 class ScenarioAPITests(APITestCase):
@@ -90,3 +90,336 @@ class ScenarioAPITests(APITestCase):
             status.HTTP_400_BAD_REQUEST,
         )
         self.assertIn("parameters", response.data["error"]["details"])
+
+
+class ScenarioParameterConfigurationAPITests(APITestCase):
+    def setUp(self):
+        self.url = "/api/v1/scenarios/"
+
+        self.base_payload = {
+            "name": "Simulation Configuration Test",
+            "parameters": {
+                "simulation_hours": 24,
+                "average_service_time_hours": 8,
+            },
+        }
+
+    def create_scenario(self, parameters):
+        payload = {
+            **self.base_payload,
+            "parameters": parameters,
+        }
+
+        return self.client.post(self.url, payload, format="json")
+
+    def create_prediction(self, status=MarinePrediction.Status.COMPLETED):
+        return MarinePrediction.objects.create(
+            grid={"west": 39.5, "east": 39.8},
+            forecast={"steps": 6},
+            input_data={"source": "test"},
+            result_data={"status": "completed"},
+            model_version="fno-test-1",
+            contract_version="2.0",
+            status=status,
+        )
+
+    def test_accepts_stochastic_arrival_configuration(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 12,
+                "average_service_time_hours": 8,
+                "arrival_source": "stochastic",
+                "random_seed": 42,
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_stochastic_arrivals_require_expected_arrivals(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "average_service_time_hours": 8,
+                "arrival_source": "stochastic",
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "expected_vessel_arrivals",
+            response.data["error"]["details"]["parameters"],
+        )
+
+    def test_ais_arrivals_do_not_require_expected_arrivals(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "average_service_time_hours": 8,
+                "arrival_source": "ais",
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_accepts_uniform_service_time_configuration(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "service_time_distribution": "uniform",
+                "minimum_service_time_hours": 4,
+                "maximum_service_time_hours": 10,
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_uniform_distribution_requires_both_bounds(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "service_time_distribution": "uniform",
+                "minimum_service_time_hours": 4,
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            "maximum_service_time_hours",
+            response.data["error"]["details"]["parameters"],
+        )
+
+    def test_rejects_maximum_service_time_below_minimum(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "service_time_distribution": "uniform",
+                "minimum_service_time_hours": 10,
+                "maximum_service_time_hours": 4,
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accepts_vessel_type_priorities(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "vessel_type_priorities": {
+                    "container": 2,
+                    "tanker": 0,
+                    "bulk_carrier": 1,
+                },
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_rejects_invalid_priority_values(self):
+        invalid_priorities = [
+            {"container": -1},
+            {"container": 1.5},
+            {"container": True},
+            {"": 1},
+        ]
+
+        for priorities in invalid_priorities:
+            with self.subTest(priorities=priorities):
+                response = self.create_scenario(
+                    {
+                        "simulation_hours": 24,
+                        "expected_vessel_arrivals": 5,
+                        "arrival_interval_hours": 2,
+                        "average_service_time_hours": 8,
+                        "vessel_type_priorities": priorities,
+                    }
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_400_BAD_REQUEST,
+                )
+
+    def test_rejects_negative_random_seed(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "random_seed": -1,
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accepts_completed_marine_prediction(self):
+        prediction = self.create_prediction()
+
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": str(prediction.id),
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["parameters"]["marine_prediction_id"],
+            str(prediction.id),
+        )
+
+    def test_rejects_non_completed_marine_prediction(self):
+        prediction = self.create_prediction(
+            status=MarinePrediction.Status.PENDING,
+        )
+
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": str(prediction.id),
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_unknown_marine_prediction_id(self):
+        import uuid
+
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": str(uuid.uuid4()),
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_invalid_marine_prediction_id(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": "not-a-uuid",
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accepts_nominal_piloting_speed_schedule(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "nominal_piloting_speed_schedule": [
+                    {
+                        "start_hour": 0,
+                        "end_hour": 6,
+                        "speed_knots": 6,
+                    },
+                    {
+                        "start_hour": 6,
+                        "end_hour": 12,
+                        "speed_knots": 5,
+                    },
+                    {
+                        "start_hour": 12,
+                        "end_hour": 24,
+                        "speed_knots": 6,
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["parameters"]["nominal_piloting_speed_schedule"],
+            [
+                {"start_hour": 0.0, "end_hour": 6.0, "speed_knots": 6.0},
+                {"start_hour": 6.0, "end_hour": 12.0, "speed_knots": 5.0},
+                {"start_hour": 12.0, "end_hour": 24.0, "speed_knots": 6.0},
+            ],
+        )
+
+    def test_rejects_overlapping_speed_schedule_periods(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "nominal_piloting_speed_schedule": [
+                    {"start_hour": 0, "end_hour": 8, "speed_knots": 6},
+                    {"start_hour": 6, "end_hour": 12, "speed_knots": 5},
+                ],
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_speed_schedule_beyond_simulation_duration(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "nominal_piloting_speed_schedule": [
+                    {"start_hour": 20, "end_hour": 25, "speed_knots": 6},
+                ],
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_invalid_speed_schedule_values(self):
+        invalid_schedules = [
+            [{"start_hour": 6, "end_hour": 6, "speed_knots": 5}],
+            [{"start_hour": 8, "end_hour": 4, "speed_knots": 5}],
+            [{"start_hour": 0, "end_hour": 6, "speed_knots": 0}],
+            [{"start_hour": -1, "end_hour": 6, "speed_knots": 5}],
+            [{"start_hour": 0, "end_hour": 6, "speed_knots": 5, "extra": 1}],
+            [],
+        ]
+
+        for schedule in invalid_schedules:
+            with self.subTest(schedule=schedule):
+                response = self.create_scenario(
+                    {
+                        "simulation_hours": 24,
+                        "expected_vessel_arrivals": 5,
+                        "arrival_interval_hours": 2,
+                        "average_service_time_hours": 8,
+                        "nominal_piloting_speed_schedule": schedule,
+                    }
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_400_BAD_REQUEST,
+                )
