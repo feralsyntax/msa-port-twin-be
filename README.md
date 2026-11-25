@@ -1,67 +1,266 @@
-# msa-port-twin-be
-API powering an AI-powered maritime digital twin for port monitoring, vessel simulation, berth scheduling, and scenario analysis.
+# MSA Port Twin Backend
 
-# Set up Instructions
-Install requirements
-- Development mode
-    ```bash
-    pip install -r requirements-dev.txt
-    ```
-- Production mode
-    ```bash
-    pip install -r requirements.txt
-    ```
+Django REST API powering the MSA Port Twin maritime digital twin for port monitoring, vessel tracking, berth scheduling, marine-condition prediction, vessel simulation, and transit assessment.
 
-# Frontend Integration
+The project models the Port of Mombasa and its surrounding marine environment using AIS vessel data, marine datasets, numerical simulations, and AI-based predictions.
 
-The frontend can download this project's API schema from this repository.
-- Run the following command from the frontend
-    ```
-    wget -O docs/api/schema.yml https://raw.githubusercontent.com/feralsyntax/msa-port-twin-be/main/docs/api/schema.yml
-    ```
-- Replace `docs/api/` with your prefered output location.
+## Technology Stack
 
-# Demonstration Data
+- Python 3.14
+- Django and Django REST Framework
+- PostgreSQL with PostGIS
+- Celery and Redis for background tasks
+- PyTorch for Fourier Neural Operator (FNO) marine prediction
+- Copernicus Marine and GEBCO for marine data
+- Ruff for Python linting
+- GitHub Actions for continuous integration
 
-MSA Port Twin provides synthetic demonstration data for local development and application demonstrations.
+## Getting Started
 
-## Load demonstration data
+### Prerequisites
+
+- Python 3.14
+- PostgreSQL with PostGIS
+- Redis (for background task execution)
+- Git
+
+### Create a virtual environment
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+### Install dependencies
+
+Development environment:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Production environment:
+
+```bash
+pip install -r requirements.txt
+```
+
+Marine data acquisition and preparation dependencies are defined in `requirements-data.txt` and are included in the development requirements.
+
+### Environment configuration
+
+Create a `.env` file in the repository root.
+
+Configure the Django secret, database connection, and other environment-specific settings.
+
+At minimum, configure:
+
+```env
+MODE=dev
+DEBUG=True
+SECRET_KEY=your-secret-key
+DATABASE_URL=postgis://postgres:password@localhost:5432/port
+```
+
+Additional settings for Redis, Celery, and marine AI can be configured when those services are needed.
+
+### Database setup
+
+Apply migrations:
+
+```bash
+python manage.py migrate
+```
+
+Start the development server:
+
+```bash
+python manage.py runserver
+```
+
+## Marine AI
+
+The backend includes a Fourier Neural Operator (FNO) model for predicting marine conditions.
+
+The model predicts:
+
+- Water level
+- East-west current velocity
+- North-south current velocity
+
+The AI implementation is located in:
+
+```text
+port_twin_app/services/marine_ai/
+```
+
+### Inference backends
+
+The marine AI service supports:
+
+- `local`: runs inference using a locally available PyTorch checkpoint.
+- `modelarts`: sends inference requests to a configured Huawei Cloud ModelArts endpoint.
+
+Configure the backend using:
+
+```env
+MARINE_AI_BACKEND=local
+MARINE_AI_CHECKPOINT=artifacts/marine_fno_residual.pt
+```
+
+For ModelArts inference, configure the endpoint, token, timeout, and model version using the corresponding `MARINE_AI_MODELARTS_*` settings.
+
+A valid local checkpoint or configured ModelArts endpoint is required for actual inference. The ordinary test suite uses mocked external inference calls and does not require live ModelArts credentials.
+
+### Marine AI data workflow
+
+The marine AI data workflow generally involves:
+
+1. Acquiring marine and bathymetry source data.
+2. Preparing and normalizing the datasets.
+3. Training the FNO model.
+4. Evaluating model predictions.
+5. Loading a checkpoint for inference.
+
+Relevant scripts are located in `scripts/`.
+
+## Celery and Redis
+
+Celery handles background processing so that longer-running operations do not need to execute inside an API request.
+
+Redis is used as the Celery message broker.
+
+Start Redis:
+
+```bash
+redis-server
+```
+
+Start a Celery worker from the repository root:
+
+```bash
+celery -A port_twin_proj worker --loglevel=info
+```
+
+Configure the Redis connection through the `REDIS_URL` or `CELERY_BROKER_URL` environment settings.
+
+The API and Celery worker must use compatible database and Redis configuration.
+
+## Data Scripts
+
+The `scripts/` directory contains utilities for generating datasets, preparing marine data, and training or evaluating FNO models.
+
+| Script                                   | Purpose                                                        |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `generate_marine_dataset.py`             | Generates simulated shallow-water datasets.                    |
+| `prepare_offshore_marine_dataset.py`     | Prepares an offshore regional marine dataset for FNO training. |
+| `train_marine_fno_v2.py`                 | Trains the forcing-conditioned FNO v2 model.                   |
+| `train_offshore_fno.py`                  | Trains and evaluates an offshore FNO candidate.                |
+| `analyze_offshore_prediction_changes.py` | Analyzes changes in offshore model predictions.                |
+| `evaluate_offshore_lead_times.py`        | Evaluates offshore prediction lead times.                      |
+
+Run a script from the repository root:
+
+```bash
+python scripts/generate_marine_dataset.py
+```
+
+Some preparation and training scripts require source datasets or existing checkpoints. Those files are not automatically generated by installing Python dependencies.
+
+## Demonstration Data
+
+Synthetic demonstration data is available for local development and demonstrations.
+
+Load it using:
 
 ```bash
 python manage.py seed_demo_data
 ```
 
-# Tests
+## Tests
 
-The `port_twin_app` has test modules for:
-- The API
-- The simulation engine
-    - Simulations
-    - Simulation API
-    - Simulation detail
-    - Simulation execution
-- Operations overview API
+The backend tests are located in:
 
-## Run Tests
+```text
+port_twin_app/tests/
+```
 
-To run all tests, use the following command:
+The test suite covers:
+
+- REST API endpoints and serializers.
+- AIS decoding, ingestion, tracking, and retention.
+- Vessel ETA calculations.
+- Scenario and vessel simulations.
+- Simulation execution and history.
+- Berth and port operations.
+- Transit assessment.
+- Marine data ingestion and preparation.
+- Bathymetry and shallow-water numerical models.
+- Marine AI models, training, evaluation, and inference.
+- ModelArts integration and marine prediction APIs.
+
+### Run the complete test suite
 
 ```bash
 python manage.py test
 ```
 
-## Run A Single Test
-
-To run a single, specific test, use the following command
-
-```bash
-python manage.py test port_twin_app.tests.[the_name_of_the_test_file]
-```
-Replace [the_name_of_the_test_file] with the actual test file you want. For example, to test simulations in the test file `test_simulations`, use the command:
+### Run an individual test module
 
 ```bash
 python manage.py test port_twin_app.tests.test_simulations
 ```
 
-# Deployment
-A deployment guide is available in this project's docs. Navigate to `./docs/deployment.md`
+Replace `test_simulations` with the relevant test module.
+
+### Check Django configuration
+
+```bash
+python manage.py check
+```
+
+### Check migration consistency
+
+```bash
+python manage.py makemigrations --check --dry-run
+```
+
+## Continuous Integration
+
+GitHub Actions runs the backend checks on pushes and pull requests.
+
+The CI workflow:
+
+1. Starts a PostgreSQL/PostGIS service.
+2. Installs the CI dependencies and CPU-only PyTorch.
+3. Runs Ruff lint checks.
+4. Runs Django system checks.
+5. Checks for missing migrations.
+6. Runs the complete Django test suite.
+
+The workflow is defined in:
+
+```text
+.github/workflows/ci.yml
+```
+
+CI does not require a live Redis server or ModelArts credentials for the current test suite.
+
+## Frontend Integration
+
+The frontend can download the OpenAPI schema from this repository:
+
+```bash
+wget -O docs/api/schema.yml \
+  https://raw.githubusercontent.com/feralsyntax/msa-port-twin-be/main/docs/api/schema.yml
+```
+
+Replace `docs/api/` with your preferred output location.
+
+## Deployment
+
+See the deployment guide:
+
+```text
+docs/deployment.md
+```
