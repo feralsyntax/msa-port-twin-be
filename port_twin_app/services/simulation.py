@@ -53,6 +53,7 @@ class VesselSimulationResult:
     service_time_hours: float | None = None
     service_order: int | None = None
     allocated_cranes: int = 0
+    allocated_crane_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -246,7 +247,7 @@ def run_crane_aware_simulation(
                 )
                 service_time = one_crane_service_time / crane_count
                 departure = service_start + service_time
-                
+
                 if service_start >= config.duration_hours:
                     continue
 
@@ -273,6 +274,9 @@ def run_crane_aware_simulation(
                         departure,
                     )
                 )
+
+            if not allocation_candidates:
+                continue
 
             (
                 _,
@@ -327,6 +331,7 @@ def run_crane_aware_simulation(
                 service_time_hours=service_time,
                 service_order=service_order,
                 allocated_cranes=crane_count,
+                allocated_crane_ids=tuple(crane_id for crane_id, _ in allocated_cranes),
             )
 
         # Advance to the next arrival or resource completion.
@@ -356,9 +361,33 @@ def run_crane_aware_simulation(
             break
 
         current_time = min(next_events)
-        
+
         if current_time >= config.duration_hours:
             break
+
+    # Process arrivals that were not reached before the simulation horizon.
+    for arrival_hour, index, vessel in arrivals[arrival_position:]:
+        if not any(compatible(vessel, berth) for berth in berths):
+            results[index] = VesselSimulationResult(
+                vessel_id=vessel.vessel_id,
+                arrival_hour=arrival_hour,
+                berth_id=None,
+                service_start_hour=None,
+                departure_hour=None,
+                waiting_hours=None,
+                status="incompatible_berth",
+                reason=incompatibility_reason(vessel),
+            )
+        else:
+            results[index] = VesselSimulationResult(
+                vessel_id=vessel.vessel_id,
+                arrival_hour=arrival_hour,
+                berth_id=None,
+                service_start_hour=None,
+                departure_hour=None,
+                waiting_hours=config.duration_hours - arrival_hour,
+                status="waiting",
+            )
 
     # Record vessels that never started service before the horizon.
     for arrival_hour, index, vessel in waiting:
