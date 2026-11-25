@@ -45,12 +45,43 @@ class SimulationDetailAPITests(TestCase):
                         "arrival_hour": 0.0,
                         "berth_id": "test-berth-1",
                         "service_start_hour": 0.0,
+                        "service_time_hours": 8.0,
+                        "service_order": 1,
                         "departure_hour": 8.0,
                         "waiting_hours": 0.0,
                         "status": "completed",
                         "reason": "No compatible berth was available.",
                     }
                 ]
+            },
+        )
+
+        SimulationResult.objects.create(
+            simulation_run=cls.simulation_run,
+            result_type="marine_conditions",
+            data={
+                "prediction_id": str(uuid.uuid4()),
+                "model_version": "test-model",
+                "contract_version": "2.0",
+                "scope": "grid_level",
+                "description": (
+                    "Hourly summaries across the prediction grid. "
+                    "These are not route-level conditions or navigational "
+                    "safety assessments."
+                ),
+                "hourly_conditions": [
+                    {
+                        "step": step,
+                        "start_time": f"2026-11-25T0{step}:00:00+00:00",
+                        "end_time": f"2026-11-25T0{step + 1}:00:00+00:00",
+                        "mean_water_level_m": 0.25,
+                        "minimum_water_level_m": 0.1,
+                        "maximum_water_level_m": 0.4,
+                        "mean_current_speed_ms": 0.5,
+                        "maximum_current_speed_ms": 0.5,
+                    }
+                    for step in range(1, 7)
+                ],
             },
         )
 
@@ -82,6 +113,24 @@ class SimulationDetailAPITests(TestCase):
             response.data["vessel_results"]["vessels"][0]["reason"],
             "No compatible berth was available.",
         )
+        vessel = response.data["vessel_results"]["vessels"][0]
+
+        self.assertEqual(vessel["service_time_hours"], 8.0)
+        self.assertEqual(vessel["service_order"], 1)
+
+        marine_conditions = response.data["marine_conditions"]
+
+        self.assertIsNotNone(marine_conditions)
+        self.assertEqual(marine_conditions["scope"], "grid_level")
+        self.assertEqual(len(marine_conditions["hourly_conditions"]), 6)
+        self.assertEqual(
+            marine_conditions["prediction_id"],
+            SimulationResult.objects.get(
+                simulation_run=self.simulation_run,
+                result_type="marine_conditions",
+            ).data["prediction_id"],
+        )
+
         self.assertEqual(
             response.data["queue_timeline"],
             [
@@ -94,7 +143,7 @@ class SimulationDetailAPITests(TestCase):
         response = self.client.get(f"/api/v1/simulations/{uuid.uuid4()}/")
 
         self.assertEqual(response.status_code, 404)
-        
+
     def test_queue_timeline_tracks_overlapping_waiting_periods(self):
         vessel_result = SimulationResult.objects.get(
             simulation_run=self.simulation_run,
