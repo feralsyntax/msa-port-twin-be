@@ -502,6 +502,10 @@ class SimulationDetailView(APIView):
                 "created_at": simulation_run.created_at,
                 "summary": results.get("summary"),
                 "vessel_results": results.get("vessel_results"),
+                "baseline_summary": results.get("baseline_summary"),
+                "baseline_vessel_results": results.get("baseline_vessel_results"),
+                "crane_schedule": results.get("crane_schedule"),
+                "policy_comparison": results.get("policy_comparison"),
                 "queue_timeline": (
                     build_queue_timeline(
                         results["vessel_results"],
