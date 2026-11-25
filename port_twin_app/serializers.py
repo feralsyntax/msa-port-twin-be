@@ -447,6 +447,8 @@ class ScenarioParametersSerializer(serializers.Serializer):
                     }
                 )
 
+            attrs["marine_prediction_id"] = str(prediction_id)
+
         return attrs
 
 
