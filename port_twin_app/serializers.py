@@ -593,6 +593,11 @@ class VesselSimulationResultSerializer(serializers.Serializer):
         allow_null=True,
         required=False,
     )
+    allocated_cranes = serializers.IntegerField(required=False)
+    allocated_crane_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+    )
 
 
 class VesselResultsSerializer(serializers.Serializer):
@@ -630,6 +635,10 @@ class SimulationDetailResponseSerializer(serializers.Serializer):
     )
     marine_conditions = serializers.JSONField(allow_null=True)
     nominal_piloting_speed_schedule = serializers.JSONField(allow_null=True)
+    baseline_summary = serializers.JSONField(allow_null=True)
+    baseline_vessel_results = serializers.JSONField(allow_null=True)
+    crane_schedule = serializers.JSONField(allow_null=True)
+    policy_comparison = serializers.JSONField(allow_null=True)
 
 
 class SimulationErrorResponseSerializer(serializers.Serializer):
