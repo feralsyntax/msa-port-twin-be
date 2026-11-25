@@ -304,6 +304,35 @@ class NonNegativeIntegerField(serializers.IntegerField):
         return super().to_internal_value(data)
 
 
+class NonNegativeFiniteFloatField(serializers.FloatField):
+    def to_internal_value(self, data):
+        if isinstance(data, bool):
+            raise serializers.ValidationError("A numeric value is required.")
+
+        value = super().to_internal_value(data)
+
+        if not math.isfinite(value) or value < 0:
+            raise serializers.ValidationError(
+                "Ensure this value is finite and non-negative."
+            )
+
+        return value
+
+
+class NominalPilotingSpeedPeriodSerializer(serializers.Serializer):
+    start_hour = NonNegativeFiniteFloatField()
+    end_hour = NonNegativeFiniteFloatField()
+    speed_knots = PositiveFiniteFloatField()
+
+    def validate(self, attrs):
+        if attrs["end_hour"] <= attrs["start_hour"]:
+            raise serializers.ValidationError(
+                "End hour must be greater than start hour."
+            )
+
+        return attrs
+
+
 class ScenarioParametersSerializer(serializers.Serializer):
     simulation_hours = PositiveFiniteFloatField()
 
@@ -347,6 +376,12 @@ class ScenarioParametersSerializer(serializers.Serializer):
     )
 
     marine_prediction_id = serializers.UUIDField(required=False)
+
+    nominal_piloting_speed_schedule = NominalPilotingSpeedPeriodSerializer(
+        many=True,
+        required=False,
+        allow_empty=False,
+    )
 
     def to_internal_value(self, data):
         if isinstance(data, dict):
@@ -429,6 +464,43 @@ class ScenarioParametersSerializer(serializers.Serializer):
                         ]
                     }
                 )
+
+        speed_schedule = attrs.get("nominal_piloting_speed_schedule")
+
+        if speed_schedule is not None:
+            simulation_hours = attrs["simulation_hours"]
+
+            ordered_periods = sorted(
+                speed_schedule,
+                key=lambda period: period["start_hour"],
+            )
+
+            previous_end_hour = None
+
+            for period in ordered_periods:
+                if period["end_hour"] > simulation_hours:
+                    raise serializers.ValidationError(
+                        {
+                            "nominal_piloting_speed_schedule": [
+                                "Schedule periods cannot extend beyond "  # noqa: ISC004
+                                "the simulation duration."
+                            ]
+                        }
+                    )
+
+                if (
+                    previous_end_hour is not None
+                    and period["start_hour"] < previous_end_hour
+                ):
+                    raise serializers.ValidationError(
+                        {
+                            "nominal_piloting_speed_schedule": [
+                                "Schedule periods cannot overlap."
+                            ]
+                        }
+                    )
+
+                previous_end_hour = period["end_hour"]
 
         prediction_id = attrs.get("marine_prediction_id")
 
