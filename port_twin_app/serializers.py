@@ -629,6 +629,7 @@ class SimulationDetailResponseSerializer(serializers.Serializer):
         allow_null=True,
     )
     marine_conditions = serializers.JSONField(allow_null=True)
+    nominal_piloting_speed_schedule = serializers.JSONField(allow_null=True)
 
 
 class SimulationErrorResponseSerializer(serializers.Serializer):
