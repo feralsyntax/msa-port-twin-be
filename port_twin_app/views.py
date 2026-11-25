@@ -510,6 +510,9 @@ class SimulationDetailView(APIView):
                     else None
                 ),
                 "marine_conditions": results.get("marine_conditions"),
+                "nominal_piloting_speed_schedule": results.get(
+                    "nominal_piloting_speed_schedule"
+                ),
             },
             status=status.HTTP_200_OK,
         )
