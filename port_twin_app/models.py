@@ -540,3 +540,107 @@ class BathymetryDataset(models.Model):
             f"{self.provider} {self.dataset_version} "
             f"({self.zone}, {self.quality_status})"
         )
+
+
+class TerminalEDIMessage(models.Model):
+    """Stores received terminal EDI messages and their processing status."""
+
+    class MessageType(models.TextChoices):
+        COPARN = "COPARN", "Container announcement"
+        CODECO = "CODECO", "Container gate-in/gate-out report"
+        COARRI = "COARRI", "Container discharge/loading report"
+
+    class ProcessingStatus(models.TextChoices):
+        RECEIVED = "received", "Received"
+        PROCESSED = "processed", "Processed"
+        FAILED = "failed", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source = models.CharField(max_length=100)
+    message_type = models.CharField(max_length=10, choices=MessageType.choices)
+    message_reference = models.CharField(max_length=100, blank=True)
+    fingerprint = models.CharField(max_length=64)
+    raw_message = models.TextField()
+    status = models.CharField(
+        max_length=20,
+        choices=ProcessingStatus.choices,
+        default=ProcessingStatus.RECEIVED,
+    )
+    error_message = models.TextField(blank=True)
+    is_synthetic = models.BooleanField(default=False)
+    received_at = models.DateTimeField()
+    processed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-received_at"]  # noqa: RUF012
+        constraints = [  # noqa: RUF012
+            models.UniqueConstraint(
+                fields=["source", "fingerprint"],
+                name="unique_terminal_edi_message",
+            ),
+        ]
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["message_type", "status"]),
+            models.Index(fields=["received_at"]),
+            models.Index(fields=["is_synthetic", "received_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.message_type} from {self.source} ({self.status})"
+
+
+class TerminalOperationalEvent(models.Model):
+    """Stores normalized terminal activities extracted from EDI messages."""
+
+    class EventType(models.TextChoices):
+        PRE_ADVICE = "pre_advice", "Container pre-advice"
+        GATE_IN = "gate_in", "Container gate-in"
+        GATE_OUT = "gate_out", "Container gate-out"
+        DISCHARGE = "discharge", "Container discharge"
+        LOADING = "loading", "Container loading"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    edi_message = models.ForeignKey(
+        TerminalEDIMessage,
+        on_delete=models.CASCADE,
+        related_name="operational_events",
+    )
+    event_fingerprint = models.CharField(max_length=64)
+    event_type = models.CharField(max_length=20, choices=EventType.choices)
+    vessel = models.ForeignKey(
+        Vessel,
+        on_delete=models.SET_NULL,
+        related_name="terminal_events",
+        null=True,
+        blank=True,
+    )
+    berth = models.ForeignKey(
+        Berth,
+        on_delete=models.SET_NULL,
+        related_name="terminal_events",
+        null=True,
+        blank=True,
+    )
+    container_reference = models.CharField(max_length=20, blank=True)
+    crane_reference = models.CharField(max_length=100, blank=True)
+    occurred_at = models.DateTimeField(null=True, blank=True)
+    metadata = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-occurred_at", "-created_at"]  # noqa: RUF012
+        constraints = [  # noqa: RUF012
+            models.UniqueConstraint(
+                fields=["edi_message", "event_fingerprint"],
+                name="unique_terminal_edi_event",
+            ),
+        ]
+        indexes = [  # noqa: RUF012
+            models.Index(fields=["event_type", "occurred_at"]),
+            models.Index(fields=["vessel", "occurred_at"]),
+            models.Index(fields=["berth", "occurred_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.event_type} from EDI message {self.edi_message_id}"
