@@ -647,3 +647,45 @@ class CraneAwareSimulationTests(SimpleTestCase):
                 self.berths,
                 config,
             )
+
+    def test_honours_vessel_type_priorities(self):
+        vessels = [
+            SimulationVessel(
+                "V1",
+                200,
+                10,
+                vessel_type="standard",
+            ),
+            SimulationVessel(
+                "V2",
+                180,
+                9,
+                vessel_type="priority",
+            ),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=2,
+            arrival_interval_hours=0,
+            service_time_hours=8,
+            vessel_type_priorities={
+                "standard": 5,
+                "priority": 1,
+            },
+            available_cranes=1,
+            max_cranes_per_vessel=1,
+        )
+
+        output = run_crane_aware_simulation(
+            vessels,
+            self.berths,
+            config,
+            policy="baseline",
+        )
+
+        first_served = min(
+            output.vessel_results,
+            key=lambda result: result.service_order,
+        )
+
+        self.assertEqual(first_served.vessel_id, "V2")
