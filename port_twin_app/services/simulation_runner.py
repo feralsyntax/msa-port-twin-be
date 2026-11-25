@@ -1,5 +1,6 @@
 import math
 import random
+from dataclasses import replace
 from decimal import Decimal
 from numbers import Real
 
@@ -11,7 +12,7 @@ from port_twin_app.services.simulation import (
     SimulationBerth,
     SimulationConfig,
     SimulationVessel,
-    run_simulation,
+    run_crane_aware_simulation,
 )
 
 DEFAULT_RANDOM_SEED = 42
@@ -295,16 +296,22 @@ def run_scenario_simulation(scenario: Scenario):
 
         expected_arrivals = len(vessels)
 
-    config = SimulationConfig(
-        duration_hours=duration_hours,
-        expected_arrivals=expected_arrivals,
-        arrival_interval_hours=arrival_interval,
-        service_time_hours=service_time_hours,
-        vessel_type_priorities=vessel_type_priorities,
-    )
-
     available_berths = parameters.get("available_berths", 2)
     _validate_non_negative_integer(available_berths, "Available berths")
+
+    # Validate crane configuration.
+    available_cranes = parameters.get("available_cranes", 4)
+    max_cranes_per_vessel = parameters.get("max_cranes_per_vessel", 2)
+
+    for name, value in (
+        ("Available cranes", available_cranes),
+        ("Maximum cranes per vessel", max_cranes_per_vessel),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be a positive integer.")
+
+    if max_cranes_per_vessel > available_cranes:
+        raise ValueError("Maximum cranes per vessel cannot exceed available cranes.")
 
     berth_records = list(
         Berth.objects.filter(status=Berth.OperationalStatus.ACTIVE).order_by("id")[
@@ -321,6 +328,16 @@ def run_scenario_simulation(scenario: Scenario):
                 "Active berths must have valid length and draft capacity limits."
             )
 
+    config = SimulationConfig(
+        duration_hours=duration_hours,
+        expected_arrivals=expected_arrivals,
+        arrival_interval_hours=arrival_interval,
+        service_time_hours=service_time_hours,
+        vessel_type_priorities=vessel_type_priorities,
+        available_cranes=available_cranes,
+        max_cranes_per_vessel=max_cranes_per_vessel,
+    )
+
     berths = [
         SimulationBerth(
             berth_id=str(berth.id),
@@ -330,4 +347,21 @@ def run_scenario_simulation(scenario: Scenario):
         for berth in berth_records
     ]
 
-    return run_simulation(vessels, berths, config)
+    baseline_output = run_crane_aware_simulation(
+        vessels,
+        berths,
+        config,
+        policy="baseline",
+    )
+
+    optimised_output = run_crane_aware_simulation(
+        vessels,
+        berths,
+        config,
+        policy="optimised",
+    )
+
+    return replace(
+        optimised_output,
+        baseline_output=baseline_output,
+    )

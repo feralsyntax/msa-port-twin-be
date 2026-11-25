@@ -1701,13 +1701,25 @@ components:
           nullable: true
         nominal_piloting_speed_schedule:
           nullable: true
+        baseline_summary:
+          nullable: true
+        baseline_vessel_results:
+          nullable: true
+        crane_schedule:
+          nullable: true
+        policy_comparison:
+          nullable: true
       required:
+      - baseline_summary
+      - baseline_vessel_results
       - completed_at
+      - crane_schedule
       - created_at
       - error_message
       - id
       - marine_conditions
       - nominal_piloting_speed_schedule
+      - policy_comparison
       - queue_timeline
       - scenario_id
       - scenario_name
@@ -2120,6 +2132,12 @@ components:
         reason:
           type: string
           nullable: true
+        allocated_cranes:
+          type: integer
+        allocated_crane_ids:
+          type: array
+          items:
+            type: integer
       required:
       - arrival_hour
       - berth_id

@@ -51,8 +51,76 @@ class SimulationDetailAPITests(TestCase):
                         "waiting_hours": 0.0,
                         "status": "completed",
                         "reason": "No compatible berth was available.",
+                        "allocated_cranes": 2,
+                        "allocated_crane_ids": [1, 2],
                     }
                 ]
+            },
+        )
+
+        SimulationResult.objects.create(
+            simulation_run=cls.simulation_run,
+            result_type="baseline_summary",
+            data={
+                "total_arrivals": 1,
+                "vessels_served": 1,
+                "vessels_waiting": 0,
+                "vessels_in_service": 0,
+                "average_waiting_hours": 2.0,
+                "average_turnaround_hours": 10.0,
+                "berth_utilization_percent": 33.33,
+            },
+        )
+
+        SimulationResult.objects.create(
+            simulation_run=cls.simulation_run,
+            result_type="baseline_vessel_results",
+            data={
+                "vessels": [
+                    {
+                        "vessel_id": "test-vessel-1",
+                        "arrival_hour": 0.0,
+                        "berth_id": "test-berth-1",
+                        "service_start_hour": 2.0,
+                        "service_time_hours": 8.0,
+                        "service_order": 1,
+                        "departure_hour": 10.0,
+                        "waiting_hours": 2.0,
+                        "status": "completed",
+                        "reason": None,
+                        "allocated_cranes": 1,
+                        "allocated_crane_ids": [1],
+                    }
+                ]
+            },
+        )
+
+        SimulationResult.objects.create(
+            simulation_run=cls.simulation_run,
+            result_type="crane_schedule",
+            data={
+                "unit": "simulation_hours",
+                "assignments": [
+                    {
+                        "crane_id": 1,
+                        "vessel_id": "test-vessel-1",
+                        "berth_id": "test-berth-1",
+                        "start_hour": 0.0,
+                        "end_hour": 4.0,
+                    }
+                ],
+            },
+        )
+
+        SimulationResult.objects.create(
+            simulation_run=cls.simulation_run,
+            result_type="policy_comparison",
+            data={
+                "baseline": {"average_waiting_hours": 2.0},
+                "optimised": {"average_waiting_hours": 0.0},
+                "optimised_minus_baseline": {
+                    "average_waiting_hours": -2.0,
+                },
             },
         )
 
@@ -175,6 +243,25 @@ class SimulationDetailAPITests(TestCase):
         self.assertIn(
             "not navigational advice",
             speed_schedule["description"],
+        )
+
+        self.assertEqual(
+            response.data["baseline_summary"]["average_waiting_hours"],
+            2.0,
+        )
+        self.assertEqual(
+            response.data["baseline_vessel_results"]["vessels"][0]["allocated_cranes"],
+            1,
+        )
+        self.assertEqual(
+            response.data["crane_schedule"]["assignments"][0]["crane_id"],
+            1,
+        )
+        self.assertEqual(
+            response.data["policy_comparison"]["optimised_minus_baseline"][
+                "average_waiting_hours"
+            ],
+            -2.0,
         )
 
     def test_nonexistent_simulation_returns_404(self):

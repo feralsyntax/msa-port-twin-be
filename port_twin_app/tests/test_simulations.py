@@ -4,6 +4,7 @@ from port_twin_app.services.simulation import (
     SimulationBerth,
     SimulationConfig,
     SimulationVessel,
+    run_crane_aware_simulation,
     run_simulation,
 )
 
@@ -542,3 +543,228 @@ class VesselPrioritySchedulingTests(SimpleTestCase):
 
             with self.subTest(priorities=priorities), self.assertRaises(ValueError):
                 run_simulation([vessel], self.berths, config)
+
+
+class CraneAwareSimulationTests(SimpleTestCase):
+    def setUp(self):
+        self.vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+        ]
+        self.berths = [
+            SimulationBerth("B1", 250, 15),
+        ]
+        self.config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=2,
+            arrival_interval_hours=0,
+            service_time_hours=8,
+            available_cranes=2,
+            max_cranes_per_vessel=2,
+        )
+
+    def test_baseline_does_not_allocate_cranes(self):
+        output = run_crane_aware_simulation(
+            self.vessels,
+            self.berths,
+            self.config,
+            policy="baseline",
+        )
+
+        self.assertEqual(
+            [result.allocated_cranes for result in output.vessel_results],
+            [0, 0],
+        )
+        self.assertEqual(
+            [result.service_time_hours for result in output.vessel_results],
+            [8, 8],
+        )
+
+    def test_optimised_policy_can_allocate_multiple_cranes(self):
+        output = run_crane_aware_simulation(
+            self.vessels,
+            self.berths,
+            self.config,
+            policy="optimised",
+        )
+
+        first, second = output.vessel_results
+
+        self.assertEqual(first.allocated_cranes, 2)
+        self.assertEqual(first.service_time_hours, 4)
+        self.assertEqual(first.departure_hour, 4)
+
+        self.assertEqual(second.service_start_hour, 4)
+        self.assertEqual(second.departure_hour, 8)
+
+    def test_rejects_invalid_policy(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            "Policy must be 'baseline' or 'optimised'.",
+        ):
+            run_crane_aware_simulation(
+                self.vessels,
+                self.berths,
+                self.config,
+                policy="unknown",
+            )
+
+    def test_rejects_zero_available_cranes(self):
+        config = SimulationConfig(
+            24,
+            2,
+            0,
+            8,
+            available_cranes=0,
+        )
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Available cranes must be a positive integer.",
+        ):
+            run_crane_aware_simulation(
+                self.vessels,
+                self.berths,
+                config,
+            )
+
+    def test_rejects_maximum_cranes_above_capacity(self):
+        config = SimulationConfig(
+            24,
+            2,
+            0,
+            8,
+            available_cranes=2,
+            max_cranes_per_vessel=3,
+        )
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Maximum cranes per vessel cannot exceed available cranes.",
+        ):
+            run_crane_aware_simulation(
+                self.vessels,
+                self.berths,
+                config,
+            )
+
+    def test_honours_vessel_type_priorities(self):
+        vessels = [
+            SimulationVessel(
+                "V1",
+                200,
+                10,
+                vessel_type="standard",
+            ),
+            SimulationVessel(
+                "V2",
+                180,
+                9,
+                vessel_type="priority",
+            ),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=2,
+            arrival_interval_hours=0,
+            service_time_hours=8,
+            vessel_type_priorities={
+                "standard": 5,
+                "priority": 1,
+            },
+            available_cranes=1,
+            max_cranes_per_vessel=1,
+        )
+
+        output = run_crane_aware_simulation(
+            vessels,
+            self.berths,
+            config,
+            policy="baseline",
+        )
+
+        first_served = min(
+            output.vessel_results,
+            key=lambda result: result.service_order,
+        )
+
+        self.assertEqual(first_served.vessel_id, "V2")
+
+    def test_cranes_cannot_be_shared_by_simultaneous_vessels(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+        ]
+        berths = [
+            SimulationBerth("B1", 250, 15),
+            SimulationBerth("B2", 250, 15),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=2,
+            arrival_interval_hours=0,
+            service_time_hours=8,
+            available_cranes=1,
+            max_cranes_per_vessel=1,
+        )
+
+        output = run_crane_aware_simulation(vessels, berths, config, policy="optimised")
+
+        first, second = output.vessel_results
+
+        self.assertEqual(first.service_start_hour, 0)
+        self.assertEqual(first.departure_hour, 8)
+        self.assertEqual(second.service_start_hour, 8)
+
+    def test_berth_and_crane_availability_both_affect_start_time(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+        ]
+        berths = [
+            SimulationBerth("B1", 250, 15),
+            SimulationBerth("B2", 250, 15),
+        ]
+        config = SimulationConfig(
+            duration_hours=24,
+            expected_arrivals=2,
+            arrival_interval_hours=0,
+            service_time_hours=8,
+            available_cranes=2,
+            max_cranes_per_vessel=1,
+        )
+
+        output = run_crane_aware_simulation(vessels, berths, config, policy="optimised")
+
+        first, second = output.vessel_results
+
+        self.assertEqual(first.service_start_hour, 0)
+        self.assertEqual(second.service_start_hour, 0)
+        self.assertNotEqual(first.berth_id, second.berth_id)
+
+    def test_vessel_waiting_beyond_horizon_does_not_reserve_cranes(self):
+        vessels = [
+            SimulationVessel("V1", 200, 10),
+            SimulationVessel("V2", 180, 9),
+        ]
+        config = SimulationConfig(
+            duration_hours=5,
+            expected_arrivals=2,
+            arrival_interval_hours=0,
+            service_time_hours=8,
+            available_cranes=1,
+            max_cranes_per_vessel=1,
+        )
+
+        output = run_crane_aware_simulation(
+            vessels, self.berths, config, policy="optimised"
+        )
+
+        first, second = output.vessel_results
+
+        self.assertEqual(first.status, "in_service")
+        self.assertEqual(first.service_start_hour, 0)
+
+        self.assertEqual(second.status, "waiting")
+        self.assertIsNone(second.service_start_hour)
+        self.assertEqual(second.allocated_cranes, 0)
