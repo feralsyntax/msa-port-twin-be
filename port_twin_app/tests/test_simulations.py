@@ -563,7 +563,7 @@ class CraneAwareSimulationTests(SimpleTestCase):
             max_cranes_per_vessel=2,
         )
 
-    def test_baseline_assigns_one_crane_per_vessel(self):
+    def test_baseline_does_not_allocate_cranes(self):
         output = run_crane_aware_simulation(
             self.vessels,
             self.berths,
@@ -573,7 +573,7 @@ class CraneAwareSimulationTests(SimpleTestCase):
 
         self.assertEqual(
             [result.allocated_cranes for result in output.vessel_results],
-            [1, 1],
+            [0, 0],
         )
         self.assertEqual(
             [result.service_time_hours for result in output.vessel_results],
@@ -708,7 +708,7 @@ class CraneAwareSimulationTests(SimpleTestCase):
             max_cranes_per_vessel=1,
         )
 
-        output = run_crane_aware_simulation(vessels, berths, config, policy="baseline")
+        output = run_crane_aware_simulation(vessels, berths, config, policy="optimised")
 
         first, second = output.vessel_results
 
@@ -734,7 +734,7 @@ class CraneAwareSimulationTests(SimpleTestCase):
             max_cranes_per_vessel=1,
         )
 
-        output = run_crane_aware_simulation(vessels, berths, config, policy="baseline")
+        output = run_crane_aware_simulation(vessels, berths, config, policy="optimised")
 
         first, second = output.vessel_results
 
@@ -757,7 +757,7 @@ class CraneAwareSimulationTests(SimpleTestCase):
         )
 
         output = run_crane_aware_simulation(
-            vessels, self.berths, config, policy="baseline"
+            vessels, self.berths, config, policy="optimised"
         )
 
         first, second = output.vessel_results
