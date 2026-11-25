@@ -34,6 +34,8 @@ class SimulationConfig:
     arrival_interval_hours: float | None
     service_time_hours: float
     vessel_type_priorities: dict[str, int] | None = None
+    available_cranes: int = 4
+    max_cranes_per_vessel: int = 2
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,7 @@ class VesselSimulationResult:
     reason: str | None = None
     service_time_hours: float | None = None
     service_order: int | None = None
+    allocated_cranes: int = 0
 
 
 @dataclass(frozen=True)
