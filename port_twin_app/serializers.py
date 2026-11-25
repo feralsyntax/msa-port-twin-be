@@ -495,6 +495,14 @@ class VesselSimulationResultSerializer(serializers.Serializer):
     arrival_hour = serializers.FloatField()
     berth_id = serializers.CharField(allow_null=True)
     service_start_hour = serializers.FloatField(allow_null=True)
+    service_time_hours = serializers.FloatField(
+        allow_null=True,
+        required=False,
+    )
+    service_order = serializers.IntegerField(
+        allow_null=True,
+        required=False,
+    )
     departure_hour = serializers.FloatField(allow_null=True)
     waiting_hours = serializers.FloatField(allow_null=True)
     status = serializers.CharField()
@@ -537,6 +545,7 @@ class SimulationDetailResponseSerializer(serializers.Serializer):
         many=True,
         allow_null=True,
     )
+    marine_conditions = serializers.JSONField(allow_null=True)
 
 
 class SimulationErrorResponseSerializer(serializers.Serializer):
