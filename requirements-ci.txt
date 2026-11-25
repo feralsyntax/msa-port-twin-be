@@ -1,0 +1,5 @@
+-r requirements.txt
+-r requirements-data.txt
+
+# CI linting
+ruff==0.14.10
