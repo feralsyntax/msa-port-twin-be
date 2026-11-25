@@ -177,7 +177,11 @@ Load it using:
 python manage.py seed_demo_data
 ```
 
-## Tests
+## Checks
+
+Before making a pull request, make the followig checks:
+
+### Tests
 
 The backend tests are located in:
 
@@ -199,13 +203,13 @@ The test suite covers:
 - Marine AI models, training, evaluation, and inference.
 - ModelArts integration and marine prediction APIs.
 
-### Run the complete test suite
+#### Run the complete test suite
 
 ```bash
 python manage.py test
 ```
 
-### Run an individual test module
+#### Run an individual test module
 
 ```bash
 python manage.py test port_twin_app.tests.test_simulations
@@ -223,6 +227,14 @@ python manage.py check
 
 ```bash
 python manage.py makemigrations --check --dry-run
+```
+
+### Check linting
+
+```bash
+ruff check port_twin_app port_twin_proj scripts \
+  --select E4,E7,E9,F \
+  --exclude '*/migrations/*'
 ```
 
 ## Continuous Integration
