@@ -86,7 +86,10 @@ class MarineConditionAdvisoryTests(SimpleTestCase):
     def test_rejects_different_output_shapes(self):
         self.prediction.result_data["current_v_ms"][0] = [[1.0]]
 
-        with self.assertRaisesMessage(ValueError, "different dimensions"):
+        with self.assertRaisesMessage(
+            ValueError,
+            "current_v_ms contains inconsistent forecast dimensions",
+        ):
             build_marine_condition_advisory(self.prediction)
 
     def test_rejects_wrong_forecast_step_count(self):
