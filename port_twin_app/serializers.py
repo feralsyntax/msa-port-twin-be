@@ -346,6 +346,8 @@ class ScenarioParametersSerializer(serializers.Serializer):
         required=False,
     )
 
+    marine_prediction_id = serializers.UUIDField(required=False)
+
     def to_internal_value(self, data):
         if isinstance(data, dict):
             allowed_fields = set(self.fields)
@@ -424,6 +426,23 @@ class ScenarioParametersSerializer(serializers.Serializer):
                     {
                         "vessel_type_priorities": [
                             "Vessel type keys must be non-empty strings."
+                        ]
+                    }
+                )
+
+        prediction_id = attrs.get("marine_prediction_id")
+
+        if prediction_id is not None:
+            prediction_exists = MarinePrediction.objects.filter(
+                id=prediction_id,
+                status=MarinePrediction.Status.COMPLETED,
+            ).exists()
+
+            if not prediction_exists:
+                raise serializers.ValidationError(
+                    {
+                        "marine_prediction_id": [
+                            "A completed marine prediction with this ID does not exist."
                         ]
                     }
                 )
