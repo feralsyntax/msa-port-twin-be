@@ -233,8 +233,7 @@ python manage.py makemigrations --check --dry-run
 
 ```bash
 ruff check port_twin_app port_twin_proj scripts \
-  --select E4,E7,E9,F \
-  --exclude '*/migrations/*'
+  --select E4,E7,E9,F
 ```
 
 ## Continuous Integration
