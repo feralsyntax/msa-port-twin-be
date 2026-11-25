@@ -85,6 +85,33 @@ class SimulationDetailAPITests(TestCase):
             },
         )
 
+        SimulationResult.objects.create(
+            simulation_run=cls.simulation_run,
+            result_type="nominal_piloting_speed_schedule",
+            data={
+                "scope": "all_vessels",
+                "unit": "knots",
+                "label": "Nominal piloting speed assumptions",
+                "description": (
+                    "Configured planning assumptions only. "
+                    "These are not navigational advice or "
+                    "current-adjusted speed recommendations."
+                ),
+                "periods": [
+                    {
+                        "start_hour": 0,
+                        "end_hour": 6,
+                        "speed_knots": 8.0,
+                    },
+                    {
+                        "start_hour": 6,
+                        "end_hour": 24,
+                        "speed_knots": 10.0,
+                    },
+                ],
+            },
+        )
+
     def setUp(self):
         self.client = APIClient()
         self.url = f"/api/v1/simulations/{self.simulation_run.id}/"
@@ -137,6 +164,17 @@ class SimulationDetailAPITests(TestCase):
                 {"hour": 0.0, "vessels_waiting": 0},
                 {"hour": 24.0, "vessels_waiting": 0},
             ],
+        )
+
+        speed_schedule = response.data["nominal_piloting_speed_schedule"]
+
+        self.assertIsNotNone(speed_schedule)
+        self.assertEqual(speed_schedule["scope"], "all_vessels")
+        self.assertEqual(speed_schedule["unit"], "knots")
+        self.assertEqual(len(speed_schedule["periods"]), 2)
+        self.assertIn(
+            "not navigational advice",
+            speed_schedule["description"],
         )
 
     def test_nonexistent_simulation_returns_404(self):
@@ -192,4 +230,17 @@ class SimulationDetailAPITests(TestCase):
                 {"hour": 6.0, "vessels_waiting": 0},
                 {"hour": 24.0, "vessels_waiting": 0},
             ],
+        )
+
+    def test_retrieve_simulation_without_speed_schedule_returns_null(self):
+        SimulationResult.objects.filter(
+            simulation_run=self.simulation_run,
+            result_type="nominal_piloting_speed_schedule",
+        ).delete()
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(
+            response.data["nominal_piloting_speed_schedule"],
         )
