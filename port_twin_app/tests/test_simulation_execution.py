@@ -81,9 +81,12 @@ class SimulationExecutionTests(TestCase):
                         arrival_hour=0,
                         berth_id="test-berth-1",
                         service_start_hour=0,
-                        departure_hour=8,
+                        service_time_hours=4,
+                        departure_hour=4,
                         waiting_hours=0,
                         status="completed",
+                        allocated_cranes=2,
+                        allocated_crane_ids=(1, 2),
                     ),
                 ),
                 summary=SimulationSummary(
@@ -92,8 +95,33 @@ class SimulationExecutionTests(TestCase):
                     vessels_waiting=0,
                     vessels_in_service=0,
                     average_waiting_hours=0,
-                    average_turnaround_hours=8,
-                    berth_utilization_percent=33.33,
+                    average_turnaround_hours=4,
+                    berth_utilization_percent=16.67,
+                ),
+                baseline_output=SimulationOutput(
+                    vessel_results=(
+                        VesselSimulationResult(
+                            vessel_id="test-vessel-1",
+                            arrival_hour=0,
+                            berth_id="test-berth-1",
+                            service_start_hour=2,
+                            service_time_hours=8,
+                            departure_hour=10,
+                            waiting_hours=2,
+                            status="completed",
+                            allocated_cranes=1,
+                            allocated_crane_ids=(1,),
+                        ),
+                    ),
+                    summary=SimulationSummary(
+                        total_arrivals=1,
+                        vessels_served=1,
+                        vessels_waiting=0,
+                        vessels_in_service=0,
+                        average_waiting_hours=2,
+                        average_turnaround_hours=10,
+                        berth_utilization_percent=33.33,
+                    ),
                 ),
             )
 
@@ -106,7 +134,7 @@ class SimulationExecutionTests(TestCase):
         self.assertIsNotNone(self.simulation_run.completed_at)
         self.assertEqual(
             SimulationResult.objects.filter(simulation_run=self.simulation_run).count(),
-            2,
+            6,
         )
 
         summary_result = SimulationResult.objects.get(
@@ -121,8 +149,8 @@ class SimulationExecutionTests(TestCase):
                 "vessels_waiting": 0,
                 "vessels_in_service": 0,
                 "average_waiting_hours": 0,
-                "average_turnaround_hours": 8,
-                "berth_utilization_percent": 33.33,
+                "average_turnaround_hours": 4,
+                "berth_utilization_percent": 16.67,
             },
         )
 
@@ -139,17 +167,81 @@ class SimulationExecutionTests(TestCase):
                         "arrival_hour": 0,
                         "berth_id": "test-berth-1",
                         "service_start_hour": 0,
-                        "service_time_hours": None,
+                        "service_time_hours": 4,
                         "service_order": None,
-                        "departure_hour": 8,
+                        "departure_hour": 4,
                         "waiting_hours": 0,
                         "status": "completed",
                         "reason": None,
-                        "allocated_cranes": 0,
-                        "allocated_crane_ids": [],
+                        "allocated_cranes": 2,
+                        "allocated_crane_ids": [1, 2],
                     }
                 ]
             },
+        )
+
+        baseline_summary = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="baseline_summary",
+        )
+        self.assertEqual(
+            baseline_summary.data["average_waiting_hours"],
+            2,
+        )
+        self.assertEqual(
+            baseline_summary.data["average_turnaround_hours"],
+            10,
+        )
+
+        baseline_vessels = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="baseline_vessel_results",
+        )
+        self.assertEqual(
+            baseline_vessels.data["vessels"][0]["allocated_cranes"],
+            1,
+        )
+
+        crane_schedule = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="crane_schedule",
+        )
+        self.assertEqual(
+            crane_schedule.data,
+            {
+                "unit": "simulation_hours",
+                "assignments": [
+                    {
+                        "crane_id": 1,
+                        "vessel_id": "test-vessel-1",
+                        "berth_id": "test-berth-1",
+                        "start_hour": 0,
+                        "end_hour": 4,
+                    },
+                    {
+                        "crane_id": 2,
+                        "vessel_id": "test-vessel-1",
+                        "berth_id": "test-berth-1",
+                        "start_hour": 0,
+                        "end_hour": 4,
+                    },
+                ],
+            },
+        )
+
+        policy_comparison = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="policy_comparison",
+        )
+        self.assertEqual(
+            policy_comparison.data["optimised_minus_baseline"]["average_waiting_hours"],
+            -2,
+        )
+        self.assertEqual(
+            policy_comparison.data["optimised_minus_baseline"][
+                "average_turnaround_hours"
+            ],
+            -6,
         )
 
     def test_successful_run_persists_marine_conditions(self):
