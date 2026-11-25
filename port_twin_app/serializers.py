@@ -324,6 +324,17 @@ class NominalPilotingSpeedPeriodSerializer(serializers.Serializer):
     end_hour = NonNegativeFiniteFloatField()
     speed_knots = PositiveFiniteFloatField()
 
+    def to_internal_value(self, data):
+        if isinstance(data, dict):
+            unknown_fields = set(data.keys()) - set(self.fields.keys())
+
+            if unknown_fields:
+                raise serializers.ValidationError(
+                    {field: ["Unknown field."] for field in sorted(unknown_fields)}
+                )
+
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         if attrs["end_hour"] <= attrs["start_hour"]:
             raise serializers.ValidationError(
