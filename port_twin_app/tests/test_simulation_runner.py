@@ -85,6 +85,9 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertEqual(config.arrival_interval_hours, 2)
         self.assertEqual(config.service_time_hours, 8)
 
+        self.assertEqual(config.available_cranes, 4)
+        self.assertEqual(config.max_cranes_per_vessel, 2)
+
     def test_rejects_negative_expected_arrivals(self):
         self.scenario.parameters["expected_vessel_arrivals"] = -1
         self.scenario.save()
@@ -138,7 +141,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         baseline_result = self.make_simulation_output()
         optimised_result = self.make_simulation_output()
-        
+
         mock_run.side_effect = [baseline_result, optimised_result]
 
         result = run_scenario_simulation(self.scenario)
@@ -502,3 +505,91 @@ class ScenarioSimulationRunnerTests(TestCase):
 
         self.assertEqual(vessels, [])
         self.assertEqual(config.expected_arrivals, 0)
+
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
+    def test_uses_custom_crane_settings(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
+
+        self.scenario.parameters.update(
+            {
+                "available_cranes": 6,
+                "max_cranes_per_vessel": 3,
+            }
+        )
+        self.scenario.save()
+
+        run_scenario_simulation(self.scenario)
+
+        _, _, config = mock_run.call_args.args
+
+        self.assertEqual(config.available_cranes, 6)
+        self.assertEqual(config.max_cranes_per_vessel, 3)
+
+    def test_rejects_invalid_crane_counts(self):
+        invalid_settings = [
+            ("available_cranes", 0, "Available cranes"),
+            ("available_cranes", -1, "Available cranes"),
+            ("available_cranes", 1.5, "Available cranes"),
+            ("available_cranes", True, "Available cranes"),
+            ("max_cranes_per_vessel", 0, "Maximum cranes per vessel"),
+            ("max_cranes_per_vessel", -1, "Maximum cranes per vessel"),
+            ("max_cranes_per_vessel", 1.5, "Maximum cranes per vessel"),
+            ("max_cranes_per_vessel", True, "Maximum cranes per vessel"),
+        ]
+
+        for parameter, value, label in invalid_settings:
+            with self.subTest(parameter=parameter, value=value):
+                self.scenario.parameters[parameter] = value
+                self.scenario.save()
+
+                with self.assertRaisesMessage(
+                    ValueError,
+                    f"{label} must be a positive integer.",
+                ):
+                    run_scenario_simulation(self.scenario)
+
+                del self.scenario.parameters[parameter]
+                self.scenario.save()
+
+    def test_rejects_maximum_cranes_exceeding_available_cranes(self):
+        self.scenario.parameters.update(
+            {
+                "available_cranes": 2,
+                "max_cranes_per_vessel": 3,
+            }
+        )
+        self.scenario.save()
+
+        with self.assertRaisesMessage(
+            ValueError,
+            "Maximum cranes per vessel cannot exceed available cranes.",
+        ):
+            run_scenario_simulation(self.scenario)
+
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
+    def test_both_policies_receive_identical_simulation_inputs(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
+
+        run_scenario_simulation(self.scenario)
+
+        self.assertEqual(mock_run.call_count, 2)
+
+        baseline_call, optimised_call = mock_run.call_args_list
+
+        self.assertEqual(
+            baseline_call.args,
+            optimised_call.args,
+        )
+        self.assertEqual(
+            baseline_call.kwargs,
+            {"policy": "baseline"},
+        )
+        self.assertEqual(
+            optimised_call.kwargs,
+            {"policy": "optimised"},
+        )
+
+        # Both policies receive the same actual input objects.
+        self.assertIs(baseline_call.args[0], optimised_call.args[0])
+        self.assertIs(baseline_call.args[1], optimised_call.args[1])
+        self.assertIs(baseline_call.args[2], optimised_call.args[2])
