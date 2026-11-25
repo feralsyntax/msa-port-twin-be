@@ -1,0 +1,12 @@
+[tool.ruff]
+extend-exclude = [
+    "**/migrations/**",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"port_twin_proj/settings_dev.py" = ["F403", "F405"]
+"port_twin_proj/settings_prod.py" = ["F403", "F405"]
+"scripts/generate_marine_dataset.py" = ["E402"]
+"scripts/prepare_offshore_marine_dataset.py" = ["E402"]
+"scripts/train_marine_fno_v2.py" = ["E402"]
+"scripts/train_offshore_fno.py" = ["E402"]
