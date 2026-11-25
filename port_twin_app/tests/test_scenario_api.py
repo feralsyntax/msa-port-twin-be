@@ -1,7 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from port_twin_app.models import Scenario
+from port_twin_app.models import MarinePrediction, Scenario
 
 
 class ScenarioAPITests(APITestCase):
@@ -111,6 +111,17 @@ class ScenarioParameterConfigurationAPITests(APITestCase):
         }
 
         return self.client.post(self.url, payload, format="json")
+
+    def create_prediction(self, status=MarinePrediction.Status.COMPLETED):
+        return MarinePrediction.objects.create(
+            grid={"west": 39.5, "east": 39.8},
+            forecast={"steps": 6},
+            input_data={"source": "test"},
+            result_data={"status": "completed"},
+            model_version="fno-test-1",
+            contract_version="2.0",
+            status=status,
+        )
 
     def test_accepts_stochastic_arrival_configuration(self):
         response = self.create_scenario(
@@ -249,6 +260,74 @@ class ScenarioParameterConfigurationAPITests(APITestCase):
                 "arrival_interval_hours": 2,
                 "average_service_time_hours": 8,
                 "random_seed": -1,
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+    def test_accepts_completed_marine_prediction(self):
+        prediction = self.create_prediction()
+
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": str(prediction.id),
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["parameters"]["marine_prediction_id"],
+            str(prediction.id),
+        )
+
+
+    def test_rejects_non_completed_marine_prediction(self):
+        prediction = self.create_prediction(
+            status=MarinePrediction.Status.PENDING,
+        )
+
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": str(prediction.id),
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+    def test_rejects_unknown_marine_prediction_id(self):
+        import uuid
+
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": str(uuid.uuid4()),
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+    def test_rejects_invalid_marine_prediction_id(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "marine_prediction_id": "not-a-uuid",
             }
         )
 
