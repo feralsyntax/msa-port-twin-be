@@ -108,6 +108,8 @@ class SimulationExecutionTests(TestCase):
                         "arrival_hour": 0,
                         "berth_id": "test-berth-1",
                         "service_start_hour": 0,
+                        "service_time_hours": None,
+                        "service_order": None,
                         "departure_hour": 8,
                         "waiting_hours": 0,
                         "status": "completed",
