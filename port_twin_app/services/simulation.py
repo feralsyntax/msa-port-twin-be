@@ -12,6 +12,8 @@ class SimulationVessel:
     length: float
     draft: float
     arrival_hour: float | None = None
+    vessel_type: str = "unknown"
+    service_time_hours: float | None = None
 
 
 @dataclass(frozen=True)
@@ -31,6 +33,7 @@ class SimulationConfig:
     expected_arrivals: int
     arrival_interval_hours: float | None
     service_time_hours: float
+    vessel_type_priorities: dict[str, int] | None = None
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,8 @@ class VesselSimulationResult:
     waiting_hours: float | None
     status: str
     reason: str | None = None
+    service_time_hours: float | None = None
+    service_order: int | None = None
 
 
 @dataclass(frozen=True)
@@ -266,7 +271,19 @@ def run_simulation(
             berth_available_at[berth.berth_id],
             arrival_hour,
         )
-        departure = service_start + config.service_time_hours
+        service_time = (
+            vessel.service_time_hours
+            if vessel.service_time_hours is not None
+            else config.service_time_hours
+        )
+
+        if not _is_finite_number(service_time) or service_time <= 0:
+            raise ValueError(
+                "Vessel service times must be finite numbers greater than zero."
+            )
+
+        departure = service_start + service_time
+
         waiting = service_start - arrival_hour
 
         if service_start >= config.duration_hours:
@@ -302,6 +319,8 @@ def run_simulation(
                 departure_hour=departure,
                 waiting_hours=waiting,
                 status=status,
+                service_time_hours=service_time,
+                service_order=index + 1,
             )
         )
 
