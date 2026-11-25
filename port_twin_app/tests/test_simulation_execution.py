@@ -206,6 +206,99 @@ class SimulationExecutionTests(TestCase):
         self.assertEqual(marine_result.data["scope"], "grid_level")
         self.assertEqual(len(marine_result.data["hourly_conditions"]), 6)
 
+    def test_successful_run_persists_nominal_speed_schedule(self):
+        from port_twin_app.services.simulation import (
+            SimulationOutput,
+            SimulationSummary,
+        )
+
+        schedule = [
+            {"start_hour": 0.0, "end_hour": 6.0, "speed_knots": 6.0},
+            {"start_hour": 6.0, "end_hour": 12.0, "speed_knots": 5.0},
+            {"start_hour": 12.0, "end_hour": 24.0, "speed_knots": 6.0},
+        ]
+
+        self.scenario.parameters["nominal_piloting_speed_schedule"] = schedule
+        self.scenario.save(update_fields=["parameters"])
+
+        output = SimulationOutput(
+            vessel_results=(),
+            summary=SimulationSummary(
+                total_arrivals=0,
+                vessels_served=0,
+                vessels_waiting=0,
+                vessels_in_service=0,
+                average_waiting_hours=0,
+                average_turnaround_hours=0,
+                berth_utilization_percent=0,
+            ),
+        )
+
+        with patch(
+            "port_twin_app.services.simulation_execution.run_scenario_simulation",
+            return_value=output,
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        self.simulation_run.refresh_from_db()
+
+        self.assertEqual(
+            self.simulation_run.status,
+            SimulationRun.Status.COMPLETED,
+        )
+
+        schedule_result = SimulationResult.objects.get(
+            simulation_run=self.simulation_run,
+            result_type="nominal_piloting_speed_schedule",
+        )
+
+        self.assertEqual(
+            schedule_result.data,
+            {
+                "scope": "all_vessels",
+                "unit": "knots",
+                "label": "Nominal piloting speed assumptions",
+                "description": (
+                    "Configured planning assumptions only. "
+                    "These are not navigational advice or "
+                    "current-adjusted speed recommendations."
+                ),
+                "periods": schedule,
+            },
+        )
+
+    def test_successful_run_without_speed_schedule_does_not_persist_one(self):
+        from port_twin_app.services.simulation import (
+            SimulationOutput,
+            SimulationSummary,
+        )
+
+        output = SimulationOutput(
+            vessel_results=(),
+            summary=SimulationSummary(
+                total_arrivals=0,
+                vessels_served=0,
+                vessels_waiting=0,
+                vessels_in_service=0,
+                average_waiting_hours=0,
+                average_turnaround_hours=0,
+                berth_utilization_percent=0,
+            ),
+        )
+
+        with patch(
+            "port_twin_app.services.simulation_execution.run_scenario_simulation",
+            return_value=output,
+        ):
+            execute_simulation_run(self.simulation_run)
+
+        self.assertFalse(
+            SimulationResult.objects.filter(
+                simulation_run=self.simulation_run,
+                result_type="nominal_piloting_speed_schedule",
+            ).exists()
+        )
+
     def test_run_fails_when_pinned_prediction_is_missing(self):
         from port_twin_app.services.simulation import (
             SimulationOutput,
