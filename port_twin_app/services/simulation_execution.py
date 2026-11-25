@@ -12,6 +12,107 @@ from port_twin_app.services.simulation_runner import run_scenario_simulation
 logger = logging.getLogger(__name__)
 
 
+def _serialize_summary(summary):
+    """Convert simulation summary metrics into JSON-compatible data."""
+
+    return {
+        "total_arrivals": summary.total_arrivals,
+        "vessels_served": summary.vessels_served,
+        "vessels_waiting": summary.vessels_waiting,
+        "vessels_in_service": summary.vessels_in_service,
+        "average_waiting_hours": summary.average_waiting_hours,
+        "average_turnaround_hours": summary.average_turnaround_hours,
+        "berth_utilization_percent": summary.berth_utilization_percent,
+    }
+
+
+def _serialize_vessel_results(vessel_results):
+    """Convert individual vessel outcomes into JSON-compatible data."""
+
+    return {
+        "vessels": [
+            {
+                "vessel_id": result.vessel_id,
+                "arrival_hour": result.arrival_hour,
+                "berth_id": result.berth_id,
+                "service_start_hour": result.service_start_hour,
+                "service_time_hours": result.service_time_hours,
+                "service_order": result.service_order,
+                "departure_hour": result.departure_hour,
+                "waiting_hours": result.waiting_hours,
+                "status": result.status,
+                "reason": result.reason,
+                "allocated_cranes": result.allocated_cranes,
+                "allocated_crane_ids": list(result.allocated_crane_ids),
+            }
+            for result in vessel_results
+        ]
+    }
+
+
+def _build_crane_schedule(vessel_results):
+    """Build a schedule containing each crane's assigned service period."""
+
+    assignments = []
+
+    for result in vessel_results:
+        if (
+            result.service_start_hour is None
+            or result.departure_hour is None
+            or not result.allocated_crane_ids
+        ):
+            continue
+
+        for crane_id in result.allocated_crane_ids:
+            assignments.append(
+                {
+                    "crane_id": crane_id,
+                    "vessel_id": result.vessel_id,
+                    "berth_id": result.berth_id,
+                    "start_hour": result.service_start_hour,
+                    "end_hour": result.departure_hour,
+                }
+            )
+
+    assignments.sort(
+        key=lambda assignment: (
+            assignment["start_hour"],
+            assignment["crane_id"],
+        )
+    )
+
+    return {
+        "unit": "simulation_hours",
+        "assignments": assignments,
+    }
+
+
+def _build_policy_comparison(baseline_summary, optimised_summary):
+    """Compare baseline and optimised simulation metrics."""
+
+    baseline = _serialize_summary(baseline_summary)
+    optimised = _serialize_summary(optimised_summary)
+
+    comparable_metrics = (
+        "total_arrivals",
+        "vessels_served",
+        "vessels_waiting",
+        "vessels_in_service",
+        "average_waiting_hours",
+        "average_turnaround_hours",
+        "berth_utilization_percent",
+    )
+
+    return {
+        "baseline": baseline,
+        "optimised": optimised,
+        "optimised_minus_baseline": {
+            metric: optimised[metric] - baseline[metric]
+            for metric in comparable_metrics
+        },
+    }
+
+
 def execute_simulation_run(simulation_run: SimulationRun):
     """Execute a pending simulation run and persist its results."""
 
@@ -61,42 +162,45 @@ def execute_simulation_run(simulation_run: SimulationRun):
             SimulationResult.objects.create(
                 simulation_run=simulation_run,
                 result_type="summary",
-                data={
-                    "total_arrivals": output.summary.total_arrivals,
-                    "vessels_served": output.summary.vessels_served,
-                    "vessels_waiting": output.summary.vessels_waiting,
-                    "vessels_in_service": output.summary.vessels_in_service,
-                    "average_waiting_hours": output.summary.average_waiting_hours,
-                    "average_turnaround_hours": (
-                        output.summary.average_turnaround_hours
-                    ),
-                    "berth_utilization_percent": (
-                        output.summary.berth_utilization_percent
-                    ),
-                },
+                data=_serialize_summary(output.summary),
             )
 
             SimulationResult.objects.create(
                 simulation_run=simulation_run,
                 result_type="vessel_results",
-                data={
-                    "vessels": [
-                        {
-                            "vessel_id": result.vessel_id,
-                            "arrival_hour": result.arrival_hour,
-                            "berth_id": result.berth_id,
-                            "service_start_hour": result.service_start_hour,
-                            "service_time_hours": result.service_time_hours,
-                            "service_order": result.service_order,
-                            "departure_hour": result.departure_hour,
-                            "waiting_hours": result.waiting_hours,
-                            "status": result.status,
-                            "reason": result.reason,
-                        }
-                        for result in output.vessel_results
-                    ]
-                },
+                data=_serialize_vessel_results(output.vessel_results),
             )
+
+            # Persist baseline and optimisation comparison when available.
+            if output.baseline_output is not None:
+                baseline_output = output.baseline_output
+
+                SimulationResult.objects.create(
+                    simulation_run=simulation_run,
+                    result_type="baseline_summary",
+                    data=_serialize_summary(baseline_output.summary),
+                )
+
+                SimulationResult.objects.create(
+                    simulation_run=simulation_run,
+                    result_type="baseline_vessel_results",
+                    data=_serialize_vessel_results(baseline_output.vessel_results),
+                )
+
+                SimulationResult.objects.create(
+                    simulation_run=simulation_run,
+                    result_type="crane_schedule",
+                    data=_build_crane_schedule(output.vessel_results),
+                )
+
+                SimulationResult.objects.create(
+                    simulation_run=simulation_run,
+                    result_type="policy_comparison",
+                    data=_build_policy_comparison(
+                        baseline_output.summary,
+                        output.summary,
+                    ),
+                )
 
             # Save marine advisory if a prediction was pinned to the scenario.
             if marine_conditions is not None:
