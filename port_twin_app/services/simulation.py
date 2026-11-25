@@ -74,6 +74,7 @@ class SimulationOutput:
 
     vessel_results: tuple[VesselSimulationResult, ...]
     summary: SimulationSummary
+    baseline_output: "SimulationOutput | None" = None
 
 
 def _is_finite_number(value: object) -> bool:
