@@ -4,6 +4,10 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from port_twin_app.models import Berth, Scenario, Vessel
+from port_twin_app.services.simulation import (
+    SimulationOutput,
+    SimulationSummary,
+)
 from port_twin_app.services.simulation_runner import run_scenario_simulation
 
 
@@ -32,6 +36,20 @@ class ScenarioSimulationRunnerTests(TestCase):
             status=Berth.OperationalStatus.ACTIVE,
         )
 
+    def make_simulation_output(self):
+        return SimulationOutput(
+            vessel_results=(),
+            summary=SimulationSummary(
+                total_arrivals=0,
+                vessels_served=0,
+                vessels_waiting=0,
+                vessels_in_service=0,
+                average_waiting_hours=0,
+                average_turnaround_hours=0,
+                berth_utilization_percent=0,
+            ),
+        )
+
     def run_ais_scenario(self):
         self.scenario.parameters = {
             "simulation_hours": 24,
@@ -43,6 +61,9 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_builds_simulation_inputs_from_database_records(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
+        mock_run.return_value = self.make_simulation_output()
+
         run_scenario_simulation(self.scenario)
 
         vessels, berths, config = mock_run.call_args.args
@@ -96,12 +117,14 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_uses_only_active_berths(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         Berth.objects.create(
             name="Inactive Berth",
             max_vessel_length=300,
             max_vessel_draft=20,
             status=Berth.OperationalStatus.INACTIVE,
         )
+        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -112,13 +135,17 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_returns_simulation_result(self, mock_run):
-        baseline_result = object()
-        optimised_result = object()
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
+        baseline_result = self.make_simulation_output()
+        optimised_result = self.make_simulation_output()
+        
         mock_run.side_effect = [baseline_result, optimised_result]
 
         result = run_scenario_simulation(self.scenario)
 
-        self.assertIs(result, optimised_result)
+        self.assertEqual(mock_run.call_count, 2)
+        self.assertIsNot(result, optimised_result)
+        self.assertEqual(result.vessel_results, optimised_result.vessel_results)
         self.assertIs(result.baseline_output, baseline_result)
 
     def test_rejects_non_dictionary_scenario_parameters(self):
@@ -183,6 +210,7 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_skips_vessel_profiles_with_missing_dimensions(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.vessel.length_overall = None
         self.vessel.save()
 
@@ -191,6 +219,8 @@ class ScenarioSimulationRunnerTests(TestCase):
             length_overall=180,
             draft=9,
         )
+
+        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -236,8 +266,11 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_allows_zero_available_berths(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.scenario.parameters["available_berths"] = 0
         self.scenario.save()
+
+        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -247,6 +280,7 @@ class ScenarioSimulationRunnerTests(TestCase):
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_uses_ais_eta_and_real_vessel_ids(self, mock_eta, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         second_vessel = Vessel.objects.create(
             name="Second Vessel",
             length_overall=180,
@@ -276,6 +310,7 @@ class ScenarioSimulationRunnerTests(TestCase):
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_excludes_vessels_without_reliable_eta(self, mock_eta, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         second_vessel = Vessel.objects.create(
             name="Unreliable Vessel",
             length_overall=180,
@@ -302,6 +337,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         mock_eta,
         mock_run,
     ):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         mock_eta.return_value = None
 
         self.run_ais_scenario()
@@ -318,6 +354,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         mock_eta,
         mock_run,
     ):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         mock_eta.return_value = SimpleNamespace(eta_hours=24)
 
         self.run_ais_scenario()
@@ -330,6 +367,7 @@ class ScenarioSimulationRunnerTests(TestCase):
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_handles_no_eligible_ais_vessels(self, mock_eta, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         mock_eta.return_value = None
 
         self.run_ais_scenario()
@@ -356,7 +394,10 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_generates_stochastic_arrivals_within_simulation_horizon(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.set_stochastic_scenario()
+
+        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -371,7 +412,10 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_stochastic_arrivals_are_reproducible(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.set_stochastic_scenario()
+
+        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
         first_vessels = mock_run.call_args.args[0]
@@ -400,11 +444,14 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_assigns_uniform_service_times_within_configured_bounds(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.set_stochastic_scenario(
             service_time_distribution="uniform",
             minimum_service_time_hours=4,
             maximum_service_time_hours=10,
         )
+
+        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -418,6 +465,7 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_passes_vessel_types_and_priorities_to_simulation(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.vessel.vessel_type = Vessel.VesselType.TANKER
         self.vessel.save()
 
@@ -429,6 +477,8 @@ class ScenarioSimulationRunnerTests(TestCase):
 
         self.set_stochastic_scenario(vessel_type_priorities=priorities)
 
+        mock_run.return_value = self.make_simulation_output()
+
         run_scenario_simulation(self.scenario)
 
         vessels, _, config = mock_run.call_args.args
@@ -438,10 +488,13 @@ class ScenarioSimulationRunnerTests(TestCase):
 
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_allows_zero_stochastic_arrivals(self, mock_run):
+        mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.set_stochastic_scenario(
             expected_vessel_arrivals=1,
             random_seed=42,
         )
+
+        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
