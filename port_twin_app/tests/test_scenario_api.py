@@ -265,7 +265,6 @@ class ScenarioParameterConfigurationAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-
     def test_accepts_completed_marine_prediction(self):
         prediction = self.create_prediction()
 
@@ -285,7 +284,6 @@ class ScenarioParameterConfigurationAPITests(APITestCase):
             str(prediction.id),
         )
 
-
     def test_rejects_non_completed_marine_prediction(self):
         prediction = self.create_prediction(
             status=MarinePrediction.Status.PENDING,
@@ -303,7 +301,6 @@ class ScenarioParameterConfigurationAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-
     def test_rejects_unknown_marine_prediction_id(self):
         import uuid
 
@@ -319,7 +316,6 @@ class ScenarioParameterConfigurationAPITests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-
     def test_rejects_invalid_marine_prediction_id(self):
         response = self.create_scenario(
             {
@@ -332,3 +328,98 @@ class ScenarioParameterConfigurationAPITests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_accepts_nominal_piloting_speed_schedule(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "nominal_piloting_speed_schedule": [
+                    {
+                        "start_hour": 0,
+                        "end_hour": 6,
+                        "speed_knots": 6,
+                    },
+                    {
+                        "start_hour": 6,
+                        "end_hour": 12,
+                        "speed_knots": 5,
+                    },
+                    {
+                        "start_hour": 12,
+                        "end_hour": 24,
+                        "speed_knots": 6,
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(
+            response.data["parameters"]["nominal_piloting_speed_schedule"],
+            [
+                {"start_hour": 0.0, "end_hour": 6.0, "speed_knots": 6.0},
+                {"start_hour": 6.0, "end_hour": 12.0, "speed_knots": 5.0},
+                {"start_hour": 12.0, "end_hour": 24.0, "speed_knots": 6.0},
+            ],
+        )
+
+    def test_rejects_overlapping_speed_schedule_periods(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "nominal_piloting_speed_schedule": [
+                    {"start_hour": 0, "end_hour": 8, "speed_knots": 6},
+                    {"start_hour": 6, "end_hour": 12, "speed_knots": 5},
+                ],
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_speed_schedule_beyond_simulation_duration(self):
+        response = self.create_scenario(
+            {
+                "simulation_hours": 24,
+                "expected_vessel_arrivals": 5,
+                "arrival_interval_hours": 2,
+                "average_service_time_hours": 8,
+                "nominal_piloting_speed_schedule": [
+                    {"start_hour": 20, "end_hour": 25, "speed_knots": 6},
+                ],
+            }
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_rejects_invalid_speed_schedule_values(self):
+        invalid_schedules = [
+            [{"start_hour": 6, "end_hour": 6, "speed_knots": 5}],
+            [{"start_hour": 8, "end_hour": 4, "speed_knots": 5}],
+            [{"start_hour": 0, "end_hour": 6, "speed_knots": 0}],
+            [{"start_hour": -1, "end_hour": 6, "speed_knots": 5}],
+            [{"start_hour": 0, "end_hour": 6, "speed_knots": 5, "extra": 1}],
+            [],
+        ]
+
+        for schedule in invalid_schedules:
+            with self.subTest(schedule=schedule):
+                response = self.create_scenario(
+                    {
+                        "simulation_hours": 24,
+                        "expected_vessel_arrivals": 5,
+                        "arrival_interval_hours": 2,
+                        "average_service_time_hours": 8,
+                        "nominal_piloting_speed_schedule": schedule,
+                    }
+                )
+
+                self.assertEqual(
+                    response.status_code,
+                    status.HTTP_400_BAD_REQUEST,
+                )
