@@ -120,7 +120,21 @@ def run_crane_aware_simulation(
     berth_available_at = {berth.berth_id: 0.0 for berth in berths}
     crane_available_at = {crane_id: 0.0 for crane_id in range(config.available_cranes)}
 
-    results: dict[int, VesselSimulationResult] = {}
+    arrivals = []
+    for index, vessel in enumerate(vessels[: config.expected_arrivals]):
+        arrival_hour = (
+            vessel.arrival_hour
+            if vessel.arrival_hour is not None
+            else index * config.arrival_interval_hours
+        )
+        if arrival_hour < config.duration_hours:
+            arrivals.append((arrival_hour, index, vessel))
+
+    arrivals.sort(key=lambda item: (item[0], item[1]))
+
+    results = {}
+    waiting = []
+    arrival_position = 0
     service_order = 0
 
     total_waiting = 0.0
@@ -128,76 +142,92 @@ def run_crane_aware_simulation(
     total_turnaround = 0.0
     completed_count = 0
     occupied_hours = 0.0
+    current_time = 0.0
 
-    arrivals = []
-
-    for index, vessel in enumerate(vessels[: config.expected_arrivals]):
-        arrival_hour = (
-            vessel.arrival_hour
-            if vessel.arrival_hour is not None
-            else index * config.arrival_interval_hours
-        )
-
-        if arrival_hour < config.duration_hours:
-            arrivals.append((arrival_hour, index, vessel))
-
-    # Process vessels in chronological arrival order.
-    arrivals.sort(key=lambda item: (item[0], item[1]))
-
-    for arrival_hour, index, vessel in arrivals:
-        compatible_berths = [
-            berth
-            for berth in berths
-            if vessel.length <= berth.max_vessel_length
+    def compatible(vessel, berth):
+        return (
+            vessel.length <= berth.max_vessel_length
             and vessel.draft <= berth.max_vessel_draft
-        ]
-
-        if not compatible_berths:
-            if not berths:
-                reason = "No berths are configured."
-            else:
-                length_fits = any(
-                    vessel.length <= berth.max_vessel_length for berth in berths
-                )
-                draft_fits = any(
-                    vessel.draft <= berth.max_vessel_draft for berth in berths
-                )
-
-                if not length_fits:
-                    reason = "Vessel length exceeds all berth limits."
-                elif not draft_fits:
-                    reason = "Vessel draft exceeds all berth limits."
-                else:
-                    reason = (
-                        "No single berth can accommodate both the vessel's "
-                        "length and draft."
-                    )
-
-            results[index] = VesselSimulationResult(
-                vessel_id=vessel.vessel_id,
-                arrival_hour=arrival_hour,
-                berth_id=None,
-                service_start_hour=None,
-                departure_hour=None,
-                waiting_hours=None,
-                status="incompatible_berth",
-                reason=reason,
-            )
-            continue
-
-        one_crane_service_time = (
-            vessel.service_time_hours
-            if vessel.service_time_hours is not None
-            else config.service_time_hours
         )
 
-        candidates = []
+    def incompatibility_reason(vessel):
+        if not berths:
+            return "No berths are configured."
 
-        for berth in compatible_berths:
-            for crane_count in range(
-                1,
-                config.max_cranes_per_vessel + 1,
-            ):
+        length_fits = any(vessel.length <= berth.max_vessel_length for berth in berths)
+        draft_fits = any(vessel.draft <= berth.max_vessel_draft for berth in berths)
+
+        if not length_fits:
+            return "Vessel length exceeds all berth limits."
+        if not draft_fits:
+            return "Vessel draft exceeds all berth limits."
+        return "No single berth can accommodate both the vessel's length and draft."
+
+    priorities = config.vessel_type_priorities or {}
+
+    while arrival_position < len(arrivals) or waiting:
+        # Add every vessel that has arrived by the current event time.
+        while (
+            arrival_position < len(arrivals)
+            and arrivals[arrival_position][0] <= current_time
+        ):
+            arrival_hour, index, vessel = arrivals[arrival_position]
+            arrival_position += 1
+
+            if not any(compatible(vessel, berth) for berth in berths):
+                results[index] = VesselSimulationResult(
+                    vessel_id=vessel.vessel_id,
+                    arrival_hour=arrival_hour,
+                    berth_id=None,
+                    service_start_hour=None,
+                    departure_hour=None,
+                    waiting_hours=None,
+                    status="incompatible_berth",
+                    reason=incompatibility_reason(vessel),
+                )
+            else:
+                waiting.append((arrival_hour, index, vessel))
+
+        # Dispatch to berths that are free at the current event time.
+        free_berths = sorted(
+            (
+                berth
+                for berth in berths
+                if berth_available_at[berth.berth_id] <= current_time
+            ),
+            key=lambda berth: berth.berth_id,
+        )
+
+        for berth in free_berths:
+            candidates = [item for item in waiting if compatible(item[2], berth)]
+
+            if not candidates:
+                continue
+
+            arrival_hour, index, vessel = min(
+                candidates,
+                key=lambda item: (
+                    priorities.get(item[2].vessel_type, 0),
+                    item[0],
+                    item[1],
+                ),
+            )
+
+            one_crane_service_time = (
+                vessel.service_time_hours
+                if vessel.service_time_hours is not None
+                else config.service_time_hours
+            )
+
+            crane_counts = (
+                [1]
+                if policy == "baseline"
+                else range(1, config.max_cranes_per_vessel + 1)
+            )
+
+            allocation_candidates = []
+
+            for crane_count in crane_counts:
                 available_cranes = sorted(
                     crane_available_at.items(),
                     key=lambda item: (item[1], item[0]),
@@ -205,34 +235,30 @@ def run_crane_aware_simulation(
 
                 crane_start = available_cranes[-1][1]
                 service_start = max(
+                    current_time,
                     arrival_hour,
                     berth_available_at[berth.berth_id],
                     crane_start,
                 )
-
                 service_time = one_crane_service_time / crane_count
                 departure = service_start + service_time
-
-                if policy == "baseline" and crane_count != 1:
-                    continue
 
                 if policy == "baseline":
                     selection_key = (
                         service_start,
-                        berth.berth_id,
+                        departure,
+                        crane_count,
                     )
                 else:
                     selection_key = (
                         departure,
                         service_start,
-                        berth.berth_id,
                         crane_count,
                     )
 
-                candidates.append(
+                allocation_candidates.append(
                     (
                         selection_key,
-                        berth,
                         crane_count,
                         available_cranes,
                         service_start,
@@ -241,62 +267,102 @@ def run_crane_aware_simulation(
                     )
                 )
 
-        (
-            _,
-            berth,
-            crane_count,
-            allocated_cranes,
-            service_start,
-            service_time,
-            departure,
-        ) = min(candidates, key=lambda candidate: candidate[0])
+            (
+                _,
+                crane_count,
+                allocated_cranes,
+                service_start,
+                service_time,
+                departure,
+            ) = min(
+                allocation_candidates,
+                key=lambda candidate: candidate[0],
+            )
 
-        # Reserve the berth and selected cranes until handling finishes.
-        berth_available_at[berth.berth_id] = departure
+            waiting.remove((arrival_hour, index, vessel))
 
-        for crane_id, _ in allocated_cranes:
-            crane_available_at[crane_id] = departure
+            berth_available_at[berth.berth_id] = departure
+            for crane_id, _ in allocated_cranes:
+                crane_available_at[crane_id] = departure
 
-        waiting = service_start - arrival_hour
+            vessel_waiting = service_start - arrival_hour
 
-        if service_start >= config.duration_hours:
-            waiting = config.duration_hours - arrival_hour
+            if service_start >= config.duration_hours:
+                vessel_waiting = config.duration_hours - arrival_hour
 
-        occupied_hours += max(
-            0.0,
-            min(departure, config.duration_hours) - max(service_start, 0.0),
-        )
+            occupied_hours += max(
+                0.0,
+                min(departure, config.duration_hours) - max(service_start, 0.0),
+            )
 
-        if service_start < config.duration_hours:
-            total_waiting += waiting
-            waiting_count += 1
+            if service_start < config.duration_hours:
+                total_waiting += vessel_waiting
+                waiting_count += 1
 
-        if departure <= config.duration_hours:
-            status = "completed"
-            total_turnaround += departure - arrival_hour
-            completed_count += 1
-        elif service_start < config.duration_hours:
-            status = "in_service"
-        else:
-            status = "waiting"
+            if departure <= config.duration_hours:
+                status = "completed"
+                total_turnaround += departure - arrival_hour
+                completed_count += 1
+            elif service_start < config.duration_hours:
+                status = "in_service"
+            else:
+                status = "waiting"
 
-        service_order += 1
+            service_order += 1
+            results[index] = VesselSimulationResult(
+                vessel_id=vessel.vessel_id,
+                arrival_hour=arrival_hour,
+                berth_id=berth.berth_id,
+                service_start_hour=service_start,
+                departure_hour=departure,
+                waiting_hours=vessel_waiting,
+                status=status,
+                service_time_hours=service_time,
+                service_order=service_order,
+                allocated_cranes=crane_count,
+            )
 
+        # Advance to the next arrival or resource completion.
+        next_events = []
+
+        if arrival_position < len(arrivals):
+            next_events.append(arrivals[arrival_position][0])
+
+        if waiting:
+            for berth in berths:
+                if berth_available_at[berth.berth_id] > current_time and any(
+                    compatible(item[2], berth) for item in waiting
+                ):
+                    next_events.append(berth_available_at[berth.berth_id])
+
+            if any(
+                crane_available_at[crane_id] > current_time
+                for crane_id in crane_available_at
+            ):
+                next_events.extend(
+                    available_at
+                    for available_at in crane_available_at.values()
+                    if available_at > current_time
+                )
+
+        if not next_events:
+            break
+
+        current_time = min(next_events)
+
+    # Record vessels that never started service before the horizon.
+    for arrival_hour, index, vessel in waiting:
         results[index] = VesselSimulationResult(
             vessel_id=vessel.vessel_id,
             arrival_hour=arrival_hour,
-            berth_id=berth.berth_id,
-            service_start_hour=service_start,
-            departure_hour=departure,
-            waiting_hours=waiting,
-            status=status,
-            service_time_hours=service_time,
-            service_order=service_order,
-            allocated_cranes=crane_count,
+            berth_id=None,
+            service_start_hour=None,
+            departure_hour=None,
+            waiting_hours=config.duration_hours - arrival_hour,
+            status="waiting",
         )
 
     ordered_results = tuple(results[index] for index in sorted(results))
-
     total_berth_hours = config.duration_hours * len(berths)
 
     summary = SimulationSummary(
