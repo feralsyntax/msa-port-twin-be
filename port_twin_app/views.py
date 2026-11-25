@@ -509,6 +509,7 @@ class SimulationDetailView(APIView):
                     if results.get("vessel_results") is not None
                     else None
                 ),
+                "marine_conditions": results.get("marine_conditions"),
             },
             status=status.HTTP_200_OK,
         )
