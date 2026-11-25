@@ -323,7 +323,26 @@ class ScenarioParametersSerializer(serializers.Serializer):
     )
 
     arrival_source = serializers.ChoiceField(
-        choices=("fixed", "ais"),
+        choices=("fixed", "ais", "stochastic"),
+        required=False,
+    )
+
+    random_seed = NonNegativeIntegerField(
+        min_value=0,
+        required=False,
+    )
+
+    service_time_distribution = serializers.ChoiceField(
+        choices=("fixed", "uniform"),
+        required=False,
+    )
+
+    minimum_service_time_hours = PositiveFiniteFloatField(required=False)
+
+    maximum_service_time_hours = PositiveFiniteFloatField(required=False)
+
+    vessel_type_priorities = serializers.DictField(
+        child=NonNegativeIntegerField(min_value=0),
         required=False,
     )
 
@@ -340,17 +359,24 @@ class ScenarioParametersSerializer(serializers.Serializer):
                 )
 
             arrival_source = data.get("arrival_source", "fixed")
+            service_distribution = data.get("service_time_distribution", "fixed")
 
             required_fields = {
                 "simulation_hours",
                 "average_service_time_hours",
             }
 
+            if arrival_source in ("fixed", "stochastic"):
+                required_fields.add("expected_vessel_arrivals")
+
             if arrival_source == "fixed":
+                required_fields.add("arrival_interval_hours")
+
+            if service_distribution == "uniform":
                 required_fields.update(
                     {
-                        "expected_vessel_arrivals",
-                        "arrival_interval_hours",
+                        "minimum_service_time_hours",
+                        "maximum_service_time_hours",
                     }
                 )
 
@@ -365,6 +391,44 @@ class ScenarioParametersSerializer(serializers.Serializer):
                 )
 
         return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        service_distribution = attrs.get("service_time_distribution", "fixed")
+
+        minimum = attrs.get("minimum_service_time_hours")
+        maximum = attrs.get("maximum_service_time_hours")
+
+        if service_distribution == "uniform":
+            if minimum is not None and maximum is not None and maximum < minimum:
+                raise serializers.ValidationError(
+                    {
+                        "maximum_service_time_hours": [
+                            (
+                                "Maximum service time must be greater than or equal "
+                                "to minimum service time."
+                            )
+                        ]
+                    }
+                )
+        elif minimum is not None or maximum is not None:
+            raise serializers.ValidationError(
+                "Minimum and maximum service times can only be supplied "
+                "for the uniform distribution."
+            )
+
+        priorities = attrs.get("vessel_type_priorities", {})
+
+        for vessel_type in priorities:
+            if not isinstance(vessel_type, str) or not vessel_type.strip():
+                raise serializers.ValidationError(
+                    {
+                        "vessel_type_priorities": [
+                            "Vessel type keys must be non-empty strings."
+                        ]
+                    }
+                )
+
+        return attrs
 
 
 class ScenarioCreateUpdateRequestSerializer(serializers.ModelSerializer):
