@@ -46,6 +46,9 @@ def execute_simulation_run(simulation_run: SimulationRun):
         output = run_scenario_simulation(simulation_run.scenario)
         marine_conditions = None
         prediction_id = simulation_run.scenario.parameters.get("marine_prediction_id")
+        nominal_speed_schedule = simulation_run.scenario.parameters.get(
+            "nominal_piloting_speed_schedule"
+        )
 
         if prediction_id is not None:
             prediction = MarinePrediction.objects.get(
@@ -101,6 +104,24 @@ def execute_simulation_run(simulation_run: SimulationRun):
                     simulation_run=simulation_run,
                     result_type="marine_conditions",
                     data=marine_conditions,
+                )
+
+            # Save configured nominal speeds as planning assumptions.
+            if nominal_speed_schedule is not None:
+                SimulationResult.objects.create(
+                    simulation_run=simulation_run,
+                    result_type="nominal_piloting_speed_schedule",
+                    data={
+                        "scope": "all_vessels",
+                        "unit": "knots",
+                        "label": "Nominal piloting speed assumptions",
+                        "description": (
+                            "Configured planning assumptions only. "
+                            "These are not navigational advice or "
+                            "current-adjusted speed recommendations."
+                        ),
+                        "periods": nominal_speed_schedule,
+                    },
                 )
 
             # Mark the simulation as completed only after all results are saved.
