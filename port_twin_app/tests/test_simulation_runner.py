@@ -41,7 +41,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.scenario.save()
         return run_scenario_simulation(self.scenario)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_builds_simulation_inputs_from_database_records(self, mock_run):
         run_scenario_simulation(self.scenario)
 
@@ -94,7 +94,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         ):
             run_scenario_simulation(self.scenario)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_uses_only_active_berths(self, mock_run):
         Berth.objects.create(
             name="Inactive Berth",
@@ -110,14 +110,16 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertEqual(len(berths), 1)
         self.assertEqual(berths[0].berth_id, str(self.berth.id))
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_returns_simulation_result(self, mock_run):
-        expected_result = object()
-        mock_run.return_value = expected_result
+        baseline_result = object()
+        optimised_result = object()
+        mock_run.side_effect = [baseline_result, optimised_result]
 
         result = run_scenario_simulation(self.scenario)
 
-        self.assertIs(result, expected_result)
+        self.assertIs(result, optimised_result)
+        self.assertIs(result.baseline_output, baseline_result)
 
     def test_rejects_non_dictionary_scenario_parameters(self):
         self.scenario.parameters = []
@@ -179,7 +181,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         ):
             run_scenario_simulation(self.scenario)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_skips_vessel_profiles_with_missing_dimensions(self, mock_run):
         self.vessel.length_overall = None
         self.vessel.save()
@@ -232,7 +234,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         ):
             run_scenario_simulation(self.scenario)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_allows_zero_available_berths(self, mock_run):
         self.scenario.parameters["available_berths"] = 0
         self.scenario.save()
@@ -242,7 +244,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         _, berths, _ = mock_run.call_args.args
         self.assertEqual(berths, [])
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_uses_ais_eta_and_real_vessel_ids(self, mock_eta, mock_run):
         second_vessel = Vessel.objects.create(
@@ -271,7 +273,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertEqual(config.expected_arrivals, 2)
         self.assertIsNone(config.arrival_interval_hours)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_excludes_vessels_without_reliable_eta(self, mock_eta, mock_run):
         second_vessel = Vessel.objects.create(
@@ -293,7 +295,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertNotEqual(vessels[0].vessel_id, str(second_vessel.pk))
         self.assertEqual(config.expected_arrivals, 1)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_excludes_vessels_already_in_port_operations(
         self,
@@ -309,7 +311,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertEqual(vessels, [])
         self.assertEqual(config.expected_arrivals, 0)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_excludes_etas_outside_simulation_window(
         self,
@@ -325,7 +327,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertEqual(vessels, [])
         self.assertEqual(config.expected_arrivals, 0)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     @patch("port_twin_app.services.simulation_runner.estimate_vessel_eta")
     def test_handles_no_eligible_ais_vessels(self, mock_eta, mock_run):
         mock_eta.return_value = None
@@ -352,7 +354,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.scenario.parameters = parameters
         self.scenario.save()
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_generates_stochastic_arrivals_within_simulation_horizon(self, mock_run):
         self.set_stochastic_scenario()
 
@@ -367,7 +369,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertEqual(config.expected_arrivals, len(vessels))
         self.assertIsNone(config.arrival_interval_hours)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_stochastic_arrivals_are_reproducible(self, mock_run):
         self.set_stochastic_scenario()
 
@@ -396,7 +398,7 @@ class ScenarioSimulationRunnerTests(TestCase):
 
         self.assertEqual(first_results, second_results)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_assigns_uniform_service_times_within_configured_bounds(self, mock_run):
         self.set_stochastic_scenario(
             service_time_distribution="uniform",
@@ -414,7 +416,7 @@ class ScenarioSimulationRunnerTests(TestCase):
             self.assertGreaterEqual(vessel.service_time_hours, 4)
             self.assertLessEqual(vessel.service_time_hours, 10)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_passes_vessel_types_and_priorities_to_simulation(self, mock_run):
         self.vessel.vessel_type = Vessel.VesselType.TANKER
         self.vessel.save()
@@ -434,7 +436,7 @@ class ScenarioSimulationRunnerTests(TestCase):
         self.assertTrue(all(v.vessel_type == "tanker" for v in vessels))
         self.assertEqual(config.vessel_type_priorities, priorities)
 
-    @patch("port_twin_app.services.simulation_runner.run_simulation")
+    @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_allows_zero_stochastic_arrivals(self, mock_run):
         self.set_stochastic_scenario(
             expected_vessel_arrivals=1,
