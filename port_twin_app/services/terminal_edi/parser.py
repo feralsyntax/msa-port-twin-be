@@ -109,7 +109,8 @@ class EDIFACTParser:
 
         for character in value:
             if escaped:
-                current.append(character)
+                # Preserve the release character for subsequent parsing stages.
+                current.extend((release, character))
                 escaped = False
             elif character == release:
                 escaped = True
