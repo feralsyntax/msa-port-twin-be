@@ -62,7 +62,6 @@ class ScenarioSimulationRunnerTests(TestCase):
     @patch("port_twin_app.services.simulation_runner.run_crane_aware_simulation")
     def test_builds_simulation_inputs_from_database_records(self, mock_run):
         mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
-        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -127,7 +126,6 @@ class ScenarioSimulationRunnerTests(TestCase):
             max_vessel_draft=20,
             status=Berth.OperationalStatus.INACTIVE,
         )
-        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -223,8 +221,6 @@ class ScenarioSimulationRunnerTests(TestCase):
             draft=9,
         )
 
-        mock_run.return_value = self.make_simulation_output()
-
         run_scenario_simulation(self.scenario)
 
         vessels, _, _ = mock_run.call_args.args
@@ -272,8 +268,6 @@ class ScenarioSimulationRunnerTests(TestCase):
         mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.scenario.parameters["available_berths"] = 0
         self.scenario.save()
-
-        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
@@ -400,8 +394,6 @@ class ScenarioSimulationRunnerTests(TestCase):
         mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.set_stochastic_scenario()
 
-        mock_run.return_value = self.make_simulation_output()
-
         run_scenario_simulation(self.scenario)
 
         vessels, _, config = mock_run.call_args.args
@@ -417,8 +409,6 @@ class ScenarioSimulationRunnerTests(TestCase):
     def test_stochastic_arrivals_are_reproducible(self, mock_run):
         mock_run.side_effect = lambda *args, **kwargs: self.make_simulation_output()
         self.set_stochastic_scenario()
-
-        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
         first_vessels = mock_run.call_args.args[0]
@@ -454,8 +444,6 @@ class ScenarioSimulationRunnerTests(TestCase):
             maximum_service_time_hours=10,
         )
 
-        mock_run.return_value = self.make_simulation_output()
-
         run_scenario_simulation(self.scenario)
 
         vessels, _, _ = mock_run.call_args.args
@@ -480,8 +468,6 @@ class ScenarioSimulationRunnerTests(TestCase):
 
         self.set_stochastic_scenario(vessel_type_priorities=priorities)
 
-        mock_run.return_value = self.make_simulation_output()
-
         run_scenario_simulation(self.scenario)
 
         vessels, _, config = mock_run.call_args.args
@@ -496,8 +482,6 @@ class ScenarioSimulationRunnerTests(TestCase):
             expected_vessel_arrivals=1,
             random_seed=42,
         )
-
-        mock_run.return_value = self.make_simulation_output()
 
         run_scenario_simulation(self.scenario)
 
