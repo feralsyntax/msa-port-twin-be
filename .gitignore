@@ -229,3 +229,6 @@ data/raw/copernicus/mombasa_glorys_hindcast_test_20221001_20221003.nc
 data/raw/copernicus/mombasa_merged_sea_level_test_20221001_20221003.nc
 data/raw/copernicus/mombasa_ocean_tide_202210.nc
 data/raw/era5/mombasa_era5_wind_20221001_20221003.nc
+
+# Downloaded Copernicus historical reanalysis data
+data/raw/copernicus/copernicus_*.nc
