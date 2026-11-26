@@ -425,6 +425,13 @@ def train_model_real(
         training_losses.append(training_loss)
         validation_losses.append(validation_loss)
 
+        print(
+            f"Epoch {epoch}/{config.epochs} | "
+            f"Train loss: {training_loss:.6f} | "
+            f"Validation loss: {validation_loss:.6f} | "
+            f"Best validation loss: {best_validation_loss:.6f}"
+        )
+
         if validation_loss < best_validation_loss:
             best_validation_loss = validation_loss
             best_epoch = epoch
